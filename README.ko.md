@@ -43,7 +43,8 @@ node scripts/iad.mjs render doc.json     # doc.json 옆에 doc.html 생성
 
 ## 브라우저 지원과 내보내기 제한
 
-- 문서 보기는 최신 Chrome, Edge, Firefox, Safari에서 동작합니다.
+- 최신 Chrome에서 문서 보기와 내보내기 전체를 검증했습니다. 다른 최신 브라우저도 표준 기능만 쓰므로 보기는
+  동작할 것으로 보이지만 검증하지 않았고, Safari는 테스트하지 않았습니다.
 - 내보내기는 SVG `foreignObject`로 페이지를 렌더하므로 브라우저마다 결과가 조금 다를 수 있고, Safari가 가장
   예측하기 어렵습니다(폰트, 이모지, 크기 차이). PNG나 클립보드 내보내기가 실패하면 화면에 메시지가 나오며 SVG
   내보내기를 대안으로 쓰면 됩니다.

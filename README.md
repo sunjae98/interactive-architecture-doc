@@ -45,7 +45,8 @@ Keep `doc.json` next to the HTML: it is the source. To update a document, edit t
 
 ## Browser support and export limits
 
-- Viewing works in current Chrome, Edge, Firefox, and Safari.
+- Tested in current Chrome (viewing and all exports). Other modern browsers use only standard features for
+  viewing and are expected to work, but are not verified; Safari was not tested.
 - Export renders the page through an SVG `foreignObject`. Output can differ slightly between browsers;
   Safari is the least predictable (fonts, emoji, and sizing may differ). If PNG or clipboard export fails,
   the document shows a message and the SVG export is the fallback.
