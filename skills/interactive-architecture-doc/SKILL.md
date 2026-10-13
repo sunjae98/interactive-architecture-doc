@@ -1,98 +1,87 @@
 ---
 name: interactive-architecture-doc
-description: 클라이언트/내부 서버/외부 시스템처럼 여러 주체가 순서대로 관여하고 입력에 따라 경로가 갈리는 시스템 흐름을 인터랙티브 HTML 단일 파일 문서로 작성할 때 사용한다. TL;DR, 번호가 매겨진 단계(stepper), 주체별 색상 코드 노드, 분기(fork), 시나리오를 골라 단계별로 재생하는 사이드바 플레이그라운드를 갖춘 문서를 만든다. "아키텍처 문서 만들어줘", "인터랙티브 다이어그램", "이 설계 흐름 문서로 정리해줘" 같은 요청에 쓴다.
+description: Create an interactive HTML architecture document for a system flow where several actors (client, internal services, external systems) take part in numbered steps and paths branch by input. You write a JSON file, validate it, and render one self-contained HTML file with a TL;DR, stepper, color-coded nodes, forks, and a scenario playground. The viewer can export the current view (selected scenario and step) as PNG, SVG, or a clipboard image. Use for requests like "make an architecture doc", "interactive diagram", "document this design flow".
+compatibility: Requires Node.js 18+ and shell access
 ---
 
 # interactive-architecture-doc
 
-## 개요
+Produces a document where the reader picks a scenario and steps through it ("Next step"),
+watching which boxes activate and what data flows at each step. You never write HTML: you write
+a JSON document, and `scripts/iad.mjs` validates it and renders a single offline HTML file
+(no CDN, no network; double-click to open).
 
-이 스킬은 **정적 다이어그램이 아니라, 사용자가 시나리오를 고르고 "다음 단계 →"를
-눌러가며 데이터가 어떻게 흐르는지 직접 재생해보는 문서**를 만든다.
-외부 라이브러리 없이 순수 HTML/CSS/바닐라 JS로 된 단일 파일이라 어디서든 열리고,
-mermaid 같은 정적 다이어그램 도구로는 표현하기 어려운 "이 시나리오면 이 박스들만 활성화되고
-나머지는 흐려진다" 같은 상호작용이 핵심 가치다.
+## When to use
 
-## 언제 쓰는가
+- A request passes through several actors in order (client / internal server / external systems).
+- Paths branch by input and you want to compare the branches as scenarios.
+- Design decisions ("why this way") should live in the same document.
 
-- 요청 하나가 여러 주체(클라이언트/내부 서버/외부 시스템)를 순서대로 거치는 시스템을 설명할 때
-- 입력에 따라 경로가 갈리는(분기) 흐름이 있고, 그 분기를 시나리오별로 비교해서 보여주고 싶을 때
-- 설계 과정에서 검토·결정한 사항(왜 이렇게 했는가)까지 같은 문서에 남기고 싶을 때
+For a plain static component diagram this is overkill; use Mermaid or similar.
 
-단순히 정적인 컴포넌트 구조도만 필요하면 이 스킬은 과함 — 이때는 mermaid 등을 쓴다.
+## Information checklist
 
-## 정보 수집 체크리스트
+Confirm with the user or extract from code/design docs before writing. If an item is missing,
+ask first instead of inventing content.
 
-작성 전에 아래를 사용자에게 확인하거나 코드/설계 문서에서 추출한다. 빠진 항목이 있으면
-작성을 시작하지 말고 먼저 질문한다.
+1. **Title / subtitle**: document title and a one-line summary of the core design.
+2. **TL;DR**: one headline sentence plus 4-6 supporting points (bold summary + one-line detail).
+3. **Step list**: the steps a request takes from start to end, in order (becomes the stepper).
+4. **Actor color classes**: for each node, one of `client` (outside the system), `decision`
+   (a choice is made), `existing` (already exists / handled elsewhere), `new` (built in this
+   project). Meanings can differ per project; state the real meaning in `legend`.
+5. **Branch scenarios**: paths that split at a decision (e.g. image / audio / video / text).
+   Each becomes a drop-down option. Be able to write the concrete data at each step (request
+   payload, decision result, response schema).
+6. **External systems (if any)**: what each provides (functions, APIs). Skip for purely
+   internal architectures.
+7. **Design considerations**: why each decision was made and which alternatives were rejected.
+8. **API / tool definitions**: real schemas or function signatures, if they exist.
 
-1. **제목/부제** — 문서 제목과, 핵심 설계를 한 줄로 요약하는 부제
-2. **TL;DR** — 전체 설계를 관통하는 핵심 문장 1개 + 근거 4~6개 (각각 굵은 요약 + 부연 한 줄)
-3. **단계(step) 목록** — 요청이 시작부터 끝까지 거치는 단계를 번호순으로 나열 (stepper에 그대로 들어감)
-4. **주체별 색상 분류** — 각 단계의 노드가 다음 중 어디에 해당하는지:
-   - `client` — 시스템 바깥의 클라이언트
-   - `decision` — 판단이 일어나는 지점 (내부 로직 또는 외부 시스템의 의사결정)
-   - `existing` — 이미 존재하는/다른 곳에서 처리하는 부분
-   - `new` — 이번에 새로 개발하는 부분
-   - 프로젝트마다 이 네 범주의 의미가 달라질 수 있음 — 문서의 legend에 실제 의미를 명시한다
-5. **분기 시나리오** — 판단 지점에서 갈리는 경로들 (예: 이미지/오디오/영상/텍스트). 플레이그라운드
-   드롭다운의 각 옵션이 된다. 시나리오마다 각 단계에서 실제로 오가는 데이터(요청 페이로드,
-   판단 결과, 응답 스키마)를 구체적으로 적을 수 있어야 좋은 문서가 된다
-6. **외부 시스템 목록 (있다면)** — 각 외부 시스템이 어떤 기능·API를 제공하는지 (external-zone에 들어감).
-   외부 연동이 없는 순수 내부 아키텍처라면 이 섹션은 생략한다
-7. **설계 검토 사항** — 왜 이렇게 결정했는지, 검토했던 대안은 무엇이었는지 (considerations 섹션)
-8. **API/tool 정의 예시** — 실제 스키마나 함수 시그니처가 있으면 tool-examples 섹션에 넣는다
+## Procedure
 
-## 작성 절차
+1. Read `references/format.md` (fields and rule codes). Optionally skim
+   `references/design-system.md` for layout constraints.
+2. Copy the closest file from `examples/` (`minimal.*.json` for a linear flow,
+   `three-branch.*.json` for a fork with scenarios, external systems, and all optional sections)
+   next to where the output belongs, e.g. `doc.json`.
+3. Rewrite it with the user's content. Pick `meta.lang` (`ko` or `en`) from the language the
+   user wrote their request in; it only affects UI strings, so write the body in that same language.
+4. Validate: `node scripts/iad.mjs validate doc.json` (add `--json` for machine-readable output).
+   Output lines are `<JSON pointer> <CODE> <message>`. Fix every error and re-run; read warnings
+   too (leftover placeholders, steps with no active node for a scenario).
+5. Render: `node scripts/iad.mjs render doc.json` writes `doc.html` next to the JSON
+   (`-o path` to change). Render refuses to run while errors remain.
+6. Check in a browser (use `agent-browser` if available; no specific tool is required):
+   - every scenario: press "Next step" to the end; unrelated nodes dim, related nodes highlight
+   - auto-play runs to the end; clicking a node jumps to its step
+   - fork arrows meet node edges, including after narrowing the window
+   - the export buttons produce an image of the current view
+7. Deliver the HTML and keep the JSON next to it.
 
-1. **템플릿 복사** — [reference/template.html](reference/template.html)을 대상 경로로 복사한다.
-   이 템플릿은 CSS 디자인 시스템 + 재생 가능한 JS 엔진을 이미 갖춘 3분기(간단/복잡A/복잡B)
-   예시로 채워져 있다. 색상 의미와 클래스 목록은
-   [reference/design-system.md](reference/design-system.md) 참고.
+Paths are relative to the skill folder; run the commands from there or use absolute paths.
 
-2. **stepper와 `TOTAL_STEPS` 맞추기** — `.stepper` 안의 `.step` 개수를 실제 단계 수에 맞게
-   추가/삭제하고, 두 번째 `<script>`의 `var TOTAL_STEPS = ...`를 그 개수와 반드시 일치시킨다.
-   각 노드에는 대응하는 `data-step="N"` 을 부여한다 (같은 번호가 여러 노드에 있으면
-   "같은 단계인데 실행 주체만 다르다"는 뜻 — 예를 들어 4단계에 분기 A용 노드와 분기 B용
-   노드를 각각 `data-step="4"`로 나란히 두면, 같은 4단계를 서로 다른 주체가 처리한다는
-   의미가 된다).
+## Rules
 
-3. **노드 작성** — `.node` 에 `client`/`decision`/`existing`/`new` 중 해당 클래스를 붙이고
-   `data-step`을 단다. 특정 시나리오에서만 활성화되는 노드는 `data-branch="branch-key"`
-   (콤마로 여러 개 가능)를 추가한다 — 없으면 모든 시나리오에서 항상 활성화된 것으로 간주된다.
+- **Never edit the generated HTML directly.** Change the JSON and render again. Keep the JSON
+  next to the HTML so the document can be updated later.
+- Every `considerations` item needs a `why`; do not record a decision without its reason.
+- Define the four kinds consistently in `legend` and use them the same way throughout.
+- Step numbers are array positions (`steps[0]` is step 1). Several nodes may share a step
+  ("same step, different actor"); restrict them with `branches` (scenario ids).
+- Fan arrows: put `fan_hub` on the deciding node and `fan_target` (same id) on the first node
+  of each path, all inside the same `fork` block. No JS or HTML changes are needed to add paths.
+- Text fields support only `**bold**` and `` `code` ``; everything else is escaped.
+- Fonts (IAD Sans, a renamed subset of Pretendard, and Geist Mono) are embedded by the renderer.
 
-4. **분기(fork) 와이어링** — 판단 지점 노드에 `data-fan-hub="hub-id"`를, 그 판단에서
-   갈라지는 각 경로의 첫 노드에 `data-fan-target="hub-id"`(같은 id)를 붙인다.
-   화살표를 그리는 `draw()` 함수는 이 속성만으로 자동으로 부채꼴을 그리므로
-   **분기 개수가 늘어나도 JS를 수정할 필요가 없다** — HTML에 속성만 추가하면 된다.
-   `.fork-zone` 안에 `<svg class="zone-overlay" data-fan-svg>` 하나가 있어야 하고,
-   같은 `.fork-zone` 안에서만 hub↔target을 짝지어야 한다 (분기 그룹마다 zone을 따로 둔다).
+## Updating an existing document
 
-5. **플레이그라운드 시나리오 채우기** — 두 번째 `<script>`의 `SCENARIOS` 객체에 분기 시나리오별로
-   `label`과 `steps: {1: "...", 2: "...", ...}`를 채운다. 각 단계 문자열은 그 시점에 실제로
-   오가는 요청/응답/판단 결과를 코드 형태로 구체적으로 적는다. 단계를 생략하면 빈 문자열로
-   처리된다.
-   `<select id="pgPrompt">`의 `<option>`도 `SCENARIOS`의 키와 `data-branch`가 일치하게 채운다.
-
-6. **정적 섹션 채우기** — TL;DR, legend, external-zone(외부 시스템 없으면 통째로 삭제),
-   callout, considerations, tool-examples를 수집한 정보로 채운다. considerations의 각 항목은
-   반드시 `<span class="why">`로 근거를 남긴다 (결정만 적고 이유를 생략하지 않는다 — 나중에
-   왜 이렇게 했는지 아무도 모르게 됨).
-
-7. **검증** — 완성 후 브라우저(또는 `agent-browser` 스킬)로 열어서 확인한다:
-   - 드롭다운의 모든 시나리오에서 "다음 단계 →"를 끝까지 눌러보고, 각 단계에서 관련 없는
-     노드가 흐려지는지(`altpath`), 관련 노드는 강조되는지(`active`) 확인
-   - "▶ 자동 재생"이 끝까지 자동으로 넘어가는지 확인
-   - 분기 화살표가 노드 가장자리에서 끊기지 않는지(특히 창 크기를 줄였을 때 — `resize` 시
-     `draw()`가 다시 호출되므로 반응형도 함께 확인) 확인
-   - 노드를 직접 클릭했을 때도 해당 단계로 이동하는지 확인
-
-## 주의사항
-
-- **완전히 self-contained** — 외부 CDN(폰트, JS 라이브러리) 의존 없이 인라인 CSS/JS만 사용한다.
-  오프라인에서도, 파일을 그냥 더블클릭해서 열어도 동작해야 한다.
-- 한국어 문서라면 `body`의 `word-break:keep-all; overflow-wrap:break-word;`를 유지한다
-  (긴 한글 단어가 이상한 위치에서 줄바꿈되는 것을 막는다).
-- 색상 분류(`client`/`decision`/`existing`/`new`)의 실제 의미는 프로젝트마다 다를 수 있지만,
-  한번 정하면 문서 전체에서 일관되게 쓰고 legend에 명시한다.
-- 이미 있는 아키텍처 문서를 갱신하는 작업이면, 새로 만들지 말고 기존 파일을 직접 수정한다.
+1. **A `.json` sits next to the HTML**: edit the JSON, validate, render again.
+2. **Only a v2 HTML exists**: extract the JSON from
+   `<script type="application/json" id="iad-data">` in the HTML (the content is plain JSON, with
+   `<`, U+2028 and U+2029 written as `\uXXXX`, which JSON parsers read normally). Save it as
+   `doc.json`, then follow case 1.
+3. **Only a v1 HTML exists** (hand-edited template with `TOTAL_STEPS` / `SCENARIOS`): for a
+   typo-level change, edit the HTML directly. For anything larger, convert it once to JSON using
+   the "v1 to JSON mapping" table in `references/format.md`, render, compare with the original in
+   a browser, and from then on work from the JSON.
