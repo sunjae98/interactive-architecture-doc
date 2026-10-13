@@ -132,6 +132,61 @@ test("fan targets: only first-node-in-column targets in the first grid row get a
   assert.deepEqual(pick([]), []);
 });
 
+// ---- self-check judging -------------------------------------------------------
+
+const goodObs = (o = {}) => ({
+  active: 1, data: "POST /x", stepText: "POST /x", entry: "POST /x", fans: [{ zone: 1, targets: 2, drawn: 7 }],
+  scrollWidth: 1400, clientWidth: 1400, ...o,
+});
+const judge = (h, obs) => {
+  const out = { failures: [], warnings: [] };
+  h.judgeStep("a", 2, obs, out);
+  return plain(out);
+};
+
+test("self-check: a healthy step has no failures or warnings", () => {
+  const h = loadHelpers();
+  assert.deepEqual(judge(h, goodObs()), { failures: [], warnings: [] });
+  // no entry node (null) and a fork with no visible targets are fine; 1px rounding is tolerated
+  assert.deepEqual(judge(h, goodObs({ entry: null, fans: [{ zone: 1, targets: 0, drawn: 0 }], scrollWidth: 1401 })), { failures: [], warnings: [] });
+});
+
+test("self-check: each broken observation becomes a failure tagged with scenario, step and check", () => {
+  const h = loadHelpers();
+  const checks = (obs) => judge(h, goodObs(obs)).failures.map((f) => f.check);
+  assert.deepEqual(checks({ active: 0 }), ["active-node"]);
+  assert.deepEqual(checks({ data: "  " }), ["data-panel"]);
+  assert.deepEqual(checks({ entry: "" }), ["entry-request"]);
+  assert.deepEqual(checks({ fans: [{ zone: 1, targets: 2, drawn: 7 }, { zone: 2, targets: 1, drawn: 0 }] }), ["fan-arrows"]);
+  assert.deepEqual(checks({ scrollWidth: 1500 }), ["overflow"]);
+  const f = judge(h, goodObs({ active: 0 })).failures[0];
+  assert.equal(f.scenario, "a");
+  assert.equal(f.step, 2);
+  assert.ok(f.detail.length > 0);
+});
+
+test("self-check: missing scenario text is a warning, not a failure (W_SCENARIO_STEP_MISSING)", () => {
+  const h = loadHelpers();
+  const out = judge(h, goodObs({ stepText: undefined, data: UI.en.data_empty }));
+  assert.deepEqual(out.failures, []);
+  assert.deepEqual(out.warnings.map((w) => w.check), ["step-text"]);
+});
+
+test("self-check result: ok only without failures and page errors; checked = scenarios x steps", () => {
+  const h = loadHelpers();
+  const pass = plain(h.selfCheckResult(3, 6, { failures: [], warnings: [{ check: "step-text" }] }, []));
+  assert.deepEqual(pass, { ok: true, checked: 18, scenarios: 3, steps: 6, failures: [], warnings: [{ check: "step-text" }], errors: [] });
+  assert.equal(h.selfCheckResult(1, 3, { failures: [{ check: "overflow" }], warnings: [] }, []).ok, false);
+  assert.equal(h.selfCheckResult(1, 3, { failures: [], warnings: [] }, [{ type: "error", message: "x" }]).ok, false);
+});
+
+test("self-check: runs only with #iad-selfcheck or window.iadSelfCheck(), and reports into a hidden <pre>", () => {
+  assert.ok(HTML.includes('location.hash === "#iad-selfcheck"'));
+  assert.ok(HTML.includes("window.iadSelfCheck = selfCheck"));
+  assert.ok(/#iad-selfcheck-result\{[^}]*clip-path:inset\(50%\)/.test(HTML), "visually hidden, still in the DOM");
+  assert.ok(HTML.includes('console.log("IAD_SELFCHECK " + json)'));
+});
+
 // ---- early theme script -----------------------------------------------------
 
 function runThemeScript({ stored, throws = false, prefersDark = false, hasMatchMedia = true }) {

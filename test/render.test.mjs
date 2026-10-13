@@ -179,7 +179,7 @@ test("render: CSP meta allows exactly the inline executable scripts by hash", ()
   assert.deepEqual(directives["base-uri"], ["'none'"]);
   assert.deepEqual(directives["form-action"], ["'none'"]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
-  assert.equal(scripts.length, 3, "theme + fan arrows + playground");
+  assert.equal(scripts.length, 4, "theme + error collector + fan arrows + playground");
   const expected = scripts.map((b) => `'sha256-${createHash("sha256").update(b, "utf8").digest("base64")}'`);
   assert.deepEqual(directives["script-src"], expected);
   assert.ok(!directives["script-src"].includes("'unsafe-inline'"));
@@ -202,8 +202,8 @@ test("render: </script> and markup in author text are neutralized", () => {
   const { html } = renderHtml(doc);
   assert.ok(!html.includes("<script>alert"));
   assert.ok(!html.includes("<img"));
-  assert.equal(count(html, /<script\b/g), 5, "2 JSON data blocks + early theme script + 2 runtime scripts");
-  assert.equal(count(html, /<\/script>/g), 5);
+  assert.equal(count(html, /<script\b/g), 6, "2 JSON data blocks + early theme script + error collector + 2 runtime scripts");
+  assert.equal(count(html, /<\/script>/g), 6);
   assert.ok(html.includes("&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;"));
   assert.ok(html.includes("<b>bold</b>"));
   const data = html.match(/id="iad-data">([\s\S]*?)<\/script>/)[1];

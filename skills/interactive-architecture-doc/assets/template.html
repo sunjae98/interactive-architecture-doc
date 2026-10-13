@@ -18,6 +18,23 @@
   document.documentElement.setAttribute("data-theme", theme);
 })();
 </script>
+<script>
+// Page errors from load onward, read by the self-check (#iad-selfcheck). Capped so a noisy page stays small.
+(function () {
+  var errors = window.__iadErrors = [];
+  function add(type, message) { if (errors.length < 50) errors.push({ type: type, message: String(message) }); }
+  window.addEventListener("error", function (e) {
+    add("error", (e.message || "error") + (e.filename ? " @ " + e.filename + ":" + e.lineno : ""));
+  });
+  window.addEventListener("unhandledrejection", function (e) {
+    var r = e.reason;
+    add("unhandledrejection", r && r.message ? r.message : r);
+  });
+  document.addEventListener("securitypolicyviolation", function (e) {
+    add("csp", e.violatedDirective + " blocked " + (e.blockedURI || "inline"));
+  });
+})();
+</script>
 {{IAD_FONTS}}
 <style>
   /* ==== Design tokens ======================================================
@@ -433,6 +450,12 @@
     display:block;text-align:center;margin-top:var(--space-5);
     font-size:12px;font-weight:600;color:var(--color-text-muted);
   }
+
+  /* ==== Self-check (#iad-selfcheck): result stays in the DOM for tools, hidden from view ==== */
+  #iad-selfcheck-result{
+    position:absolute;left:0;top:0;width:1px;height:1px;margin:0;padding:0;border:0;
+    overflow:hidden;clip-path:inset(50%);white-space:pre;
+  }
 </style>
 </head>
 <body>
@@ -598,6 +621,7 @@
 
   var currentStep = 0;
   var autoPlayTimer = null;
+  var selfChecking = false;
   var promptEl = document.getElementById("pgPrompt");
   var prevBtn = document.getElementById("pgPrev");
   var nextBtn = document.getElementById("pgNext");
@@ -672,6 +696,35 @@
       css.push(rule.cssText);
     });
   }
+
+  // Self-check: judges one scenario x step from what the page shows. obs = {
+  //   active: number of .active nodes, data: data panel text, stepText: the scenario's text for the step,
+  //   entry: entry request text or null without an entry node,
+  //   fans: [{zone, targets: visible fan targets, drawn: drawn lines}], scrollWidth, clientWidth }
+  // Failures and warnings are appended to out.failures / out.warnings.
+  function judgeStep(scenario, step, obs, out) {
+    function add(list, check, detail) { list.push({ scenario: scenario, step: step, check: check, detail: detail }); }
+    if (!(obs.active >= 1)) add(out.failures, "active-node", "no active node");
+    if (!obs.stepText) add(out.warnings, "step-text", "scenario has no steps text for this step (W_SCENARIO_STEP_MISSING)");
+    if (!String(obs.data || "").trim()) add(out.failures, "data-panel", "data panel is empty");
+    if (obs.entry !== null && obs.entry !== undefined && !String(obs.entry).trim()) add(out.failures, "entry-request", "entry request box is empty");
+    (obs.fans || []).forEach(function (f) {
+      if (f.targets > 0 && f.drawn < 1) add(out.failures, "fan-arrows", "fork zone " + f.zone + ": " + f.targets + " visible target(s), no arrow drawn");
+    });
+    if (obs.scrollWidth > obs.clientWidth + 1) add(out.failures, "overflow", "page scrollWidth " + obs.scrollWidth + " > clientWidth " + obs.clientWidth);
+  }
+
+  function selfCheckResult(scenarios, steps, out, errors) {
+    return {
+      ok: out.failures.length === 0 && errors.length === 0,
+      checked: scenarios * steps,
+      scenarios: scenarios,
+      steps: steps,
+      failures: out.failures,
+      warnings: out.warnings,
+      errors: errors
+    };
+  }
   // ---- END pure helpers ----
 
   SCENARIOS.forEach(function (sc) {
@@ -725,7 +778,7 @@
     dataEl.textContent = text ? text : t("data_empty");
 
     var activeEl = document.querySelector(".node[data-step].active");
-    if (activeEl) activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (activeEl && !selfChecking) activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
     window.draw();
     setTimeout(window.draw, 260); // re-align arrows after the transform/scroll transition
   }
@@ -784,6 +837,85 @@
   });
 
   render();
+
+  // ---- Self-check: replays every scenario x step with the functions above and reports what it saw.
+  // Runs when the page is opened with #iad-selfcheck (or the hash is set later), or via window.iadSelfCheck().
+  // The result is JSON in <pre id="iad-selfcheck-result" data-state="pass|fail"> and one console line.
+  function observeStep() {
+    var fans = [];
+    document.querySelectorAll(".fork-zone").forEach(function (zone, i) {
+      var own = function (sel) {
+        return Array.prototype.filter.call(zone.querySelectorAll(sel), function (el) { return el.closest(".fork-zone") === zone; });
+      };
+      var svg = own("[data-fan-svg]")[0];
+      fans.push({
+        zone: i + 1,
+        targets: own("[data-fan-target]").filter(function (el) { return el.getClientRects().length > 0; }).length,
+        drawn: svg ? svg.querySelectorAll("line,path").length : 0
+      });
+    });
+    var root = document.documentElement;
+    return {
+      active: document.querySelectorAll(".node[data-step].active").length,
+      data: dataEl.textContent,
+      stepText: currentScenario().steps[String(currentStep)],
+      entry: entryEl ? entryEl.textContent : null,
+      fans: fans,
+      scrollWidth: root.scrollWidth,
+      clientWidth: root.clientWidth
+    };
+  }
+
+  function whenSettled() {
+    return new Promise(function (resolve) {
+      if (document.readyState === "complete") resolve(); else window.addEventListener("load", function () { resolve(); });
+    }).then(function () { return document.fonts && document.fonts.ready; });
+  }
+
+  function selfCheck() {
+    return whenSettled().then(function () {
+      var saved = { index: promptEl.selectedIndex, step: currentStep, playing: !!autoPlayTimer, x: window.scrollX, y: window.scrollY };
+      var out = { failures: [], warnings: [] };
+      stopAutoPlay();
+      selfChecking = true;
+      var html = document.documentElement;
+      html.classList.add("iad-measuring");
+      try {
+        SCENARIOS.forEach(function (sc, i) {
+          promptEl.selectedIndex = i;
+          for (var s = 1; s <= TOTAL_STEPS; s++) {
+            currentStep = s;
+            render();
+            window.draw();
+            judgeStep(sc.id, s, observeStep(), out);
+          }
+        });
+      } finally {
+        html.classList.remove("iad-measuring");
+        selfChecking = false;
+        promptEl.selectedIndex = saved.index;
+        if (saved.playing) { currentStep = saved.step - 1; startAutoPlay(); }
+        else { currentStep = saved.step; render(); }
+        window.scrollTo(saved.x, saved.y);
+      }
+      var result = selfCheckResult(SCENARIOS.length, TOTAL_STEPS, out, (window.__iadErrors || []).slice());
+      var json = JSON.stringify(result);
+      var pre = document.getElementById("iad-selfcheck-result");
+      if (!pre) {
+        pre = document.createElement("pre");
+        pre.id = "iad-selfcheck-result";
+        document.body.appendChild(pre);
+      }
+      pre.textContent = json;
+      pre.setAttribute("data-state", result.ok ? "pass" : "fail");
+      console.log("IAD_SELFCHECK " + json);
+      return result;
+    });
+  }
+  window.iadSelfCheck = selfCheck;
+  function selfCheckFromHash() { if (location.hash === "#iad-selfcheck") selfCheck(); }
+  window.addEventListener("hashchange", selfCheckFromHash);
+  selfCheckFromHash();
 
   // ---- Theme toggle: flips data-theme on <html> (set early in <head>) and remembers the choice.
   // Without a saved choice the page keeps following the OS preference.
