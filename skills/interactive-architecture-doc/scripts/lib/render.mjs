@@ -2,7 +2,8 @@
 // Static markup is generated here; the runtime in assets/template.html only reads #iad-data
 // (steps, scenarios, meta.entry_request) and #iad-i18n (UI strings).
 
-import { readFileSync, writeFileSync, renameSync, unlinkSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, unlinkSync, readdirSync, existsSync, openSync, closeSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { dirname, join, basename, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validate, KINDS } from "./validate.mjs";
@@ -38,7 +39,8 @@ export function fontFaces(dir = FONTS_DIR) {
   const faces = files.map((f) => {
     const data = readFileSync(join(dir, f)).toString("base64");
     const known = FONT_FACES[f];
-    const family = known ? known.family : basename(f, ".woff2");
+    // the file name becomes a CSS string: keep only characters that cannot break out of it
+    const family = known ? known.family : basename(f, ".woff2").replace(/[^A-Za-z0-9 _-]/g, "") || "font";
     const weight = known ? `font-weight:${known.weight};` : "";
     return `@font-face{font-family:"${family}";src:url(data:font/woff2;base64,${data}) format("woff2");${weight}font-display:swap;}`;
   });
@@ -213,7 +215,13 @@ export function renderHtml(doc, { templatePath = TEMPLATE_PATH, fontsDir = FONTS
   };
 
   // Single pass: substituted content is never re-scanned for slots.
-  const html = readFileSync(templatePath, "utf8").replace(SLOT_RE, (match, name) => {
+  let template;
+  try {
+    template = readFileSync(templatePath, "utf8");
+  } catch (e) {
+    throw new Error(`template ${templatePath} cannot be read: ${e.message}`);
+  }
+  const html = template.replace(SLOT_RE, (match, name) => {
     if (name.startsWith("t:")) {
       const key = name.slice(2);
       if (!Object.hasOwn(ui, key)) throw new Error(`template uses unknown UI string ${match}`);
@@ -231,17 +239,28 @@ export function defaultOutputPath(inputPath) {
 }
 
 // Write via a temp file in the same directory, then rename (atomic on POSIX filesystems).
+// The temp name is random and opened exclusively ("wx"), so an existing file is never clobbered
+// or removed; only a temp file this call created is cleaned up on failure.
 export function writeFileAtomic(path, data) {
   const target = resolve(path);
-  const tmp = join(dirname(target), `.${basename(target)}.${process.pid}.tmp`);
+  const tmp = join(dirname(target), `.${basename(target)}.${randomBytes(8).toString("hex")}.tmp`);
+  let created = false;
   try {
-    writeFileSync(tmp, data);
+    const fd = openSync(tmp, "wx");
+    created = true;
+    try {
+      writeFileSync(fd, data);
+    } finally {
+      closeSync(fd);
+    }
     renameSync(tmp, target);
   } catch (e) {
-    try {
-      unlinkSync(tmp);
-    } catch {
-      // temp file was never created
+    if (created) {
+      try {
+        unlinkSync(tmp);
+      } catch {
+        // already gone
+      }
     }
     throw e;
   }

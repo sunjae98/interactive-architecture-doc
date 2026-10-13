@@ -14,9 +14,15 @@ node scripts/iad.mjs validate doc.json --json   # {ok, errors[], warnings[]}
 node scripts/iad.mjs render doc.json [-o out.html]
 ```
 
-Exit codes: `0` valid (warnings allowed) · `1` validation errors · `2` usage, read, or JSON parse error.
+Exit codes: `0` valid (warnings allowed) · `1` validation errors · `2` usage, read, JSON parse, or write error.
 `render` re-validates and refuses to write anything if there are errors. The default output is
-next to the JSON with the same basename and `.html`.
+next to the JSON with the same basename and `.html`; `render` refuses (exit 2) when the output path
+is the input file itself.
+
+`--json` output shape: one input file prints one object, several files print an array of objects
+(each with an extra `file` field). A document that was checked prints `{ok, errors[], warnings[]}`
+(`render` adds `output` on success). A file that cannot be read, parsed or written prints
+`{ok: false, error: "<message>"}` instead, and the exit code is `2`.
 
 ## Top level
 

@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, writeFileSync, mkdtempSync, rmSync, existsSync, copyFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, mkdtempSync, mkdirSync, rmSync, existsSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { renderHtml, ValidationFailed, TEMPLATE_PATH, fontFaces } from "../skills/interactive-architecture-doc/scripts/lib/render.mjs";
+import { renderHtml, ValidationFailed, TEMPLATE_PATH, fontFaces, writeFileAtomic } from "../skills/interactive-architecture-doc/scripts/lib/render.mjs";
 import { collectNodes } from "../skills/interactive-architecture-doc/scripts/lib/validate.mjs";
 import { UI } from "../skills/interactive-architecture-doc/scripts/lib/i18n.mjs";
 
@@ -274,6 +274,94 @@ test("CLI render: errors exit 1 and write nothing; --json reports them", () => {
     assert.equal(run("render").status, 2);
     assert.equal(run("render", input, "-o").status, 2);
     assert.equal(run("render", join(EXAMPLES, "minimal.en.json"), "-o", join(dir, "no/such/dir.html")).status, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI render: refuses to overwrite the input (explicit -o or default path of an .html input)", () => {
+  const dir = tmp();
+  try {
+    const input = join(dir, "doc.json");
+    copyFileSync(join(EXAMPLES, "minimal.en.json"), input);
+    const r = run("render", input, "-o", join(dir, ".", "doc.json"));
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /overwrite the input/);
+    const html = join(dir, "doc.html");
+    copyFileSync(input, html);
+    assert.equal(run("render", html).status, 2);
+    assert.deepEqual(readFileSync(html), readFileSync(input), "input untouched");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI --json: file and write errors still print {ok:false, error}", () => {
+  const dir = tmp();
+  try {
+    const missing = join(dir, "missing.json");
+    const v = run("validate", missing, "--json");
+    assert.equal(v.status, 2);
+    const one = JSON.parse(v.stdout);
+    assert.equal(one.ok, false);
+    assert.match(one.error, /cannot read/);
+    const many = run("validate", join(EXAMPLES, "minimal.en.json"), missing, "--json");
+    assert.equal(many.status, 2);
+    const arr = JSON.parse(many.stdout);
+    assert.equal(arr.length, 2);
+    assert.equal(arr[0].ok, true);
+    assert.deepEqual({ ...arr[1], error: typeof arr[1].error }, { file: missing, ok: false, error: "string" });
+    const w = run("render", join(EXAMPLES, "minimal.en.json"), "-o", join(dir, "no/such/dir.html"), "--json");
+    assert.equal(w.status, 2);
+    const werr = JSON.parse(w.stdout);
+    assert.equal(werr.ok, false);
+    assert.match(werr.error, /^cannot write /);
+    assert.ok(!/\n\s+at /.test(w.stderr), "no stack trace");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("render: template problems are reported as template errors, not write errors", () => {
+  const dir = tmp();
+  try {
+    const doc = load("minimal.en.json");
+    assert.throws(() => renderHtml(doc, { templatePath: join(dir, "nope.html") }), /^Error: template .* cannot be read/);
+    const bad = join(dir, "bad.html");
+    writeFileSync(bad, "<p>{{IAD_NOPE}}</p>");
+    assert.throws(() => renderHtml(doc, { templatePath: bad }), /template uses unknown slot \{\{IAD_NOPE\}\}/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("writeFileAtomic: random exclusive temp file, nothing left behind on failure", () => {
+  const dir = tmp();
+  try {
+    const target = join(dir, "out.html");
+    writeFileAtomic(target, "one");
+    writeFileAtomic(target, "two");
+    assert.equal(readFileSync(target, "utf8"), "two");
+    assert.deepEqual(readdirSync(dir), ["out.html"]);
+    // rename onto a directory fails after the temp file was written: it must be removed
+    const asDir = join(dir, "sub");
+    mkdirSync(asDir);
+    writeFileSync(join(asDir, "keep"), "x");
+    assert.throws(() => writeFileAtomic(asDir, "data"));
+    assert.deepEqual(readdirSync(dir).sort(), ["out.html", "sub"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fonts: family names from file names are sanitized", () => {
+  const dir = tmp();
+  try {
+    writeFileSync(join(dir, 'Evil";}body{x:url(y)}.woff2'), Buffer.from([1]));
+    writeFileSync(join(dir, "\u00e9\u00e9.woff2"), Buffer.from([2]));
+    const css = fontFaces(dir);
+    assert.ok(css.includes('font-family:"Evilbodyxurly"'), css);
+    assert.ok(css.includes('font-family:"font"'), css);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
