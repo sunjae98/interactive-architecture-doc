@@ -83,5 +83,5 @@ Paths are relative to the skill folder; run the commands from there or use absol
    `doc.json`, then follow case 1.
 3. **Only a v1 HTML exists** (hand-edited template with `TOTAL_STEPS` / `SCENARIOS`): for a
    typo-level change, edit the HTML directly. For anything larger, convert it once to JSON using
-   the "v1 to JSON mapping" table in `references/format.md`, render, compare with the original in
+   the mapping table in `references/migration-v1.md`, render, compare with the original in
    a browser, and from then on work from the JSON.

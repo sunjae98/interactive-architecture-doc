@@ -8,27 +8,7 @@ and render again. The rendered HTML embeds a copy of the JSON in
 The validator (`scripts/lib/validate.mjs`) is the single source of truth. This page describes the
 same rules; a test fails if the rule table below and the validator drift apart.
 
-```sh
-node scripts/iad.mjs validate doc.json          # human-readable: <JSON pointer> <CODE> <message>
-node scripts/iad.mjs validate doc.json --json   # {ok, errors[], warnings[]}
-node scripts/iad.mjs render doc.json [-o out.html]
-node scripts/iad.mjs init doc.json [--lang ko|en] [--steps N] [--scenarios id1,id2] [--fork] [--force]
-```
-
-`init` writes a skeleton with 0 errors whose strings are all `[...]` placeholders (reported as
-`W_PLACEHOLDER` until filled). Defaults: `en`, 3 steps, one scenario `default`, no fork. `--fork`
-(needs ≥2 scenarios and ≥2 steps) adds a decision `fan_hub` and one branch-scoped `fan_target`
-column per scenario. It refuses to overwrite an existing file (exit 2) unless `--force`.
-
-Exit codes: `0` valid (warnings allowed) · `1` validation errors · `2` usage, read, JSON parse, or write error.
-`render` re-validates and refuses to write anything if there are errors. The default output is
-next to the JSON with the same basename and `.html`; `render` refuses (exit 2) when the output path
-is the input file itself.
-
-`--json` output shape: one input file prints one object, several files print an array of objects
-(each with an extra `file` field). A document that was checked prints `{ok, errors[], warnings[]}`
-(`render` adds `output` on success). A file that cannot be read, parsed or written prints
-`{ok: false, error: "<message>"}` instead, and the exit code is `2`.
+Commands, options, exit codes and `--json` output: [cli.md](cli.md).
 
 ## Top level
 
@@ -152,39 +132,8 @@ block. Structural rules run first; cross-reference rules run only when the struc
 start a new scope. A node is *active* for a scenario at step *s* when `node.step = s` and it has no
 `branches` or its `branches` include the scenario id.
 
-## Minimal example
+## Starting point
 
-See `examples/minimal.en.json` (3 steps, 1 scenario) and `examples/three-branch.en.json`
-(fork with three paths, external systems, all optional sections). Korean versions: `*.ko.json`.
-
-## v1 → JSON mapping
-
-For converting a v1 document (hand-edited `template.html`) into JSON once.
-
-| v1 | JSON |
-|---|---|
-| `<h1>` / `.subtitle` | `meta.title` / `meta.subtitle` |
-| `.tldr` `.headline` and its `.card` items | `tldr.headline` / `tldr.points[{title, detail}]` |
-| `.stepper` `.step` (N items) | `steps[{label}]`, N = array length |
-| `var TOTAL_STEPS = N` | not needed: `steps.length` |
-| `.legend` `.dot.<kind>` + text | `legend.<kind>` = the text |
-| `.node.client` / `.decision` / `.existing` / `.new` | `node.kind` |
-| `data-step="N"` | `node.step` |
-| `data-branch="a,b"` | `node.branches: ["a", "b"]` |
-| `.tag` / `.sub` / `.note` / code `<pre>` in a node | `node.tag` / `node.body` / `node.note` / `node.code` |
-| `.center-row` + `.node` | a top-level `node` block (`width`: `.narrow` / `.wide` / `.full` classes) |
-| `.plain-arrow`, `.arrow-label` | `{type: "arrow", label}` |
-| `.internal` with `.badge` | `{type: "internal", badge, children}` |
-| `.external-zone` `.external-card` `.ext-tag` | `{type: "external", badge, systems[{name, items[{text, tag}]}]}` |
-| `.fork-zone` + `.fork-row` of `.fork-col` | `{type: "fork", children}` containing a `columns` block; each `.fork-col` is a `columns[]` entry (`.fork-title` = `title`) |
-| inline `grid-template-columns` | not needed: column count comes from `columns.length` (`--cols`) |
-| `data-fan-hub="id"` / `data-fan-target="id"` | `node.fan_hub` / `node.fan_target` (same fork block) |
-| `<svg class="zone-overlay" data-fan-svg>` | generated per `fork` |
-| `.detail-grid` (`.detail-left` / `.detail-right`, `.alt-item`) | `node.details{code, items[{title, body, variant: "alt"}]}` |
-| `.callout` | `callouts[{title, body}]` |
-| `.considerations` items with `.why` | `considerations.items[{decision, why}]` |
-| `.tool-examples` `.tool-card` (`.tool-name`, `.tool-note`) | `tool_examples{title, lead, tools[{name, code, note}]}` |
-| `SCENARIOS = {key: {label, steps: {1: "..."}}}` | `scenarios[{id: key, label, steps: {"1": "..."}}]` |
-| `<select id="pgPrompt">` options | `scenarios[].icon` / `.input` (the drop-down is generated) |
-| `#entryCode` and `buildEntryRequest()` template | `meta.entry_request` with `{{input}}`, plus `entry: true` on that node |
-| Korean `word-break: keep-all` on body | handled by the template; set `meta.lang` |
+`node scripts/iad.mjs init doc.json` writes a valid skeleton to fill in ([cli.md](cli.md)). Complete
+examples: `examples/minimal.en.json` (3 steps, 1 scenario) and `examples/three-branch.en.json` (fork
+with three paths, external systems, all optional sections). Korean versions: `*.ko.json`.
