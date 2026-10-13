@@ -102,6 +102,23 @@ test("tokens: each kind's text is >= 4.5:1 on its own bg and on the neutral surf
   }
 });
 
+test("theme: early head script picks saved theme or OS preference, toggle persists it guardedly", () => {
+  const src = readFileSync(TEMPLATE_PATH, "utf8");
+  const head = src.slice(0, src.indexOf("</head>"));
+  const early = head.match(/<script>([\s\S]*?)<\/script>/);
+  assert.ok(early, "inline theme script in <head>");
+  assert.ok(head.indexOf("<script>") < head.indexOf("<style>"), "theme is set before the CSS is parsed");
+  for (const needle of ['localStorage.getItem("iad-theme")', "(prefers-color-scheme: dark)", 'setAttribute("data-theme", theme)']) {
+    assert.ok(early[1].includes(needle), needle);
+  }
+  assert.ok(/try \{ theme = localStorage\.getItem/.test(early[1]), "storage read is guarded");
+  assert.ok(src.includes('<button class="pg-btn pg-theme" id="pgTheme" aria-pressed="false">{{t:theme_dark}}</button>'));
+  assert.ok(/try \{ localStorage\.setItem\("iad-theme", next\); \} catch/.test(src), "storage write is guarded");
+  for (const lang of ["en", "ko"]) assert.equal(typeof UI[lang].theme_dark, "string", `${lang}.theme_dark`);
+  // export copies the live theme
+  assert.ok(src.includes('root.setAttribute("data-theme", html.getAttribute("data-theme"))'));
+});
+
 test("template: grid columns come from --cols, not inline grid-template-columns", () => {
   const src = readFileSync(TEMPLATE_PATH, "utf8");
   assert.ok(/\.fork-row\{[^}]*repeat\(var\(--cols,4\),1fr\)/.test(src));
@@ -170,8 +187,8 @@ test("render: </script> and markup in author text are neutralized", () => {
   const { html } = renderHtml(doc);
   assert.ok(!html.includes("<script>alert"));
   assert.ok(!html.includes("<img"));
-  assert.equal(count(html, /<script\b/g), 4, "2 JSON data blocks + 2 runtime scripts");
-  assert.equal(count(html, /<\/script>/g), 4);
+  assert.equal(count(html, /<script\b/g), 5, "2 JSON data blocks + early theme script + 2 runtime scripts");
+  assert.equal(count(html, /<\/script>/g), 5);
   assert.ok(html.includes("&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;"));
   assert.ok(html.includes("<b>bold</b>"));
   const data = html.match(/id="iad-data">([\s\S]*?)<\/script>/)[1];

@@ -5,6 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="interactive-architecture-doc">
 <title>{{IAD_TITLE}}</title>
+<script>
+// Theme before first paint (no flash): the saved choice, else the OS preference. localStorage can
+// throw on file:// (blocked storage), so every access is guarded.
+(function () {
+  var theme = null;
+  try { theme = localStorage.getItem("iad-theme"); } catch (e) { /* storage unavailable */ }
+  if (theme !== "light" && theme !== "dark") {
+    theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  document.documentElement.setAttribute("data-theme", theme);
+})();
+</script>
 {{IAD_FONTS}}
 <style>
   /* ==== Design tokens ======================================================
@@ -82,8 +94,42 @@
     --shadow-panel:0 0 0 1px #d1d9e040,0 6px 12px -3px #25292e0a,0 6px 18px 0 #25292e1f; /* shadow-floating-small */
     --shadow-active:0 0 0 3px #5eb1ef,0 6px 12px -3px #25292e0a,0 6px 18px 0 #25292e1f; /* blue 8 ring + floating-small */
   }
+  /* Dark theme: Radix dark steps (same step numbers as light), Primer dark shadows. Tokens not
+     repeated here (primary, solids, code block colors, fonts, scales) are theme-independent. */
   [data-theme="dark"]{
-    /* Dark theme slot: values are added with the theme toggle. */
+    color-scheme:dark;
+    --color-bg:#111113;             /* slate dark 1 */
+    --color-surface:#18191b;        /* slate dark 2 */
+    --color-surface-2:#212225;      /* slate dark 3 */
+    --color-border:#363a3f;         /* slate dark 6 */
+    --color-text:#edeef0;           /* slate dark 12 */
+    --color-text-muted:#b0b4ba;     /* slate dark 11 */
+    --color-primary-bg:#0d2847;     /* blue dark 3 */
+    --color-primary-text:#70b8ff;   /* blue dark 11 */
+    --color-hatch:#18191b;          /* slate dark 2 (stripes on the slate dark 1 page) */
+    --line:#5a6169;                 /* slate dark 8 */
+
+    --kind-client-bg:#381525;       /* crimson dark 3 */
+    --kind-client-border:#873356;   /* crimson dark 7 */
+    --kind-client-text:#ff92ad;     /* crimson dark 11 */
+
+    --kind-decision-bg:#291f43;     /* violet dark 3 */
+    --kind-decision-border:#56468b; /* violet dark 7 */
+    --kind-decision-text:#baa7ff;   /* violet dark 11 */
+    --kind-decision-tag-bg:#33255b; /* violet dark 4 */
+
+    --kind-existing-bg:#132d21;     /* green dark 3 */
+    --kind-existing-border:#28684a; /* green dark 7 */
+    --kind-existing-text:#3dd68c;   /* green dark 11 */
+    --kind-existing-zone-bg:#121b17; /* green dark 2 */
+
+    --kind-new-bg:#302008;          /* amber dark 3 */
+    --kind-new-border:#714f19;      /* amber dark 7 */
+    --kind-new-text:#ffca16;        /* amber dark 11 */
+
+    --shadow-card:0 1px 1px 0 #01040966,0 3px 6px 0 #010409cc;                         /* shadow-resting-medium (dark) */
+    --shadow-panel:0 0 0 1px #3d444d,0 6px 12px -3px #01040966,0 6px 18px 0 #01040966;   /* shadow-floating-small (dark) */
+    --shadow-active:0 0 0 3px #2870bd,0 6px 12px -3px #01040966,0 6px 18px 0 #01040966;  /* blue dark 8 ring + floating-small */
   }
 
   /* ==== Base ============================================================== */
@@ -337,6 +383,8 @@
   .pg-btn:hover{background:var(--color-surface-2);}
   .pg-btn.primary{background:var(--color-primary);border-color:var(--color-primary);color:var(--color-on-solid);}
   .pg-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .pg-btn[aria-pressed="true"]{background:var(--color-primary-bg);border-color:var(--color-primary);color:var(--color-primary-text);}
+  .pg-theme{width:100%;}
   .pg-btns{display:flex;gap:var(--space-2);}
   .pg-btns .pg-btn{flex:1;padding:8px var(--space-2);}
   .pg-status{font-size:10.6px;color:var(--color-text-muted);line-height:1.5;}
@@ -412,6 +460,9 @@
         <button class="pg-btn" id="pgExportCopy">{{t:export_copy}}</button>
       </div>
       <div class="pg-export-status" id="pgExportStatus" role="status" aria-live="polite"></div>
+    </div>
+    <div class="pg-panel">
+      <button class="pg-btn pg-theme" id="pgTheme" aria-pressed="false">{{t:theme_dark}}</button>
     </div>
   </div>
 </aside>
@@ -637,6 +688,34 @@
   });
 
   render();
+
+  // ---- Theme toggle: flips data-theme on <html> (set early in <head>) and remembers the choice.
+  // Without a saved choice the page keeps following the OS preference.
+  var themeBtn = document.getElementById("pgTheme");
+  var rootEl = document.documentElement;
+  function syncThemeButton() {
+    themeBtn.setAttribute("aria-pressed", rootEl.getAttribute("data-theme") === "dark" ? "true" : "false");
+  }
+  function savedTheme() {
+    try { return localStorage.getItem("iad-theme"); } catch (e) { return null; }
+  }
+  themeBtn.addEventListener("click", function () {
+    var next = rootEl.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    rootEl.setAttribute("data-theme", next);
+    try { localStorage.setItem("iad-theme", next); } catch (e) { /* not persisted on this page */ }
+    syncThemeButton();
+  });
+  if (window.matchMedia) {
+    var darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    var onSchemeChange = function (e) {
+      if (savedTheme()) return;
+      rootEl.setAttribute("data-theme", e.matches ? "dark" : "light");
+      syncThemeButton();
+    };
+    if (darkQuery.addEventListener) darkQuery.addEventListener("change", onSchemeChange);
+    else if (darkQuery.addListener) darkQuery.addListener(onSchemeChange);
+  }
+  syncThemeButton();
 
   // ---- Export: the current view (scenario + step) as PNG, SVG or a clipboard image.
   // Every [data-export] element is cloned into one .iad-export root at the live width, the page CSS

@@ -32,6 +32,7 @@ export const UI = {
     export_svg_failed: "Could not create the SVG ({reason}).",
     export_clip_unsupported: "This browser cannot copy images to the clipboard. Use PNG or SVG instead.",
     export_clip_denied: "Clipboard access was denied ({reason}). Use PNG or SVG instead.",
+    theme_dark: "Dark mode",
   },
   ko: {
     scenario: "시나리오",
@@ -62,6 +63,7 @@ export const UI = {
     export_svg_failed: "SVG를 만들지 못했습니다({reason}).",
     export_clip_unsupported: "이 브라우저는 이미지를 클립보드에 복사할 수 없습니다. PNG나 SVG를 사용하세요.",
     export_clip_denied: "클립보드 접근이 거부되었습니다({reason}). PNG나 SVG를 사용하세요.",
+    theme_dark: "다크 모드",
   },
 };
 
