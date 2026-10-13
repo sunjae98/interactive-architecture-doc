@@ -112,9 +112,15 @@ IAD Sans is a subset of Pretendard Variable 1.3.9 renamed because Pretendard is 
 under its OFL (see `THIRD_PARTY_NOTICES.md` and `tools/build-fonts/README.md` in the repository);
 Geist Mono 1.7.2 has no Reserved Font Name.
 
-**Rendered size.** Fonts are ~509 KB of woff2 (~680 KB as base64). Rendered examples:
-`minimal.en` 726,346 B, `minimal.ko` 727,023 B, `three-branch.en` 748,498 B, `three-branch.ko`
-750,730 B. All are well under the 1.5 MB threshold the plan set for falling back to system fonts, so
+**Glyph coverage.** Both fonts carry Basic Latin, Latin-1 (punctuation and the letters U+00C0–00FF,
+e.g. `é ü ñ ß`), common punctuation/arrows/symbols; IAD Sans adds the 2,350 KS X 1001 Hangul
+syllables. Everything else falls back to the system fonts in the stack: Hangul syllables outside
+KS X 1001 (e.g. `똠 쀍 햏`), Hangul Jamo, Hanja/CJK, Latin Extended (e.g. `ő ł ş`), Greek, Cyrillic,
+and emoji. Fallback text stays readable but its metrics differ slightly from IAD Sans.
+
+**Rendered size.** Fonts are ~516 KB of woff2 (~689 KB as base64). Rendered examples:
+`minimal.en` 740,232 B, `minimal.ko` 740,909 B, `three-branch.en` 762,384 B, `three-branch.ko`
+764,616 B. All are well under the 1.5 MB threshold the plan set for falling back to system fonts, so
 both fonts stay embedded (decision recorded 2026-10-13).
 
 ## Dark mode

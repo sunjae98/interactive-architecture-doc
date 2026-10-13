@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Reproducible woff2 subsetting. See README.md. Usage: .venv/bin/python build.py [--check]"""
+"""Reproducible woff2 subsetting. See README.md. Usage: .venv/bin/python build.py [--check]
+
+--check rebuilds in memory, writes nothing, and exits 1 if any output differs from hashes.json."""
 import hashlib, io, json, sys, urllib.request, zipfile
 from pathlib import Path
 from fontTools import subset
@@ -43,7 +45,7 @@ def fetch(font):
     path = CACHE / font["archiveName"]
     if not path.exists():
         print("downloading", font["url"])
-        with urllib.request.urlopen(font["url"]) as r:
+        with urllib.request.urlopen(font["url"], timeout=60) as r:
             path.write_bytes(r.read())
     data = path.read_bytes()
     if sha256(data) != font["archiveSha256"]:
@@ -108,7 +110,15 @@ def main():
             out_dir.mkdir(parents=True, exist_ok=True)
             (out_dir / font["output"]).write_bytes(data)
         print(font["output"], len(data), sha256(data))
-    if not check:
+    if check:
+        expected = json.loads((HERE / "hashes.json").read_text())
+        if hashes != expected:
+            print("MISMATCH: rebuilt fonts differ from hashes.json", file=sys.stderr)
+            print("expected:", json.dumps(expected, indent=2), file=sys.stderr)
+            print("rebuilt: ", json.dumps(hashes, indent=2), file=sys.stderr)
+            sys.exit(1)
+        print("ok: rebuilt fonts match hashes.json")
+    else:
         (HERE / "hashes.json").write_text(json.dumps(hashes, indent=2) + "\n")
 
 

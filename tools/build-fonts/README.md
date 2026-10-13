@@ -8,19 +8,21 @@ runtime, CI or distribution dependency (CI only verifies the committed woff2 has
 ```sh
 cd tools/build-fonts
 python3 -m venv .venv                      # gitignored
-.venv/bin/pip install fonttools brotli     # tested with fonttools 4.66.1, brotli 1.2.0
+.venv/bin/pip install -r requirements.txt  # pinned: fonttools==4.66.1, brotli==1.2.0
 .venv/bin/python build.py                  # writes assets/fonts/*.woff2 and hashes.json
-.venv/bin/python build.py --check          # rebuild in memory only, no files written
+.venv/bin/python build.py --check          # rebuild in memory only; exit 1 if it differs from hashes.json
 ```
 
-Source archives are downloaded to `.cache/` (gitignored) and their SHA-256 is verified against
+`requirements.txt` pins the exact fontTools / brotli versions: other versions may produce different
+bytes. Source archives are downloaded (60 s timeout) to `.cache/` (gitignored) and their SHA-256 is verified against
 `fonts.spec.json` before use; a mismatch aborts. Output is deterministic (timestamps are not
-recalculated), so `hashes.json` should be unchanged after a clean rebuild.
+recalculated), so `hashes.json` should be unchanged after a clean rebuild; `--check` verifies exactly
+that. `test/fonts.test.mjs` (and CI) check the committed woff2 files against `hashes.json`.
 
 ## Spec (`fonts.spec.json`)
 
 - Per font: family, version, license, download URL, archive SHA-256, member path inside the archive, glyph ranges.
-- Ranges: Basic Latin, Latin-1 punctuation, arrows/symbols used by the template and examples
+- Ranges: Basic Latin, Latin-1 punctuation, Latin-1 letters (U+00C0-00FF: `À`-`ÿ`, e.g. `é ü ñ ß`), arrows/symbols used by the template and examples
   (`·` `–` `—` `→` `①` plus the general arrows / circled digit / geometric blocks).
   Emoji (e.g. `⏳ 💬 📷 🔎`) are intentionally not embedded; they fall back to the system emoji font.
 - Pretendard additionally includes the KS X 1001 Hangul set: the 2,350 syllables in U+AC00-D7A3 that encode
