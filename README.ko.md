@@ -104,7 +104,7 @@ Colors와 Primer Primitives에서 가져왔습니다. [THIRD_PARTY_NOTICES.md](T
 
 ## 기여
 
-[CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요. 설계 문서: [docs/plans/v2.md](docs/plans/v2.md).
+[CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
 
 ## 라이선스
 

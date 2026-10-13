@@ -7,3 +7,5 @@ node_modules/
 # font build venv / downloads
 tools/build-fonts/.venv/
 tools/build-fonts/.cache/
+# local planning notes (not published)
+docs/plans/

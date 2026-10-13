@@ -108,7 +108,7 @@ and scales derive from Radix Colors and Primer Primitives. See [THIRD_PARTY_NOTI
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Design notes: [docs/plans/v2.md](docs/plans/v2.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
