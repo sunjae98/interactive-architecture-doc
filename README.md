@@ -11,7 +11,9 @@ The agent never writes HTML. It writes a JSON document, a dependency-free Node s
 HTML file. The viewer can export the **current view** (selected scenario and step) as PNG, SVG, or a
 clipboard image. Light and dark themes, Korean and English UI.
 
-<!-- Screenshots: add images under docs/ and link them here. -->
+| Light | Dark |
+|---|---|
+| ![Interactive architecture document, light theme](docs/screenshot-light.png) | ![Interactive architecture document, dark theme](docs/screenshot-dark.png) |
 
 ## Install
 
