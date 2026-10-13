@@ -92,7 +92,7 @@ export const BLOCK_TYPES = Object.keys(BLOCKS);
 const ptr = (path, key) => path + "/" + String(key).replace(/~/g, "~0").replace(/\//g, "~1");
 const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const typeName = (v) => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v);
-const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 // Quote author-supplied keys/values in messages; JSON escaping keeps control characters
 // (e.g. terminal escape sequences) out of CLI output.
 const q = (v) => JSON.stringify(String(v));

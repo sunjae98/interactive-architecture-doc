@@ -12,7 +12,13 @@ same rules; a test fails if the rule table below and the validator drift apart.
 node scripts/iad.mjs validate doc.json          # human-readable: <JSON pointer> <CODE> <message>
 node scripts/iad.mjs validate doc.json --json   # {ok, errors[], warnings[]}
 node scripts/iad.mjs render doc.json [-o out.html]
+node scripts/iad.mjs init doc.json [--lang ko|en] [--steps N] [--scenarios id1,id2] [--fork] [--force]
 ```
+
+`init` writes a skeleton with 0 errors whose strings are all `[...]` placeholders (reported as
+`W_PLACEHOLDER` until filled). Defaults: `en`, 3 steps, one scenario `default`, no fork. `--fork`
+(needs ≥2 scenarios and ≥2 steps) adds a decision `fan_hub` and one branch-scoped `fan_target`
+column per scenario. It refuses to overwrite an existing file (exit 2) unless `--force`.
 
 Exit codes: `0` valid (warnings allowed) · `1` validation errors · `2` usage, read, JSON parse, or write error.
 `render` re-validates and refuses to write anything if there are errors. The default output is

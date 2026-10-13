@@ -3,24 +3,32 @@
 //
 //   node scripts/iad.mjs validate <doc.json>... [--json]
 //   node scripts/iad.mjs render <doc.json> [-o <out.html>] [--json]
+//   node scripts/iad.mjs init <out.json> [--lang ko|en] [--steps N] [--scenarios a,b] [--fork] [--force] [--json]
 //
 // Exit codes: 0 = valid (warnings allowed), 1 = validation errors, 2 = usage / read / parse / write error.
 // --json: one file -> one object, several files -> an array. A file that cannot be read, parsed or
 // written is reported as {ok: false, error: "..."} (arrays add "file") and the exit code is 2.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { validate, formatIssue } from "./lib/validate.mjs";
 import { renderHtml, writeFileAtomic, defaultOutputPath, ValidationFailed } from "./lib/render.mjs";
+import { scaffold, KEBAB, LANGS, MAX_STEPS } from "./lib/scaffold.mjs";
 
 const USAGE = `Usage:
   iad validate <doc.json>... [--json]
   iad render <doc.json> [-o <out.html>] [--json]
+  iad init <out.json> [--lang ko|en] [--steps N] [--scenarios id1,id2,...] [--fork] [--force] [--json]
 
 Options:
   --json             print {ok, errors[], warnings[]} (render adds "output") as JSON;
                      unreadable/unwritable files print {ok:false, error}
   -o, --out <file>   render output path (default: next to the JSON, same name, .html)
+  --lang ko|en       init: UI and placeholder language (default en)
+  --steps N          init: number of steps, 1..20 (default 3)
+  --scenarios ids    init: comma-separated kebab-case scenario ids (default "default")
+  --fork             init: a decision node fanning out to one column per scenario (needs >= 2 scenarios, >= 2 steps)
+  --force            init: overwrite an existing file
   -h, --help         show this help`;
 
 class UsageError extends Error {}
@@ -40,17 +48,25 @@ function readDoc(file) {
   }
 }
 
+const INIT_OPTIONS = ["--lang", "--steps", "--scenarios", "--fork", "--force"];
+
 function parseArgs(argv) {
-  const args = { command: argv[0], files: [], json: false, help: false, out: null };
+  const args = { command: argv[0], files: [], json: false, help: false, out: null, init: {} };
   const rest = argv.slice(1);
+  const value = (i, what) => {
+    if (i + 1 >= rest.length) throw new UsageError(`${rest[i]} needs ${what}`);
+    return rest[i + 1];
+  };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a === "--json") args.json = true;
-    else if (a === "-o" || a === "--out") {
-      if (i + 1 >= rest.length) throw new UsageError(`${a} needs a file path`);
-      args.out = rest[++i];
-    } else if (a === "-h" || a === "--help") args.help = true;
-    else if (a.startsWith("-")) throw new UsageError(`unknown option ${a}`);
+    else if (a === "-o" || a === "--out") args.out = value(i++, "a file path");
+    else if (a === "-h" || a === "--help") args.help = true;
+    else if (INIT_OPTIONS.includes(a)) {
+      if (args.command !== "init") throw new UsageError(`${a} is only valid for init`);
+      if (a === "--fork" || a === "--force") args.init[a.slice(2)] = true;
+      else args.init[a.slice(2)] = value(i++, a === "--lang" ? "ko or en" : a === "--steps" ? "a number" : "scenario ids");
+    } else if (a.startsWith("-")) throw new UsageError(`unknown option ${a}`);
     else args.files.push(a);
   }
   return args;
@@ -119,6 +135,40 @@ function cmdRender(args) {
   }
 }
 
+function cmdInit(args) {
+  if (args.files.length !== 1) throw new UsageError("init needs exactly one output file");
+  if (args.out) throw new UsageError("init takes the output path as its argument, not -o");
+  const file = args.files[0];
+  const o = args.init;
+  const lang = o.lang ?? "en";
+  if (!LANGS.includes(lang)) throw new UsageError(`--lang must be one of: ${LANGS.join(", ")}`);
+  const stepsText = o.steps ?? "3";
+  if (!/^[0-9]+$/.test(stepsText) || +stepsText < 1 || +stepsText > MAX_STEPS) throw new UsageError(`--steps must be an integer in 1..${MAX_STEPS}`);
+  const steps = +stepsText;
+  const scenarios = (o.scenarios ?? "default").split(",").map((id) => id.trim());
+  for (const id of scenarios) {
+    if (!KEBAB.test(id)) throw new UsageError(`scenario id ${JSON.stringify(id)} must be kebab-case`);
+  }
+  if (new Set(scenarios).size !== scenarios.length) throw new UsageError("scenario ids must be unique");
+  if (o.fork && scenarios.length < 2) throw new UsageError("--fork needs at least 2 scenarios (--scenarios a,b)");
+  if (o.fork && steps < 2) throw new UsageError("--fork needs --steps 2 or more");
+  if (!o.force && existsSync(file)) throw new FileError(`${file} already exists (use --force to overwrite)`);
+
+  const doc = scaffold({ lang, steps, scenarios, fork: !!o.fork });
+  const { warnings } = validate(doc);
+  try {
+    writeFileAtomic(file, JSON.stringify(doc, null, 2) + "\n");
+  } catch (e) {
+    throw new FileError(`cannot write ${file}: ${e.message}`);
+  }
+  if (args.json) {
+    process.stdout.write(JSON.stringify({ ok: true, errors: [], warnings, output: file }, null, 2) + "\n");
+  } else {
+    process.stdout.write(`wrote ${file}: replace the ${warnings.length} [placeholder] string(s), then run validate\n`);
+  }
+  return 0;
+}
+
 function strip({ ok, errors, warnings, error }) {
   return error ? { ok, error } : { ok, errors, warnings };
 }
@@ -134,6 +184,7 @@ function main(argv) {
     }
     if (args.command === "validate") return cmdValidate(args);
     if (args.command === "render") return cmdRender(args);
+    if (args.command === "init") return cmdInit(args);
     throw new UsageError(`unknown command "${args.command}"`);
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
