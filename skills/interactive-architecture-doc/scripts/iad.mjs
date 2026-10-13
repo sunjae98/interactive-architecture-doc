@@ -2,40 +2,50 @@
 // iad — interactive-architecture-doc CLI. Node >= 18, no dependencies.
 //
 //   node scripts/iad.mjs validate <doc.json>... [--json]
+//   node scripts/iad.mjs render <doc.json> [-o <out.html>] [--json]
 //
 // Exit codes: 0 = valid (warnings allowed), 1 = validation errors, 2 = usage / read / parse error.
 
 import { readFileSync } from "node:fs";
 import { validate, formatIssue } from "./lib/validate.mjs";
+import { renderFile, defaultOutputPath, ValidationFailed } from "./lib/render.mjs";
 
 const USAGE = `Usage:
   iad validate <doc.json>... [--json]
+  iad render <doc.json> [-o <out.html>] [--json]
 
 Options:
-  --json       print {ok, errors[], warnings[]} as JSON
-  -h, --help   show this help`;
+  --json             print {ok, errors[], warnings[]} (render adds "output") as JSON
+  -o, --out <file>   render output path (default: next to the JSON, same name, .html)
+  -h, --help         show this help`;
 
 class UsageError extends Error {}
+class FileError extends UsageError {} // read/parse/write problems: exit 2, no usage text
 
 function readDoc(file) {
   let source;
   try {
     source = readFileSync(file, "utf8");
   } catch (e) {
-    throw new UsageError(`cannot read ${file}: ${e.message}`);
+    throw new FileError(`cannot read ${file}: ${e.message}`);
   }
   try {
     return JSON.parse(source);
   } catch (e) {
-    throw new UsageError(`${file} is not valid JSON: ${e.message}`);
+    throw new FileError(`${file} is not valid JSON: ${e.message}`);
   }
 }
 
 function parseArgs(argv) {
-  const args = { command: argv[0], files: [], json: false, help: false };
-  for (const a of argv.slice(1)) {
+  const args = { command: argv[0], files: [], json: false, help: false, out: null };
+  const rest = argv.slice(1);
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
     if (a === "--json") args.json = true;
-    else if (a === "-h" || a === "--help") args.help = true;
+    else if (a === "-o" || a === "--out") {
+      if (i + 1 >= rest.length) throw new UsageError(`${a} needs a file path`);
+      args.out = rest[++i];
+    } else if (a === "-h" || a === "--help") args.help = true;
     else if (a.startsWith("-")) throw new UsageError(`unknown option ${a}`);
     else args.files.push(a);
   }
@@ -59,6 +69,35 @@ function cmdValidate(args) {
   return results.every((r) => r.ok) ? 0 : 1;
 }
 
+function cmdRender(args) {
+  if (args.files.length !== 1) throw new UsageError("render needs exactly one file");
+  const file = args.files[0];
+  const outPath = args.out || defaultOutputPath(file);
+  const doc = readDoc(file);
+  try {
+    const { warnings } = renderFile(doc, outPath);
+    if (args.json) {
+      process.stdout.write(JSON.stringify({ ok: true, errors: [], warnings, output: outPath }, null, 2) + "\n");
+    } else {
+      for (const w of warnings) process.stderr.write(formatIssue(w) + "\n");
+      process.stdout.write(`wrote ${outPath}\n`);
+    }
+    return 0;
+  } catch (e) {
+    if (!(e instanceof ValidationFailed)) {
+      if (e.code) throw new FileError(`cannot write ${outPath}: ${e.message}`);
+      throw e;
+    }
+    if (args.json) {
+      process.stdout.write(JSON.stringify(strip(e.result), null, 2) + "\n");
+    } else {
+      for (const i of [...e.result.errors, ...e.result.warnings]) process.stdout.write(formatIssue(i) + "\n");
+      process.stderr.write(`${file}: not rendered (${e.result.errors.length} error(s))\n`);
+    }
+    return 1;
+  }
+}
+
 function strip({ ok, errors, warnings }) {
   return { ok, errors, warnings };
 }
@@ -71,10 +110,11 @@ function main(argv) {
       return args.command ? 0 : 2;
     }
     if (args.command === "validate") return cmdValidate(args);
+    if (args.command === "render") return cmdRender(args);
     throw new UsageError(`unknown command "${args.command}"`);
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
-    process.stderr.write(`iad: ${e.message}\n\n${USAGE}\n`);
+    process.stderr.write(e instanceof FileError ? `iad: ${e.message}\n` : `iad: ${e.message}\n\n${USAGE}\n`);
     return 2;
   }
 }
