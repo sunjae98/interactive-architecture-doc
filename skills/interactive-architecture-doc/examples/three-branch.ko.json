@@ -1,0 +1,250 @@
+{
+  "meta": {
+    "title": "요청 라우터",
+    "subtitle": "엔드포인트 하나, 실행 경로 셋 — 라우터가 **즉시 응답**, **조회**, **백그라운드 작업** 중 어디로 보낼지 결정합니다.",
+    "lang": "ko",
+    "entry_request": "POST /v1/ask\n{ \"input\": \"{{input}}\" }"
+  },
+  "tldr": {
+    "headline": "경로 판단은 라우터가 하고, 클라이언트는 요청만 보낸다.",
+    "points": [
+      { "title": "모든 요청은 엔드포인트 하나로", "detail": "클라이언트는 경로·워커·타임아웃을 고르지 않습니다. `POST /v1/ask`로 보내고 한 가지 형태의 응답만 읽습니다." },
+      { "title": "분류는 맨 앞에서 한 번만", "detail": "규칙 기반 분류기가 경로를 고르고, 규칙으로 판단이 안 될 때만 모델에 묻습니다." },
+      { "title": "느린 작업이 요청을 붙잡지 않는다", "detail": "오래 걸리는 작업은 큐에 넣고, 클라이언트는 기다리는 대신 `status_url`을 받습니다." },
+      { "title": "모든 경로는 하나의 봉투로 합쳐진다", "detail": "즉시 응답이든 조회든 지연 작업이든 `{status, answer, links}` 형태로 돌려줍니다." }
+    ]
+  },
+  "steps": [
+    { "label": "클라이언트 요청" },
+    { "label": "라우팅 설정 로드" },
+    { "label": "분류" },
+    { "label": "경로 실행" },
+    { "label": "후처리" },
+    { "label": "응답 조립" },
+    { "label": "클라이언트 수신" }
+  ],
+  "legend": {
+    "client": "클라이언트 — 시스템 바깥",
+    "decision": "판단 — 경로가 갈리는 지점",
+    "existing": "기존 — 이미 있는 것을 그대로 재사용",
+    "new": "신규 — 이번에 새로 만드는 부분"
+  },
+  "scenarios": [
+    {
+      "id": "simple",
+      "label": "단순 응답",
+      "icon": "💬",
+      "input": "영업시간이 어떻게 되나요?",
+      "steps": {
+        "1": "POST /v1/ask\n{ \"input\": \"영업시간이 어떻게 되나요?\" }",
+        "2": "config = {\n  classifier: \"rules-v2\",\n  timeout_ms: 800,\n  fallback: \"inline\"\n}",
+        "3": "route = \"simple\"\nmatched_rule = \"faq.opening_hours\"",
+        "4": "faq_handler.answer(\"opening_hours\")\n→ \"평일 09:00–18:00\"",
+        "5": "cache.set(\"faq:opening_hours\", answer, ttl = 3600)",
+        "6": "{\n  \"status\": \"done\",\n  \"answer\": \"평일 09:00–18:00\",\n  \"links\": []\n}",
+        "7": "200 OK — 클라이언트가 답을 바로 표시"
+      }
+    },
+    {
+      "id": "lookup",
+      "label": "조회 필요",
+      "icon": "🔎",
+      "input": "지난주에 출고된 주문 찾아줘",
+      "steps": {
+        "1": "POST /v1/ask\n{ \"input\": \"지난주에 출고된 주문 찾아줘\" }",
+        "2": "config = {\n  classifier: \"rules-v2\",\n  timeout_ms: 800,\n  fallback: \"inline\"\n}",
+        "3": "route = \"lookup\"\nreason = \"라우터가 갖고 있지 않은 레코드가 필요함\"",
+        "4": "GET /search?q=status:shipped+date:last-7d\n→ 42건",
+        "5": "summarizer.run(hits[:10])\n→ \"42건 출고, 그중 3건 지연\"",
+        "6": "{\n  \"status\": \"done\",\n  \"answer\": \"42건 출고, 그중 3건 지연\",\n  \"links\": [\"/orders?filter=shipped-7d\"]\n}",
+        "7": "200 OK — 답변 + 전체 목록 링크"
+      }
+    },
+    {
+      "id": "job",
+      "label": "오래 걸리는 작업",
+      "icon": "⏳",
+      "input": "분기 보고서 PDF 만들어줘",
+      "steps": {
+        "1": "POST /v1/ask\n{ \"input\": \"분기 보고서 PDF 만들어줘\" }",
+        "2": "config = {\n  classifier: \"rules-v2\",\n  timeout_ms: 800,\n  fallback: \"inline\"\n}",
+        "3": "route = \"job\"\nreason = \"예상 실행 시간 90s > timeout_ms\"",
+        "4": "POST /jobs\n{ \"kind\": \"report.quarterly\" }\n→ { \"job_id\": \"j-7f3a\" }",
+        "5": "status_store.put(\"j-7f3a\", \"queued\")\nstatus_url = \"/v1/jobs/j-7f3a\"",
+        "6": "{\n  \"status\": \"pending\",\n  \"answer\": null,\n  \"links\": [\"/v1/jobs/j-7f3a\"]\n}",
+        "7": "202 Accepted — 클라이언트가 status_url을 완료될 때까지 폴링"
+      }
+    }
+  ],
+  "board": [
+    {
+      "type": "node",
+      "kind": "client",
+      "step": 1,
+      "width": "full",
+      "entry": true,
+      "tag": "단일 엔드포인트",
+      "body": "클라이언트는 경로를 고르지 않고 요청 하나만 보냅니다.",
+      "code": "POST /v1/ask\n{ \"input\": \"...\" }",
+      "note": "어떤 워커·타임아웃·경로를 쓸지 클라이언트는 지정하지 않습니다."
+    },
+    { "type": "arrow" },
+    {
+      "type": "internal",
+      "badge": "내부 — 클라이언트에게는 보이지 않는 흐름",
+      "children": [
+        {
+          "type": "node",
+          "kind": "new",
+          "step": 2,
+          "width": "full",
+          "tag": "신규 — 서버가 결정",
+          "body": "요청마다 라우팅 설정을 불러옵니다.",
+          "details": {
+            "code": "classifier: rules-v2\ntimeout_ms: 800\nfallback: inline",
+            "items": [
+              { "title": "규칙 기반 분류기", "body": "기본값. 키워드·스키마 검사로 1ms 안에 경로를 정합니다." },
+              { "title": "모델 보조 분류기", "body": "규칙으로 판단이 안 될 때만 사용. 지연이 늘어나서 대체 경로로만 둡니다.", "variant": "alt" }
+            ]
+          },
+          "note": "이 값들은 클라이언트 코드가 아니라 라우터 설정 파일에 있습니다."
+        },
+        { "type": "arrow", "label": "① 분류 — 모든 요청이 분류기를 거친다" },
+        {
+          "type": "fork",
+          "children": [
+            {
+              "type": "node",
+              "kind": "decision",
+              "step": 3,
+              "width": "wide",
+              "fan_hub": "classify",
+              "tag": "판단 지점",
+              "body": "이 요청은 어떤 경로가 필요한가?",
+              "note": "규칙을 먼저 적용하고, 애매한 입력일 때만 모델에 묻습니다."
+            },
+            {
+              "type": "columns",
+              "columns": [
+                {
+                  "title": "단순 — 즉시 응답",
+                  "children": [
+                    { "type": "node", "kind": "decision", "step": 3, "branches": ["simple"], "fan_target": "classify", "tag": "즉시", "body": "라우터가 이미 가진 데이터로 답할 수 있음." },
+                    { "type": "arrow" },
+                    { "type": "node", "kind": "existing", "step": 4, "branches": ["simple"], "tag": "바로 완료", "body": "기존 FAQ 핸들러가 바로 답합니다.", "note": "이 경로는 외부 호출이 없습니다." }
+                  ]
+                },
+                {
+                  "title": "조회 — 서비스에 질의",
+                  "children": [
+                    { "type": "node", "kind": "decision", "step": 3, "branches": ["lookup"], "fan_target": "classify", "tag": "데이터 필요", "body": "검색 서비스의 레코드가 필요함." },
+                    { "type": "arrow" },
+                    { "type": "node", "kind": "existing", "step": 4, "branches": ["lookup"], "tag": "질의", "body": "구조화된 쿼리로 검색 서비스를 호출합니다." }
+                  ]
+                },
+                {
+                  "title": "작업 — 백그라운드 실행",
+                  "children": [
+                    { "type": "node", "kind": "decision", "step": 3, "branches": ["job"], "fan_target": "classify", "tag": "장시간", "body": "요청 타임아웃 안에 끝낼 수 없음." },
+                    { "type": "arrow" },
+                    { "type": "node", "kind": "existing", "step": 4, "branches": ["job"], "tag": "큐 등록", "body": "작업 큐에 넣고 job id를 받습니다." }
+                  ]
+                }
+              ]
+            },
+            { "type": "arrow" },
+            {
+              "type": "external",
+              "badge": "여기부터 시스템 바깥 — 외부 서비스가 처리하는 영역",
+              "systems": [
+                {
+                  "name": "검색 서비스",
+                  "items": [
+                    { "text": "`GET /search`", "tag": "레코드 전문 검색" },
+                    { "text": "`GET /records/{id}`", "tag": "레코드 1건 조회" }
+                  ]
+                },
+                {
+                  "name": "작업 큐",
+                  "items": [
+                    { "text": "`POST /jobs`", "tag": "백그라운드 작업 등록" },
+                    { "text": "`GET /jobs/{id}`", "tag": "작업 상태 조회" }
+                  ]
+                }
+              ]
+            },
+            { "type": "arrow", "label": "모든 경로는 응답을 만들기 전에 후처리를 거친다" },
+            {
+              "type": "columns",
+              "columns": [
+                {
+                  "title": "단순",
+                  "children": [
+                    { "type": "node", "kind": "existing", "step": 5, "branches": ["simple"], "tag": "캐시", "body": "같은 질문이 다시 오면 분류를 건너뛰도록 답을 저장합니다." }
+                  ]
+                },
+                {
+                  "title": "조회",
+                  "children": [
+                    { "type": "node", "kind": "new", "step": 5, "branches": ["lookup"], "tag": "요약", "body": "상위 결과를 한 줄 답변으로 정리합니다." }
+                  ]
+                },
+                {
+                  "title": "작업",
+                  "children": [
+                    { "type": "node", "kind": "new", "step": 5, "branches": ["job"], "tag": "상태 등록", "body": "job id를 기록하고 `status_url`을 만듭니다." }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "node",
+              "kind": "new",
+              "step": 6,
+              "width": "narrow",
+              "tag": "통합 응답",
+              "body": "모든 경로가 같은 봉투로 응답합니다: `{status, answer, links}`."
+            }
+          ]
+        }
+      ]
+    },
+    { "type": "arrow" },
+    {
+      "type": "node",
+      "kind": "client",
+      "step": 7,
+      "width": "wide",
+      "body": "어떤 경로를 거쳤든 클라이언트는 같은 형태의 응답을 받습니다.",
+      "note": "작업 경로의 응답에는 `status_url`이 있어, 클라이언트가 완료될 때까지 폴링합니다."
+    }
+  ],
+  "callouts": [
+    { "title": "클라이언트가 보는 것", "body": "엔드포인트 하나와 응답 봉투 하나. 경로 선택도, 조정할 타임아웃도, 검색 서비스나 작업 큐에 대한 지식도 필요 없습니다." },
+    { "title": "라우터가 떠안는 책임", "body": "분류, 외부 서비스 호출, 느린 작업 지연 처리, 캐시, 그리고 모든 결과를 같은 봉투로 정규화하는 일." }
+  ],
+  "considerations": {
+    "title": "설계 과정에서 검토·결정했던 사항들",
+    "items": [
+      { "decision": "규칙 먼저, 모델은 나중에", "why": "대부분의 트래픽은 단순 규칙에 걸린다. 모든 요청에 모델을 부르면 이득 없이 지연과 비용만 늘어나므로, 모델은 애매한 입력용 대체 경로로만 둔다." },
+      { "decision": "긴 요청 대신 백그라운드 작업", "why": "연결을 90초씩 붙잡으면 프록시와 모바일 클라이언트가 깨진다. `202`와 `status_url`은 예측 가능하고 재시도에도 안전하다." },
+      { "decision": "모든 경로에 하나의 응답 봉투", "why": "경로별 응답 타입도 검토했지만, 그러면 클라이언트마다 파서가 세 개 필요하다. 공통 봉투를 쓰면 클라이언트 코드가 경로를 몰라도 된다." }
+    ]
+  },
+  "tool_examples": {
+    "title": "인터페이스 예시",
+    "lead": "라우터 내부에서 쓰는 형태입니다. 클라이언트는 응답 봉투만 봅니다.",
+    "tools": [
+      {
+        "name": "route_request",
+        "code": "{\n  \"input\": \"string\",\n  \"returns\": {\n    \"route\": \"simple | lookup | job\",\n    \"reason\": \"string\"\n  }\n}",
+        "note": "모든 요청에 대해 3단계에서 호출됩니다."
+      },
+      {
+        "name": "enqueue_job",
+        "code": "{\n  \"kind\": \"string\",\n  \"payload\": \"object\",\n  \"returns\": { \"job_id\": \"string\" }\n}",
+        "note": "작업 경로의 4단계에서만 호출됩니다."
+      }
+    ]
+  }
+}

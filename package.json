@@ -1,0 +1,15 @@
+{
+  "name": "interactive-architecture-doc",
+  "version": "2.0.0-dev",
+  "private": true,
+  "description": "Agent skill: JSON IR -> validated, self-contained interactive HTML architecture documents.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node skills/interactive-architecture-doc/scripts/iad.mjs validate skills/interactive-architecture-doc/examples/*.json"
+  }
+}

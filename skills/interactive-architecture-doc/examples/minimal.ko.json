@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "title": "이미지 업로드",
+    "subtitle": "가장 작은 문서 예시: 단계 3개, 시나리오 1개, 분기 없음.",
+    "lang": "ko",
+    "entry_request": "PUT /v1/images\nContent-Type: {{input}}"
+  },
+  "steps": [
+    { "label": "업로드" },
+    { "label": "저장" },
+    { "label": "응답" }
+  ],
+  "legend": {
+    "client": "클라이언트 — 이미지를 올리는 앱",
+    "new": "신규 — 이번에 만드는 업로드 서비스"
+  },
+  "scenarios": [
+    {
+      "id": "upload",
+      "label": "사진 업로드",
+      "icon": "📷",
+      "input": "image/png",
+      "steps": {
+        "1": "PUT /v1/images\nContent-Type: image/png\n(본문 1.2 MB)",
+        "2": "storage.put(\"images/3c9e.png\", body)\nthumbnail.enqueue(\"3c9e\")",
+        "3": "201 Created\n{ \"id\": \"3c9e\", \"url\": \"/images/3c9e.png\" }"
+      }
+    }
+  ],
+  "board": [
+    {
+      "type": "node",
+      "kind": "client",
+      "step": 1,
+      "width": "wide",
+      "entry": true,
+      "body": "앱이 이미지 원본 바이트를 올립니다.",
+      "code": "PUT /v1/images"
+    },
+    { "type": "arrow" },
+    {
+      "type": "node",
+      "kind": "new",
+      "step": 2,
+      "width": "wide",
+      "tag": "업로드 서비스",
+      "body": "원본을 저장하고 **썸네일** 작업을 큐에 넣습니다.",
+      "note": "썸네일은 비동기로 만들어지며, 응답은 썸네일을 기다리지 않습니다."
+    },
+    { "type": "arrow" },
+    {
+      "type": "node",
+      "kind": "client",
+      "step": 3,
+      "width": "wide",
+      "body": "앱이 이미지 id와 URL을 받습니다."
+    }
+  ]
+}

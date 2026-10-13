@@ -1,0 +1,250 @@
+{
+  "meta": {
+    "title": "Request Router",
+    "subtitle": "One endpoint, three execution paths: the router decides whether to answer **inline**, run a **lookup**, or start a **background job**.",
+    "lang": "en",
+    "entry_request": "POST /v1/ask\n{ \"input\": \"{{input}}\" }"
+  },
+  "tldr": {
+    "headline": "The router owns the decision; the client only sends a request.",
+    "points": [
+      { "title": "One endpoint for every request", "detail": "Clients never pick a path, a worker, or a timeout. They send `POST /v1/ask` and read one response shape." },
+      { "title": "Classification happens once, up front", "detail": "A rule-based classifier picks the path; a model is consulted only when the rules are inconclusive." },
+      { "title": "Slow work never blocks the request", "detail": "Long-running work is queued and the client gets a `status_url` instead of waiting." },
+      { "title": "Every path converges on one envelope", "detail": "`{status, answer, links}` is returned whether the answer was inline, looked up, or deferred." }
+    ]
+  },
+  "steps": [
+    { "label": "Client request" },
+    { "label": "Load routing config" },
+    { "label": "Classify" },
+    { "label": "Run the path" },
+    { "label": "Post-process" },
+    { "label": "Assemble response" },
+    { "label": "Client receives" }
+  ],
+  "legend": {
+    "client": "Client — outside the system",
+    "decision": "Decision — where the path is chosen",
+    "existing": "Existing — already built, reused as-is",
+    "new": "New — built in this project"
+  },
+  "scenarios": [
+    {
+      "id": "simple",
+      "label": "Simple answer",
+      "icon": "💬",
+      "input": "What are your opening hours?",
+      "steps": {
+        "1": "POST /v1/ask\n{ \"input\": \"What are your opening hours?\" }",
+        "2": "config = {\n  classifier: \"rules-v2\",\n  timeout_ms: 800,\n  fallback: \"inline\"\n}",
+        "3": "route = \"simple\"\nmatched_rule = \"faq.opening_hours\"",
+        "4": "faq_handler.answer(\"opening_hours\")\n→ \"Mon–Fri 09:00–18:00\"",
+        "5": "cache.set(\"faq:opening_hours\", answer, ttl = 3600)",
+        "6": "{\n  \"status\": \"done\",\n  \"answer\": \"Mon–Fri 09:00–18:00\",\n  \"links\": []\n}",
+        "7": "200 OK — the client renders the answer directly"
+      }
+    },
+    {
+      "id": "lookup",
+      "label": "Needs a lookup",
+      "icon": "🔎",
+      "input": "Find orders shipped last week",
+      "steps": {
+        "1": "POST /v1/ask\n{ \"input\": \"Find orders shipped last week\" }",
+        "2": "config = {\n  classifier: \"rules-v2\",\n  timeout_ms: 800,\n  fallback: \"inline\"\n}",
+        "3": "route = \"lookup\"\nreason = \"needs records the router does not hold\"",
+        "4": "GET /search?q=status:shipped+date:last-7d\n→ 42 hits",
+        "5": "summarizer.run(hits[:10])\n→ \"42 orders shipped; 3 are delayed\"",
+        "6": "{\n  \"status\": \"done\",\n  \"answer\": \"42 orders shipped; 3 are delayed\",\n  \"links\": [\"/orders?filter=shipped-7d\"]\n}",
+        "7": "200 OK — answer plus a link to the full list"
+      }
+    },
+    {
+      "id": "job",
+      "label": "Long-running job",
+      "icon": "⏳",
+      "input": "Generate the quarterly report PDF",
+      "steps": {
+        "1": "POST /v1/ask\n{ \"input\": \"Generate the quarterly report PDF\" }",
+        "2": "config = {\n  classifier: \"rules-v2\",\n  timeout_ms: 800,\n  fallback: \"inline\"\n}",
+        "3": "route = \"job\"\nreason = \"estimated runtime 90s > timeout_ms\"",
+        "4": "POST /jobs\n{ \"kind\": \"report.quarterly\" }\n→ { \"job_id\": \"j-7f3a\" }",
+        "5": "status_store.put(\"j-7f3a\", \"queued\")\nstatus_url = \"/v1/jobs/j-7f3a\"",
+        "6": "{\n  \"status\": \"pending\",\n  \"answer\": null,\n  \"links\": [\"/v1/jobs/j-7f3a\"]\n}",
+        "7": "202 Accepted — the client polls the status_url until done"
+      }
+    }
+  ],
+  "board": [
+    {
+      "type": "node",
+      "kind": "client",
+      "step": 1,
+      "width": "full",
+      "entry": true,
+      "tag": "Single endpoint",
+      "body": "The client sends one request without choosing a path.",
+      "code": "POST /v1/ask\n{ \"input\": \"...\" }",
+      "note": "The client never specifies which worker, timeout, or path to use."
+    },
+    { "type": "arrow" },
+    {
+      "type": "internal",
+      "badge": "Internal — invisible to the client",
+      "children": [
+        {
+          "type": "node",
+          "kind": "new",
+          "step": 2,
+          "width": "full",
+          "tag": "Decided by the server",
+          "body": "Routing settings are loaded for every request.",
+          "details": {
+            "code": "classifier: rules-v2\ntimeout_ms: 800\nfallback: inline",
+            "items": [
+              { "title": "Rule-based classifier", "body": "Default. Fast keyword and schema checks decide the path in under a millisecond." },
+              { "title": "Model-assisted classifier", "body": "Used only when the rules are inconclusive; adds latency, so it is the fallback.", "variant": "alt" }
+            ]
+          },
+          "note": "These values live in the router's config file, not in client code."
+        },
+        { "type": "arrow", "label": "① classify — every request goes through the classifier" },
+        {
+          "type": "fork",
+          "children": [
+            {
+              "type": "node",
+              "kind": "decision",
+              "step": 3,
+              "width": "wide",
+              "fan_hub": "classify",
+              "tag": "Decision point",
+              "body": "Which path does this request need?",
+              "note": "Rules run first; the model is consulted only for ambiguous input."
+            },
+            {
+              "type": "columns",
+              "columns": [
+                {
+                  "title": "Simple — answer inline",
+                  "children": [
+                    { "type": "node", "kind": "decision", "step": 3, "branches": ["simple"], "fan_target": "classify", "tag": "Inline", "body": "Answerable from data the router already has." },
+                    { "type": "arrow" },
+                    { "type": "node", "kind": "existing", "step": 4, "branches": ["simple"], "tag": "Done immediately", "body": "The existing FAQ handler answers directly.", "note": "No external calls on this path." }
+                  ]
+                },
+                {
+                  "title": "Lookup — query a service",
+                  "children": [
+                    { "type": "node", "kind": "decision", "step": 3, "branches": ["lookup"], "fan_target": "classify", "tag": "Needs data", "body": "Requires records from the search service." },
+                    { "type": "arrow" },
+                    { "type": "node", "kind": "existing", "step": 4, "branches": ["lookup"], "tag": "Query", "body": "Calls the search service with a structured query." }
+                  ]
+                },
+                {
+                  "title": "Job — run in the background",
+                  "children": [
+                    { "type": "node", "kind": "decision", "step": 3, "branches": ["job"], "fan_target": "classify", "tag": "Long-running", "body": "Too slow to finish within the request timeout." },
+                    { "type": "arrow" },
+                    { "type": "node", "kind": "existing", "step": 4, "branches": ["job"], "tag": "Enqueue", "body": "Puts the work on the job queue and gets a job id." }
+                  ]
+                }
+              ]
+            },
+            { "type": "arrow" },
+            {
+              "type": "external",
+              "badge": "Outside the system — handled by external services",
+              "systems": [
+                {
+                  "name": "Search service",
+                  "items": [
+                    { "text": "`GET /search`", "tag": "full-text query over records" },
+                    { "text": "`GET /records/{id}`", "tag": "fetch one record" }
+                  ]
+                },
+                {
+                  "name": "Job queue",
+                  "items": [
+                    { "text": "`POST /jobs`", "tag": "enqueue background work" },
+                    { "text": "`GET /jobs/{id}`", "tag": "read job state" }
+                  ]
+                }
+              ]
+            },
+            { "type": "arrow", "label": "every path is post-processed before the response is built" },
+            {
+              "type": "columns",
+              "columns": [
+                {
+                  "title": "Simple",
+                  "children": [
+                    { "type": "node", "kind": "existing", "step": 5, "branches": ["simple"], "tag": "Cache", "body": "Stores the answer so repeats skip classification." }
+                  ]
+                },
+                {
+                  "title": "Lookup",
+                  "children": [
+                    { "type": "node", "kind": "new", "step": 5, "branches": ["lookup"], "tag": "Summarize", "body": "Turns the top hits into a one-line answer." }
+                  ]
+                },
+                {
+                  "title": "Job",
+                  "children": [
+                    { "type": "node", "kind": "new", "step": 5, "branches": ["job"], "tag": "Register status", "body": "Records the job id and builds a `status_url`." }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "node",
+              "kind": "new",
+              "step": 6,
+              "width": "narrow",
+              "tag": "Unified response",
+              "body": "Every path returns the same envelope: `{status, answer, links}`."
+            }
+          ]
+        }
+      ]
+    },
+    { "type": "arrow" },
+    {
+      "type": "node",
+      "kind": "client",
+      "step": 7,
+      "width": "wide",
+      "body": "The client receives one response shape regardless of the path taken.",
+      "note": "Job responses carry a `status_url` that the client polls until the work is done."
+    }
+  ],
+  "callouts": [
+    { "title": "What the client sees", "body": "One endpoint and one response envelope. No path selection, no timeouts to tune, no knowledge of the search service or the job queue." },
+    { "title": "What the router absorbs", "body": "Classification, calling external services, deferring slow work, caching, and normalizing every result into the same envelope." }
+  ],
+  "considerations": {
+    "title": "Decisions made during design",
+    "items": [
+      { "decision": "Rules first, model second", "why": "Most traffic matches simple rules. Calling a model for every request would add latency and cost for no gain; it is kept as a fallback for ambiguous input." },
+      { "decision": "Background jobs instead of long requests", "why": "Holding a connection open for 90 seconds breaks proxies and mobile clients. A `202` with a `status_url` is predictable and retry-safe." },
+      { "decision": "One response envelope for all paths", "why": "We considered per-path response types, but every client would then need three parsers. A shared envelope keeps client code path-agnostic." }
+    ]
+  },
+  "tool_examples": {
+    "title": "Interface examples",
+    "lead": "Shapes the router uses internally; clients only ever see the response envelope.",
+    "tools": [
+      {
+        "name": "route_request",
+        "code": "{\n  \"input\": \"string\",\n  \"returns\": {\n    \"route\": \"simple | lookup | job\",\n    \"reason\": \"string\"\n  }\n}",
+        "note": "Called at step 3 for every request."
+      },
+      {
+        "name": "enqueue_job",
+        "code": "{\n  \"kind\": \"string\",\n  \"payload\": \"object\",\n  \"returns\": { \"job_id\": \"string\" }\n}",
+        "note": "Called at step 4 on the job path only."
+      }
+    ]
+  }
+}
