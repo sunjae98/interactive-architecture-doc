@@ -2,6 +2,7 @@
 <html lang="{{IAD_LANG}}">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="{{IAD_CSP}}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="interactive-architecture-doc">
 <title>{{IAD_TITLE}}</title>
@@ -184,7 +185,8 @@
   .center-row{display:flex;justify-content:center;}
   .plain-arrow{text-align:center;color:var(--color-text-muted);font-size:20px;line-height:1;margin:var(--space-2) 0;}
   .fork-col .plain-arrow{margin:2px 0;}
-  .arrow-label{display:block;font-size:10.3px;font-weight:600;color:var(--color-text-muted);line-height:1.4;margin-top:1px;}
+  /* margin-bottom clears the step badge (.node .num sits 10px above the node, plus its 2px ring) */
+  .arrow-label{display:block;font-size:10.3px;font-weight:600;color:var(--color-text-muted);line-height:1.4;margin-top:1px;margin-bottom:var(--space-4);}
 
   .node{
     border-radius:var(--radius-node);padding:11px var(--space-4);font-size:12.3px;line-height:1.5;
@@ -282,7 +284,8 @@
   }
   .fork-zone .fork-row{margin-top:40px;}
   .fork-col{display:flex;flex-direction:column;gap:var(--space-2);min-width:0;}
-  .fork-title{text-align:center;font-size:10.8px;color:var(--color-text-muted);margin-bottom:2px;position:relative;z-index:1;}
+  /* margin-bottom + the column gap clear the step badge of the node below */
+  .fork-title{text-align:center;font-size:10.8px;color:var(--color-text-muted);margin-bottom:var(--space-3);position:relative;z-index:1;}
 
   .external-row{display:grid;grid-template-columns:repeat(var(--cols,4),1fr);gap:12px;margin-top:12px;align-items:start;}
   .external-card{
@@ -410,6 +413,8 @@
     z-index:5;
   }
   .node.altpath{opacity:.35;filter:grayscale(60%);}
+  /* set while the export measures the live layout: running transitions jump to their end state */
+  .iad-measuring .node{transition:none !important;}
 
   /* ==== Export (current view -> PNG / SVG / clipboard) ==================== */
   .pg-export-status{font-size:10.6px;color:var(--color-text-muted);line-height:1.5;margin-top:var(--space-2);min-height:1.5em;}
@@ -507,6 +512,19 @@
     });
   }
 
+  // ---- BEGIN pure helpers (no DOM access; test/runtime.test.mjs runs this block in node:vm) ----
+  // Fan targets that get an arrow. A target must be the first node in its column (an arrow to a
+  // lower node would cross the nodes above it), and its column must start in the first grid row:
+  // when columns wrap (2 columns) or stack (1 column) only the top row is connected, which leaves one
+  // short vertical connector from the hub in the stacked layout.
+  function firstRowTargets(targets, colTop, isFirstInColumn) {
+    var first = targets.filter(function (el) { return isFirstInColumn(el); });
+    if (!first.length) return [];
+    var firstRow = Math.min.apply(null, first.map(colTop));
+    return first.filter(function (el) { return colTop(el) < firstRow + 1; });
+  }
+  // ---- END pure helpers ----
+
   function drawZone(zone) {
     var svg = own(zone, "[data-fan-svg]")[0];
     if (!svg) return;
@@ -521,19 +539,23 @@
         return el.getAttribute("data-fan-target") === hubId;
       });
       if (!targets.length) return;
-      // Only targets in the first grid row get an arrow. When columns wrap (2 columns) or stack
-      // (1 column), arrows to lower rows would run through the nodes above them; in the stacked
-      // layout this leaves one short vertical connector from the hub to the first column.
-      var colTop = function (el) { return (el.closest(".fork-col") || el).getBoundingClientRect().top; };
-      var firstRow = Math.min.apply(null, targets.map(colTop));
-      targets = targets.filter(function (el) { return colTop(el) < firstRow + 1; });
+      targets = firstRowTargets(
+        targets,
+        function (el) { return (el.closest(".fork-col") || el).getBoundingClientRect().top; },
+        function (el) {
+          var col = el.closest(".fork-col");
+          return !col || col.querySelector(".node") === el;
+        }
+      );
+      if (!targets.length) return;
       var fromX = centerX(hub, zr.left), fromY = bottomY(hub, zr.top);
-      // Arrows stop above a column title (".fork-title" before the target) instead of crossing it.
+      // Arrows stop a few px above whatever sits on top of the target: the column title (".fork-title"
+      // before the target), else the node's step badge, else the node itself.
       var points = targets.map(function (el) {
         var col = el.closest(".fork-col");
         var title = col && col.querySelector(".fork-title");
-        var end = title && (title.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) ? title : el;
-        return { x: centerX(el, zr.left), y: topY(end, zr.top) };
+        var end = title && (title.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) ? title : (el.querySelector(".num") || el);
+        return { x: centerX(el, zr.left), y: topY(end, zr.top) - 3 };
       });
       var barY = fromY + 16;
       var xs = points.map(function (p) { return p.x; }).concat([fromX]);
@@ -548,9 +570,18 @@
   window.draw = draw;
 
   var t;
-  window.addEventListener("resize", function () { clearTimeout(t); t = setTimeout(draw, 100); });
+  function drawSoon() { clearTimeout(t); t = setTimeout(draw, 100); }
+  window.addEventListener("resize", drawSoon);
   window.addEventListener("load", draw);
-  document.addEventListener("DOMContentLoaded", draw);
+  document.addEventListener("DOMContentLoaded", function () {
+    draw();
+    // zone size changes that are not window resizes (fonts, wrapping, details opening)
+    if (window.ResizeObserver) {
+      var ro = new ResizeObserver(drawSoon);
+      document.querySelectorAll(".fork-zone").forEach(function (zone) { ro.observe(zone); });
+    }
+  });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
 })();
 </script>
 
@@ -578,11 +609,70 @@
   var entryEl = document.querySelector("[data-entry]");
   var entryDefault = entryEl ? entryEl.textContent : "";
 
+  // ---- BEGIN pure helpers (no DOM access; test/runtime.test.mjs runs this block in node:vm) ----
+  var EXPORT_MAX_PIXELS = 16000000;  // ~16MP canvas area cap (Safari's limit)
+  var EXPORT_MAX_SIDE = 16384;       // per-side canvas cap shared by current browsers
+
+  // UI string with {name} placeholders filled; unknown placeholders are kept as-is.
   function t(key, params) {
     return String(UI[key]).replace(/\{(\w+)\}/g, function (m, name) {
       return params && Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : m;
     });
   }
+
+  // meta.entry_request with {{input}} replaced in one pass: "{{input}}" in quotes becomes a
+  // JSON-escaped string, a bare {{input}} the raw input. Replaced text is never re-scanned.
+  function fillEntryRequest(template, input) {
+    return template.replace(/"\{\{input\}\}"|\{\{input\}\}/g, function (m) {
+      return m === "{{input}}" ? input : JSON.stringify(input);
+    });
+  }
+
+  // Text for the entry node's code block: the request for this scenario's input. A scenario without
+  // input keeps the authored code, or shows the request with an empty input if there is none.
+  function entryText(template, input, fallback) {
+    if (!template) return fallback;
+    if (typeof input === "string") return fillEntryRequest(template, input);
+    return fallback || fillEntryRequest(template, "");
+  }
+
+  function sanitizeFilePart(s) {
+    return String(s)
+      .replace(/[\u0000-\u001f\u007f<>:"\/\\|?*]+/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-{2,}/g, "-")
+      .replace(/^[-.]+|[-.]+$/g, "")
+      .slice(0, 80);
+  }
+
+  // Canvas scale: device pixel ratio clamped to 1..2, then shrunk to the canvas area / side caps.
+  function exportScale(w, h, dpr) {
+    var s = Math.min(Math.max(dpr || 1, 1), 2);
+    return Math.min(s, Math.sqrt(EXPORT_MAX_PIXELS / (w * h)), EXPORT_MAX_SIDE / Math.max(w, h));
+  }
+
+  // Flattens stylesheet rules: @media / @supports are kept only when they match right now, so the
+  // export looks like the live page even though the SVG has its own viewport. Token names declared
+  // in :root / [data-theme] rules are collected so their current values can be inlined.
+  function collectRules(rules, css, tokens) {
+    Array.prototype.forEach.call(rules, function (rule) {
+      if (window.CSSMediaRule && rule instanceof CSSMediaRule) {
+        if (window.matchMedia(rule.media.mediaText).matches) collectRules(rule.cssRules, css, tokens);
+        return;
+      }
+      if (window.CSSSupportsRule && rule instanceof CSSSupportsRule) {
+        if (window.CSS && CSS.supports(rule.conditionText)) collectRules(rule.cssRules, css, tokens);
+        return;
+      }
+      if (rule.style && /:root|\[data-theme/.test(rule.selectorText || "")) {
+        for (var i = 0; i < rule.style.length; i++) {
+          if (rule.style[i].indexOf("--") === 0) tokens[rule.style[i]] = true;
+        }
+      }
+      css.push(rule.cssText);
+    });
+  }
+  // ---- END pure helpers ----
 
   SCENARIOS.forEach(function (sc) {
     var opt = document.createElement("option");
@@ -605,16 +695,10 @@
     return !b || b.split(",").indexOf(id) !== -1;
   }
 
-  // meta.entry_request with {{input}} replaced; "{{input}}" in quotes gets a JSON-escaped string.
-  function entryRequest(sc) {
-    if (!ENTRY_REQUEST || typeof sc.input !== "string") return entryDefault;
-    return ENTRY_REQUEST.split('"{{input}}"').join(JSON.stringify(sc.input)).split("{{input}}").join(sc.input);
-  }
-
   function render() {
     var sc = currentScenario();
     branchLabelEl.textContent = sc.label;
-    if (entryEl) entryEl.textContent = entryRequest(sc);
+    if (entryEl) entryEl.textContent = entryText(ENTRY_REQUEST, sc.input, entryDefault);
 
     var nodes = document.querySelectorAll(".node[data-step]");
     nodes.forEach(function (el) { el.classList.remove("active", "altpath"); });
@@ -734,8 +818,6 @@
   // is inlined (with @media resolved against the live viewport) and the result is wrapped in
   // <svg><foreignObject>. PNG rasterizes that SVG through a data: URL so the canvas stays untainted.
   var EXPORT_PAD = 24;               // px around the captured content
-  var EXPORT_MAX_PIXELS = 16000000;  // ~16MP canvas area cap (Safari's limit)
-  var EXPORT_MAX_SIDE = 16384;       // per-side canvas cap shared by current browsers
   var exportPngBtn = document.getElementById("pgExportPng");
   var exportSvgBtn = document.getElementById("pgExportSvg");
   var exportCopyBtn = document.getElementById("pgExportCopy");
@@ -758,37 +840,6 @@
     return e.name && e.name !== "Error" ? e.name : (e.message || String(e));
   }
 
-  // Flattens stylesheet rules: @media / @supports are kept only when they match right now, so the
-  // export looks like the live page even though the SVG has its own viewport. Token names declared
-  // in :root / [data-theme] rules are collected so their current values can be inlined.
-  function collectRules(rules, css, tokens) {
-    Array.prototype.forEach.call(rules, function (rule) {
-      if (window.CSSMediaRule && rule instanceof CSSMediaRule) {
-        if (window.matchMedia(rule.media.mediaText).matches) collectRules(rule.cssRules, css, tokens);
-        return;
-      }
-      if (window.CSSSupportsRule && rule instanceof CSSSupportsRule) {
-        if (window.CSS && CSS.supports(rule.conditionText)) collectRules(rule.cssRules, css, tokens);
-        return;
-      }
-      if (rule.style && /:root|\[data-theme/.test(rule.selectorText || "")) {
-        for (var i = 0; i < rule.style.length; i++) {
-          if (rule.style[i].indexOf("--") === 0) tokens[rule.style[i]] = true;
-        }
-      }
-      css.push(rule.cssText);
-    });
-  }
-
-  function sanitizeFilePart(s) {
-    return String(s)
-      .replace(/[\u0000-\u001f\u007f<>:"\/\\|?*]+/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-{2,}/g, "-")
-      .replace(/^[-.]+|[-.]+$/g, "")
-      .slice(0, 80);
-  }
-
   function exportFileBase(sc) {
     var parts = [sanitizeFilePart(DOC.meta.title), sanitizeFilePart(sc.id), "step" + currentStep];
     return parts.filter(Boolean).join("-");
@@ -796,7 +847,14 @@
 
   // Synchronous: returns { svg, width, height, base }.
   function buildExport() {
-    window.draw(); // fan arrows must match the live layout before cloning
+    // Measure the settled layout: an active node may be mid-way through its 180ms scale transition.
+    var html = document.documentElement;
+    html.classList.add("iad-measuring");
+    try {
+      window.draw(); // fan arrows must match the live layout before cloning
+    } finally {
+      html.classList.remove("iad-measuring");
+    }
     var sc = currentScenario();
     captionEl.textContent = t("export_caption", {
       scenario: (sc.icon ? sc.icon + " " : "") + sc.label,
@@ -812,7 +870,6 @@
       if (rules) collectRules(rules, css, tokens);
     });
 
-    var html = document.documentElement;
     var live = getComputedStyle(html);
     var width = Math.ceil(document.querySelector(".main").getBoundingClientRect().width) + 2 * EXPORT_PAD;
     var decl = "width:" + width + "px;padding:" + EXPORT_PAD + "px;";
@@ -848,18 +905,12 @@
     return { svg: svg, width: width, height: height, base: exportFileBase(sc) };
   }
 
-  function exportScale(w, h) {
-    var s = Math.min(window.devicePixelRatio || 1, 2);
-    s = Math.min(s, Math.sqrt(EXPORT_MAX_PIXELS / (w * h)), EXPORT_MAX_SIDE / Math.max(w, h));
-    return s;
-  }
-
   function renderPng(ex) {
     return new Promise(function (resolve, reject) {
       var img = new Image();
-      img.onload = function () {
+      function paint() {
         try {
-          var s = exportScale(ex.width, ex.height);
+          var s = exportScale(ex.width, ex.height, window.devicePixelRatio);
           var canvas = document.createElement("canvas");
           canvas.width = Math.max(1, Math.floor(ex.width * s));
           canvas.height = Math.max(1, Math.floor(ex.height * s));
@@ -872,6 +923,10 @@
         } catch (e) {
           reject(e); // SecurityError when the browser taints foreignObject canvases
         }
+      }
+      img.onload = function () {
+        // decode() lets embedded fonts finish before the first draw (first-export font race)
+        if (img.decode) img.decode().then(paint, paint); else paint();
       };
       img.onerror = function () { reject(new Error("SVG image did not load")); };
       img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(ex.svg);
@@ -889,13 +944,19 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
   }
 
+  // Runs fn after the next paint so the "Exporting…" status is visible before the synchronous build.
+  function afterPaint(fn) {
+    if (window.requestAnimationFrame) requestAnimationFrame(function () { setTimeout(fn, 0); });
+    else setTimeout(fn, 0);
+  }
+
   exportPngBtn.addEventListener("click", function () {
     setExportBusy(true);
     var name = "export.png";
-    new Promise(function (resolve) {
+    new Promise(function (resolve) { afterPaint(resolve); }).then(function () {
       var ex = buildExport();
       name = ex.base + ".png";
-      resolve(renderPng(ex));
+      return renderPng(ex);
     }).then(function (blob) {
       saveBlob(blob, name);
       setExportBusy(false);
@@ -907,13 +968,18 @@
   });
 
   exportSvgBtn.addEventListener("click", function () {
-    try {
-      var ex = buildExport();
-      saveBlob(new Blob([ex.svg], { type: "image/svg+xml" }), ex.base + ".svg");
-      setExportStatus(t("export_saved", { file: ex.base + ".svg" }), false);
-    } catch (e) {
-      setExportStatus(t("export_svg_failed", { reason: errorReason(e) }), true);
-    }
+    setExportBusy(true);
+    afterPaint(function () {
+      try {
+        var ex = buildExport();
+        saveBlob(new Blob([ex.svg], { type: "image/svg+xml" }), ex.base + ".svg");
+        setExportBusy(false);
+        setExportStatus(t("export_saved", { file: ex.base + ".svg" }), false);
+      } catch (e) {
+        setExportBusy(false);
+        setExportStatus(t("export_svg_failed", { reason: errorReason(e) }), true);
+      }
+    });
   });
 
   exportCopyBtn.addEventListener("click", function () {

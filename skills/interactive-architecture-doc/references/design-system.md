@@ -12,8 +12,9 @@ slot is a render error.
 | Slot | Filled with |
 |---|---|
 | `{{IAD_LANG}}` | `meta.lang` (`en` default) — `<html lang>` |
+| `{{IAD_CSP}}` | the Content-Security-Policy `<meta>` value (see below) |
 | `{{IAD_TITLE}}` | `meta.title — subtitle` as plain text |
-| `{{IAD_FONTS}}` | `<style>` with `@font-face` rules for every `assets/fonts/*.woff2` (base64), or empty when there are none. `iad-sans.woff2` → family "IAD Sans", `geist-mono.woff2` → "Geist Mono" (with their variable weight ranges); any other file uses its basename |
+| `{{IAD_FONTS}}` | `<style>` with `@font-face` rules for every `assets/fonts/*.woff2` (base64), or empty when there are none. `iad-sans.woff2` → family "IAD Sans", `geist-mono.woff2` → "Geist Mono" (with their variable weight ranges); any other file uses its basename, reduced to `[A-Za-z0-9 _-]` |
 | `{{IAD_HEADER}}` | `<h1>` + subtitle |
 | `{{IAD_TLDR}}` | `.tldr` box, or empty |
 | `{{IAD_STEPPER}}` | `.stepper` with one `.step` per `steps[]` entry |
@@ -23,6 +24,14 @@ slot is a render error.
 | `{{IAD_DATA}}` | the full IR as JSON (`<`, U+2028, U+2029 escaped) inside `<script type="application/json" id="iad-data">` |
 | `{{IAD_I18N}}` | the UI string table for `meta.lang` inside `<script type="application/json" id="iad-i18n">` |
 | `{{t:key}}` | one UI string, HTML-escaped (buttons, panel titles, step hint) |
+
+**Content-Security-Policy.** The page loads nothing from the network, so the policy is closed:
+`default-src 'none'; script-src 'sha256-…' (one per inline script); style-src 'unsafe-inline';
+font-src data:; img-src data: blob:; base-uri 'none'; form-action 'none'`. The renderer computes the
+hashes from the template's attribute-less `<script>` elements (the theme script and the two runtime
+scripts), so they always match the shipped code; the JSON data islands are not executed and need no
+hash. Inline scripts may not contain slots (render error), which keeps the hashes and the output
+byte-deterministic. Editing a runtime script needs no manual CSP change.
 
 The runtime reads only `#iad-data` (`steps.length`, `scenarios`, `meta.entry_request`, and `meta.title` for export file names) and
 `#iad-i18n`. The drop-down options are built from `scenarios`, so they can never disagree with the
@@ -124,7 +133,7 @@ both fonts stay embedded (decision recorded 2026-10-13).
 
 | Class | Default meaning | Color |
 |---|---|---|
-| `.node.client` | client outside the system | pink (tinted background) |
+| `.node.client` | client outside the system | crimson (tinted background) |
 | `.node.decision` | where a path is chosen | violet (tinted background) |
 | `.node.existing` | already exists / handled elsewhere | green border |
 | `.node.new` | built in this project | amber border |
@@ -153,12 +162,16 @@ Documents may redefine the meanings; the legend text is what readers see.
 - `≤1180px`: those rows use `--cols-md` (2 columns at most). `≤900px`: 1 column, and `.callout`
   becomes 1 column. `≤760px`: `.tool-cards` 1 column. `≤640px`: `.detail-grid` 1 column.
 - `≤1080px`: the playground sidebar stops being sticky and moves above the content.
-- Fan arrows are redrawn on load, resize and every step change. A fork draws only the hubs and
+- Fan arrows are redrawn on load, resize, when a `.fork-zone` changes size (`ResizeObserver`,
+  debounced), when web fonts finish loading (`document.fonts.ready`) and on every step change. A fork draws only the hubs and
   targets whose nearest `.fork-zone` is itself, so nested forks do not double-draw.
-- Fan arrows go only to targets in the **first grid row** of the fork. When the columns wrap (2
-  columns) or stack (1 column, ≤900px), lower targets get no arrow, so no line runs through the nodes
-  above them; a stacked fork shows one short connector from the hub into the first column. Arrows
-  stop above a column's `.fork-title` rather than crossing it.
+- Fan arrows go only to targets that are the **first node of their column** and whose column starts
+  in the **first grid row** of the fork. When the columns wrap (2 columns) or stack (1 column,
+  ≤900px), lower targets get no arrow, so no line runs through the nodes above them; a stacked fork
+  shows one short connector from the hub into the first column. Arrows stop a few px above a
+  column's `.fork-title` (or, without a title, above the node's step badge) rather than crossing it.
+- `.arrow-label` and `.fork-title` have a bottom margin that clears the step badge (`.node .num`,
+  10 px above the node plus its 2 px ring), so badges never overlap labels or titles.
 - `≤1080px`: `.layout` stretches its children; as fit-content flex items the nowrap stepper would
   otherwise widen the page.
 - `body` keeps `word-break: keep-all` so Korean words do not break mid-word.
@@ -178,7 +191,8 @@ captured as they are on screen.
 
 **How.** On click the runtime:
 
-1. calls `draw()` so fan arrows match the live layout, then clones every `[data-export]` element into
+1. shows `export_busy` and waits one paint (PNG/SVG), disables `.node` transitions while it calls
+   `draw()` so fan arrows match the settled layout (an active node may be mid-scale), then clones every `[data-export]` element into
    one `.iad-export` root whose width is fixed to the live width of `.main` plus 24 px padding;
 2. inlines the page CSS: every rule of `document.styleSheets`, with `@media` / `@supports` blocks kept
    only when they match **now** (`matchMedia`), so the export uses the live column count, not the
@@ -191,7 +205,8 @@ captured as they are on screen.
    `<svg><foreignObject><div xmlns="http://www.w3.org/1999/xhtml">` via `XMLSerializer`.
 
 SVG saves that string as-is (it opens on its own in a browser). PNG loads it as a
-`data:image/svg+xml` URL into an `<img>` (keeps the canvas untainted), draws it on a canvas and calls
+`data:image/svg+xml` URL into an `<img>` (keeps the canvas untainted), waits for `img.decode()`
+where available (embedded fonts are ready on the first export), draws it on a canvas and calls
 `toBlob`. Copy image creates `new ClipboardItem({"image/png": promise})` synchronously inside the
 click handler (required for user activation, notably in Safari) and passes it to
 `navigator.clipboard.write`.
@@ -202,7 +217,7 @@ characters; non-Latin letters are kept.
 
 **Limits.**
 
-- Scale starts at `devicePixelRatio` capped at 2, then shrinks (fractional) until the canvas is at
+- Scale starts at `devicePixelRatio` clamped to 1..2, then shrinks (fractional) until the canvas is at
   most ~16 MP and no side exceeds 16384 px. Very tall boards therefore export at lower resolution.
 - Only what the page's CSS draws is captured: form controls, external images and cross-origin
   stylesheets are skipped (the template has none of these).

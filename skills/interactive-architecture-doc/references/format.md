@@ -66,7 +66,7 @@ four kinds and their default meaning:
 
 | Kind | Default meaning | Color family |
 |---|---|---|
-| `client` | the client outside the system | pink |
+| `client` | the client outside the system | crimson |
 | `decision` | where a path is chosen | violet |
 | `existing` | already exists / handled elsewhere | green |
 | `new` | built in this project | amber |

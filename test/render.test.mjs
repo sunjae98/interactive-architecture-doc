@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { renderHtml, ValidationFailed, TEMPLATE_PATH, fontFaces, writeFileAtomic } from "../skills/interactive-architecture-doc/scripts/lib/render.mjs";
 import { collectNodes } from "../skills/interactive-architecture-doc/scripts/lib/validate.mjs";
 import { UI } from "../skills/interactive-architecture-doc/scripts/lib/i18n.mjs";
@@ -121,7 +122,7 @@ test("theme: early head script picks saved theme or OS preference, toggle persis
 
 test("template: fan arrows only reach first-row targets and stop above column titles", () => {
   const src = readFileSync(TEMPLATE_PATH, "utf8");
-  assert.ok(src.includes('targets = targets.filter(function (el) { return colTop(el) < firstRow + 1; });'), "wrapped/stacked rows get no crossing arrows");
+  assert.ok(src.includes("targets = firstRowTargets("), "wrapped/stacked rows get no crossing arrows");
   assert.ok(src.includes('var title = col && col.querySelector(".fork-title");'), "arrows end above the column title");
   assert.ok(/@media \(max-width:1080px\)\{\s*\.layout\{flex-direction:column;align-items:stretch;\}/.test(src), "no horizontal overflow in the column layout");
 });
@@ -176,6 +177,26 @@ for (const file of exampleFiles) {
     assert.equal(renderHtml(doc).html, renderHtml(load(file)).html);
   });
 }
+
+test("render: CSP meta allows exactly the inline executable scripts by hash", () => {
+  const { html } = renderHtml(load("three-branch.en.json"));
+  const meta = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/);
+  assert.ok(meta, "CSP meta present");
+  assert.ok(html.indexOf(meta[0]) < html.indexOf("<script"), "CSP precedes every script");
+  const csp = meta[1].replace(/&#39;/g, "'");
+  const directives = Object.fromEntries(csp.split(/;\s*/).map((d) => { const [k, ...v] = d.split(" "); return [k, v]; }));
+  assert.deepEqual(directives["default-src"], ["'none'"]);
+  assert.deepEqual(directives["style-src"], ["'unsafe-inline'"]);
+  assert.deepEqual(directives["font-src"], ["data:"]);
+  assert.deepEqual(directives["img-src"], ["data:", "blob:"]);
+  assert.deepEqual(directives["base-uri"], ["'none'"]);
+  assert.deepEqual(directives["form-action"], ["'none'"]);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  assert.equal(scripts.length, 3, "theme + fan arrows + playground");
+  const expected = scripts.map((b) => `'sha256-${createHash("sha256").update(b, "utf8").digest("base64")}'`);
+  assert.deepEqual(directives["script-src"], expected);
+  assert.ok(!directives["script-src"].includes("'unsafe-inline'"));
+});
 
 test("render: columns get --cols N and --cols-md min(N,2)", () => {
   const { html } = renderHtml(load("three-branch.en.json"));
@@ -385,7 +406,7 @@ test("export: runtime follows the capture recipe", () => {
     'xmlns="http://www.w3.org/2000/svg"',
     "new XMLSerializer().serializeToString(root)",
     '"data:image/svg+xml;charset=utf-8," + encodeURIComponent(ex.svg)',
-    "Math.min(window.devicePixelRatio || 1, 2)",
+    "exportScale(ex.width, ex.height, window.devicePixelRatio)",
     "EXPORT_MAX_PIXELS = 16000000",
     'new ClipboardItem({ "image/png": png })',
     'if (blob) resolve(blob); else reject(new Error("toBlob returned null"))',

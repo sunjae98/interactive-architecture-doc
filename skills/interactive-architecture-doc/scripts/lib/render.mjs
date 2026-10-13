@@ -3,7 +3,7 @@
 // (steps, scenarios, meta.entry_request) and #iad-i18n (UI strings).
 
 import { readFileSync, writeFileSync, renameSync, unlinkSync, readdirSync, existsSync, openSync, closeSync } from "node:fs";
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { dirname, join, basename, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validate, KINDS } from "./validate.mjs";
@@ -193,6 +193,29 @@ function renderSections(doc) {
   return out.join("\n");
 }
 
+// ---- Content-Security-Policy -------------------------------------------------
+// The page needs no network: everything is inline or a data:/blob: URL. Inline executable scripts
+// (plain <script> without attributes) are allowed by their SHA-256, computed from the template so the
+// policy can never drift from the shipped code. JSON data islands are not executed and need no hash.
+// The export rasterizes a data: SVG through <img> and downloads via blob: URLs.
+const EXEC_SCRIPT_RE = /<script>([\s\S]*?)<\/script>/g;
+
+export function contentSecurityPolicy(template) {
+  const hashes = [...template.matchAll(EXEC_SCRIPT_RE)].map(([, body]) => {
+    if (new RegExp(SLOT_RE.source).test(body)) throw new Error("template has a slot inside an inline script; its CSP hash would not be stable");
+    return `'sha256-${createHash("sha256").update(body, "utf8").digest("base64")}'`;
+  });
+  return [
+    "default-src 'none'",
+    `script-src ${hashes.join(" ")}`,
+    "style-src 'unsafe-inline'",
+    "font-src data:",
+    "img-src data: blob:",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+}
+
 // ---- public API -------------------------------------------------------------
 export function renderHtml(doc, { templatePath = TEMPLATE_PATH, fontsDir = FONTS_DIR } = {}) {
   const result = validate(doc);
@@ -221,6 +244,7 @@ export function renderHtml(doc, { templatePath = TEMPLATE_PATH, fontsDir = FONTS
   } catch (e) {
     throw new Error(`template ${templatePath} cannot be read: ${e.message}`);
   }
+  slots.IAD_CSP = escapeHtml(contentSecurityPolicy(template));
   const html = template.replace(SLOT_RE, (match, name) => {
     if (name.startsWith("t:")) {
       const key = name.slice(2);
