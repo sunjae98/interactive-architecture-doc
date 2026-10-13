@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Self-check mode: open a rendered page with `#iad-selfcheck` (or call `window.iadSelfCheck()`) to replay
+  every scenario × step and get one JSON result (active node, data panel, entry request, fan arrows, horizontal
+  overflow, page errors) in `#iad-selfcheck-result` and the console. Agents read this instead of taking screenshots.
+- `iad init <out.json> [--lang ko|en] [--steps N] [--scenarios ids] [--fork]` writes a skeleton document with
+  0 validation errors and `[...]` placeholders; refuses to overwrite without `--force`.
+- Smaller agent read set: `SKILL.md` no longer asks to read `design-system.md`; the CLI details and the v1
+  mapping moved out of `format.md` into `references/cli.md` and `references/migration-v1.md`.
+- READMEs: `iad init`, `#iad-selfcheck`, and a comparison with the v1 hand-edited template approach.
+- The v2 plan document is no longer part of the repository.
+
 ## 2.0.0 — 2026-10-13
 
 First public release.

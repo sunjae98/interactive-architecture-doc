@@ -19,7 +19,7 @@ clipboard image. Light and dark themes, Korean and English UI.
 
 ```mermaid
 flowchart LR
-    A["Agent<br/>writes JSON only"] --> J[("doc.json")]
+    A["Agent<br/>writes JSON only"] -- "iad.mjs init<br/>(skeleton)" --> J[("doc.json")]
     J --> V{"iad.mjs validate<br/>(Node 18+, node: built-ins only)"}
     V -- "errors<br/>(JSON pointer + rule code)" --> A
     V -- "ok" --> R["iad.mjs render"]
@@ -28,11 +28,34 @@ flowchart LR
     R -- "atomic write" --> H["doc.html<br/>single self-contained file"]
     H --> B["Browser (offline)<br/>scenario playground"]
     B --> E["Export current view<br/>PNG · SVG · clipboard"]
+    H --> S["doc.html#iad-selfcheck<br/>replays every scenario × step"]
+    S -- "one JSON line<br/>(failures → fix JSON)" --> A
 ```
 
 - The agent never edits HTML. If something is wrong, it fixes the JSON and renders again.
 - `render` re-runs validation and refuses to write if there are errors.
 - The JSON is embedded in the HTML (`#iad-data`), so the source can be recovered from the HTML file.
+
+## Why scripts instead of a single hand-edited skill
+
+Version 1 was a single `SKILL.md` plus an ~840-line `template.html` that the agent copied and edited by hand.
+This repository replaces that with a JSON format, a validator, a renderer, and a browser self-check.
+
+| | v1: one skill, hand-edited template | This repository |
+|---|---|---|
+| Consistency | step count / `TOTAL_STEPS`, `data-step` / `data-branch`, fan hub/target pairs, `<option>` / `SCENARIOS` keys kept in sync by hand | all generated from one JSON definition |
+| Validation | mismatches found by clicking through the page | rejected before render with a JSON pointer and rule code, e.g. `/board/3 E_FAN_TARGET_NO_HUB` |
+| Verification | manual clicking, many screenshots | `doc.html#iad-selfcheck` replays every scenario × step and returns one JSON line |
+| Agent reads | ≈46 KB (`SKILL.md` 7.9 KB + `design-system.md` 4.5 KB + `template.html` 34 KB) | ≈15–21 KB (`SKILL.md` 5.8 KB + `format.md` 7.9 KB + `iad init` skeleton 1.8–7.2 KB); the 46 KB `template.html` is used only by the renderer |
+| Agent writes | ~34 KB+ of HTML | a small JSON file (≈2–12 KB) |
+| Updates | re-edit the HTML | edit the JSON and render again; the JSON is embedded in the HTML and can be recovered |
+| Distribution | folder copied into each project (copies drift) | one-line install and updates with `npx skills add` / `npx skills update` |
+
+- Figures are file sizes in bytes, not exact token counts.
+- Maintained as an open-source repository: versioned releases with a [CHANGELOG](CHANGELOG.md), CI on
+  Node 18/20/22 (tests, example validation, font hashes), and development files (tests, font build tool, CI)
+  kept out of the installed skill folder.
+- Trade-off: the agent needs Node.js 18+ and shell access; v1 needed only file editing.
 
 ## Install
 
@@ -56,17 +79,22 @@ You can also just describe what you want ("make an interactive architecture docu
 the skill from its description. Other agents that support skills load it the same way, but the explicit
 invocation syntax depends on the agent.
 
-The agent follows `skills/interactive-architecture-doc/SKILL.md`: it gathers the details, copies the closest
-file from `examples/`, writes `doc.json`, and runs
+The agent follows `skills/interactive-architecture-doc/SKILL.md`: it gathers the details, starts `doc.json`
+from a skeleton (or the minimal example), fills it in, and runs
 
 ```sh
+node scripts/iad.mjs init doc.json --lang en --steps 4 --scenarios image,audio --fork   # skeleton with [placeholders]
 node scripts/iad.mjs validate doc.json   # fix reported errors and warnings
 node scripts/iad.mjs render doc.json     # writes doc.html next to doc.json
 ```
 
+To check the result, it opens `doc.html#iad-selfcheck` in a browser tool and reads one JSON line from
+`#iad-selfcheck-result` (`{"ok":true,"checked":21,...,"failures":[]}`) instead of clicking through every
+scenario; screenshots are only needed when the self-check fails. You can open the same URL yourself.
+
 Keep `doc.json` next to the HTML: it is the source. To update a document, edit the JSON and render again
 (the HTML also embeds a copy of the JSON in `<script id="iad-data">`). The format is described in
-`skills/interactive-architecture-doc/references/format.md`.
+`skills/interactive-architecture-doc/references/format.md`, the commands in `references/cli.md`.
 
 ### Language (Korean / English output)
 
@@ -77,7 +105,7 @@ The document language is set by `meta.lang` in the JSON: `"en"` (default) or `"k
 | How to ask | Write your request in English | Write your request in Korean (or say "write it in Korean") |
 | `meta.lang` | `"en"` (or omit) | `"ko"` |
 | UI strings (buttons, status, export messages) | English | Korean |
-| Starting example | `examples/*.en.json` | `examples/*.ko.json` |
+| Starting point | `iad init --lang en` or `examples/*.en.json` | `iad init --lang ko` or `examples/*.ko.json` |
 
 - The agent picks `meta.lang` from the language of your request; you can always override it explicitly
   ("make the document in Korean").

@@ -28,6 +28,12 @@ Run `npm test` before every commit.
    A test cross-checks the table against the validator and fails if they drift.
 3. Add a failing fixture for the code to `test/validate.test.mjs`.
 
+## Changing the template or runtime
+
+After changing `assets/template.html`, render the examples and open each with `#iad-selfcheck` in a browser
+(wide and narrow windows); `#iad-selfcheck-result` must have `data-state="pass"`. See the *Self-check*
+section of `references/design-system.md`.
+
 ## Regenerating fonts
 
 Fonts are committed as subset woff2 files in `skills/interactive-architecture-doc/assets/fonts/`.

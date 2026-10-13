@@ -245,3 +245,21 @@ characters; non-Latin letters are kept.
 
 Buttons are disabled while an export is running (`export_busy`); success shows `export_saved` with
 the file name or `export_copied`.
+
+## Self-check
+
+`doc.html#iad-selfcheck` (or `window.iadSelfCheck()`, which returns a Promise) checks the page from the
+inside so agents and tools can verify a render without screenshots. Result format: [cli.md](cli.md).
+
+- A small inline script in `<head>` (hashed in the CSP like the others) collects `error`,
+  `unhandledrejection` and `securitypolicyviolation` events from load onward into `window.__iadErrors`.
+- The playground waits for `load` and `document.fonts.ready`, stops auto-play, adds `.iad-measuring`
+  (no transitions) and, for every scenario × step, calls the real `render()` and `draw()` without
+  scrolling, then records: number of `.active` nodes, `#pgData` text, the entry request text, visible
+  fan targets vs. drawn `line`/`path` elements per `.fork-zone`, and `scrollWidth` vs. `clientWidth`.
+  `judgeStep()` and `selfCheckResult()` in the pure-helpers block turn that into failures and warnings
+  (unit-tested in `test/runtime.test.mjs`).
+- Afterwards the scenario, step, auto-play and scroll position are restored. The JSON goes into a
+  `<pre id="iad-selfcheck-result" data-state="pass|fail">` created on demand (visually hidden with
+  `clip-path`, still readable as text) and one `IAD_SELFCHECK {json}` console line. Without the hash
+  nothing runs; setting the hash later (`hashchange`) runs it too.
