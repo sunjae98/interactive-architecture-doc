@@ -9,8 +9,11 @@
   0 validation errors and `[...]` placeholders; refuses to overwrite without `--force`.
 - Smaller agent read set: `SKILL.md` no longer asks to read `design-system.md`; the CLI details and the v1
   mapping moved out of `format.md` into `references/cli.md` and `references/migration-v1.md`.
-- READMEs: `iad init`, `#iad-selfcheck`, and a comparison with the v1 hand-edited template approach.
+- READMEs: `iad init`, `#iad-selfcheck`, a comparison with a single hand-edited `SKILL.md` template, and an
+  estimated token comparison chart.
 - The v2 plan document is no longer part of the repository.
+- Theme toggle is now an icon button (moon / sun) fixed to the top-right corner instead of a text button in
+  the sidebar; its label names the action ("Switch to dark mode" / "다크 모드로 전환").
 
 ## 2.0.0 — 2026-10-13
 

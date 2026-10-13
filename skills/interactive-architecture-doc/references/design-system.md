@@ -128,8 +128,10 @@ both fonts stay embedded (decision recorded 2026-10-13).
 - An inline script at the top of `<head>` sets `data-theme="light"|"dark"` on `<html>` before the CSS
   is parsed (no flash): the saved choice from `localStorage["iad-theme"]` if any, otherwise
   `prefers-color-scheme`. Without a saved choice the page keeps following OS changes.
-- The sidebar **Dark mode** button (`theme_dark` in the UI tables, `aria-pressed`) flips the attribute
-  and saves the choice. Every `localStorage` access is in `try/catch`: on `file://` pages storage can be
+- The icon button fixed to the top-right corner (`#pgTheme`, `.theme-toggle`) flips the attribute and
+  saves the choice. It shows a moon in light mode and a sun in dark mode (inline SVG, `currentColor`), and its
+  `aria-label`/`title` name the action (`theme_to_dark` / `theme_to_light` in the UI tables). It is not part of
+  the export. Every `localStorage` access is in `try/catch`: on `file://` pages storage can be
   blocked, and then the choice simply lasts until reload. The key is shared by all documents of the
   same origin, so the choice carries over between documents.
 - `color-scheme` is set per theme so native controls (select, scrollbars) follow.

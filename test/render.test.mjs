@@ -105,8 +105,15 @@ test("tokens: each kind's text is >= 4.5:1 on its own bg and on the neutral surf
 
 test("theme: toggle button and UI strings exist (behaviour: test/runtime.test.mjs)", () => {
   const src = readFileSync(TEMPLATE_PATH, "utf8");
-  assert.ok(src.includes('<button class="pg-btn pg-theme" id="pgTheme" aria-pressed="false">{{t:theme_dark}}</button>'));
-  for (const lang of ["en", "ko"]) assert.equal(typeof UI[lang].theme_dark, "string", `${lang}.theme_dark`);
+  assert.match(src, /<button class="theme-toggle" id="pgTheme" type="button" aria-label="\{\{t:theme_to_dark\}\}"/);
+  assert.match(src, /class="icon-moon"[^>]*aria-hidden="true"/);
+  assert.match(src, /class="icon-sun"[^>]*aria-hidden="true"/);
+  assert.match(src, /\[data-theme="dark"\] \.theme-toggle \.icon-sun\{display:block;\}/);
+  for (const lang of ["en", "ko"]) {
+    for (const key of ["theme_to_dark", "theme_to_light"]) {
+      assert.equal(typeof UI[lang][key], "string", `${lang}.${key}`);
+    }
+  }
 });
 
 test("template: no horizontal overflow in the column layout (fan targets: test/runtime.test.mjs)", () => {
