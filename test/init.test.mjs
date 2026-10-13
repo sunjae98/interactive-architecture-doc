@@ -114,3 +114,13 @@ test("init: bad arguments exit 2 and write nothing", () =>
     // init-only options are rejected by other commands
     assert.equal(run("validate", out, "--fork").status, 2);
   }));
+
+test("formatJson: round-trips and keeps short values on one line", async () => {
+  const { formatJson, scaffold } = await import("../skills/interactive-architecture-doc/scripts/lib/scaffold.mjs");
+  const doc = scaffold({ lang: "ko", steps: 4, scenarios: ["a", "b"], fork: true });
+  const text = formatJson(doc);
+  assert.deepEqual(JSON.parse(text), doc);
+  assert.ok(text.includes('{"label":"[1단계 이름]"}'), "short objects stay on one line");
+  assert.ok(text.split("\n").every((l) => l.length <= 140), "long values are broken into lines");
+  assert.deepEqual(JSON.parse(formatJson({ s: "a\n\"b\"", n: null, e: [], o: {} })), { s: "a\n\"b\"", n: null, e: [], o: {} });
+});

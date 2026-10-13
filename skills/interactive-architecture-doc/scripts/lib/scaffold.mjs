@@ -124,3 +124,15 @@ export function scaffold({ lang = "en", steps = 3, scenarios = ["default"], fork
     considerations: { title: T.considerations, items: [{ decision: T.decision, why: T.why }] },
   };
 }
+
+// JSON with short arrays/objects kept on one line (smaller for the agent to read than 2-space indent).
+export function formatJson(value, indent = "") {
+  const flat = JSON.stringify(value);
+  if (value === null || typeof value !== "object" || indent.length + flat.length <= 100) return flat;
+  const inner = indent + "  ";
+  const items = Array.isArray(value)
+    ? value.map((v) => inner + formatJson(v, inner))
+    : Object.entries(value).map(([k, v]) => inner + JSON.stringify(k) + ": " + formatJson(v, inner));
+  const [open, close] = Array.isArray(value) ? ["[", "]"] : ["{", "}"];
+  return `${open}\n${items.join(",\n")}\n${indent}${close}`;
+}

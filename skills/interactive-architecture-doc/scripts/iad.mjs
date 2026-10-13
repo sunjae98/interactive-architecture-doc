@@ -13,7 +13,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { validate, formatIssue } from "./lib/validate.mjs";
 import { renderHtml, writeFileAtomic, defaultOutputPath, ValidationFailed } from "./lib/render.mjs";
-import { scaffold, KEBAB, LANGS, MAX_STEPS } from "./lib/scaffold.mjs";
+import { scaffold, formatJson, KEBAB, LANGS, MAX_STEPS } from "./lib/scaffold.mjs";
 
 const USAGE = `Usage:
   iad validate <doc.json>... [--json]
@@ -157,7 +157,7 @@ function cmdInit(args) {
   const doc = scaffold({ lang, steps, scenarios, fork: !!o.fork });
   const { warnings } = validate(doc);
   try {
-    writeFileAtomic(file, JSON.stringify(doc, null, 2) + "\n");
+    writeFileAtomic(file, formatJson(doc) + "\n");
   } catch (e) {
     throw new FileError(`cannot write ${file}: ${e.message}`);
   }
