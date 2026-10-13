@@ -362,7 +362,7 @@
   }
   .main{flex:1;min-width:0;}
   @media (max-width:1080px){
-    .layout{flex-direction:column;}
+    .layout{flex-direction:column;align-items:stretch;} /* stretch: fit-content would let the nowrap stepper widen the page */
     .sidebar{position:static;width:100%;max-height:none;}
   }
 
@@ -521,8 +521,20 @@
         return el.getAttribute("data-fan-target") === hubId;
       });
       if (!targets.length) return;
+      // Only targets in the first grid row get an arrow. When columns wrap (2 columns) or stack
+      // (1 column), arrows to lower rows would run through the nodes above them; in the stacked
+      // layout this leaves one short vertical connector from the hub to the first column.
+      var colTop = function (el) { return (el.closest(".fork-col") || el).getBoundingClientRect().top; };
+      var firstRow = Math.min.apply(null, targets.map(colTop));
+      targets = targets.filter(function (el) { return colTop(el) < firstRow + 1; });
       var fromX = centerX(hub, zr.left), fromY = bottomY(hub, zr.top);
-      var points = targets.map(function (el) { return { x: centerX(el, zr.left), y: topY(el, zr.top) }; });
+      // Arrows stop above a column title (".fork-title" before the target) instead of crossing it.
+      var points = targets.map(function (el) {
+        var col = el.closest(".fork-col");
+        var title = col && col.querySelector(".fork-title");
+        var end = title && (title.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) ? title : el;
+        return { x: centerX(el, zr.left), y: topY(end, zr.top) };
+      });
       var barY = fromY + 16;
       var xs = points.map(function (p) { return p.x; }).concat([fromX]);
       html += line(fromX, fromY, fromX, barY);

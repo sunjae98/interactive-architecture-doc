@@ -119,6 +119,13 @@ test("theme: early head script picks saved theme or OS preference, toggle persis
   assert.ok(src.includes('root.setAttribute("data-theme", html.getAttribute("data-theme"))'));
 });
 
+test("template: fan arrows only reach first-row targets and stop above column titles", () => {
+  const src = readFileSync(TEMPLATE_PATH, "utf8");
+  assert.ok(src.includes('targets = targets.filter(function (el) { return colTop(el) < firstRow + 1; });'), "wrapped/stacked rows get no crossing arrows");
+  assert.ok(src.includes('var title = col && col.querySelector(".fork-title");'), "arrows end above the column title");
+  assert.ok(/@media \(max-width:1080px\)\{\s*\.layout\{flex-direction:column;align-items:stretch;\}/.test(src), "no horizontal overflow in the column layout");
+});
+
 test("template: grid columns come from --cols, not inline grid-template-columns", () => {
   const src = readFileSync(TEMPLATE_PATH, "utf8");
   assert.ok(/\.fork-row\{[^}]*repeat\(var\(--cols,4\),1fr\)/.test(src));
