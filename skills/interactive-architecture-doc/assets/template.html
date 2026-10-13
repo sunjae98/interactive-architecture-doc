@@ -9,74 +9,81 @@
 <style>
   /* ==== Design tokens ======================================================
      The ONLY place colors may appear. Component CSS and JS reference tokens.
-     Values are identical to v1; the redesign happens in a later phase. */
+     Colors: Radix Colors 3.0.0 (MIT) — neutral slate, kinds crimson / violet / green / amber,
+     primary blue; the comment after each value names the scale and step.
+     Spacing, radius, shadows: Primer Primitives 11.10.0 (MIT). */
   :root{
-    --color-bg:#f4f5f7;
-    --color-surface:#ffffff;
-    --color-surface-2:#eef0f4;
-    --color-border:#d6dae1;
-    --color-text:#1b1e24;
-    --color-text-muted:#66707c;
-    --color-on-solid:#ffffff;
-    --color-primary:#3b6fd1;
-    --color-primary-bg:#e4ecfb;
-    --color-code-bg:#0b0d11;
-    --color-code-text:#9fd3a5;
-    --color-hatch:rgba(0,0,0,0.015);
-    --line:#aab1bc;
+    color-scheme:light;
+    --color-bg:#f9f9fb;             /* slate 2 */
+    --color-surface:#fcfcfd;        /* slate 1 */
+    --color-surface-2:#f0f0f3;      /* slate 3 */
+    --color-border:#d9d9e0;         /* slate 6 */
+    --color-text:#1c2024;           /* slate 12 */
+    --color-text-muted:#60646c;     /* slate 11 */
+    --color-on-solid:#ffffff;       /* text on step-9 fills */
+    --color-primary:#0090ff;        /* blue 9 */
+    --color-primary-bg:#e6f4fe;     /* blue 3 */
+    --color-primary-text:#113264;   /* blue 12 (blue 11 is 4.25:1 on blue 3) */
+    --color-hatch:#fcfcfd;          /* slate 1 (stripes on the slate 2 page) */
+    --line:#b9bbc6;                 /* slate 8 */
+    /* code blocks are dark in both themes */
+    --color-code-bg:#111113;        /* slate dark 1 */
+    --color-code-text:#3dd68c;      /* green dark 11 */
 
-    --kind-client-bg:#fbe6ef;
-    --kind-client-border:#c2417a;
-    --kind-client-solid:#c2417a;
-    --kind-client-text:#c2417a;
+    --kind-client-bg:#ffe9f0;       /* crimson 3 */
+    --kind-client-border:#eaacc3;   /* crimson 7 */
+    --kind-client-solid:#e93d82;    /* crimson 9 */
+    --kind-client-text:#cb1d63;     /* crimson 11 */
 
-    --kind-decision-bg:#f1e8fb;
-    --kind-decision-border:#8b5cc9;
-    --kind-decision-solid:#8b5cc9;
-    --kind-decision-text:#8b5cc9;
-    --kind-decision-tag-bg:#e5d5f7;
-    --kind-decision-code-text:#d3b6f0;
+    --kind-decision-bg:#f4f0fe;     /* violet 3 */
+    --kind-decision-border:#c2b5f5; /* violet 7 */
+    --kind-decision-solid:#6e56cf;  /* violet 9 */
+    --kind-decision-text:#6550b9;   /* violet 11 */
+    --kind-decision-tag-bg:#ebe4ff; /* violet 4 */
+    --kind-decision-code-text:#baa7ff; /* violet dark 11 */
 
-    --kind-existing-bg:#e6f5ec;
-    --kind-existing-border:#1f8f57;
-    --kind-existing-solid:#1f8f57;
-    --kind-existing-text:#1f8f57;
-    --kind-existing-zone-bg:rgba(31,143,87,0.04);
+    /* green 11 / amber 11 are below 4.5:1 on their step-3 background in light, so text uses step 12 */
+    --kind-existing-bg:#e6f6eb;     /* green 3 */
+    --kind-existing-border:#8eceaa; /* green 7 */
+    --kind-existing-solid:#30a46c;  /* green 9 */
+    --kind-existing-text:#193b2d;   /* green 12 */
+    --kind-existing-zone-bg:#f4fbf6; /* green 2 */
 
-    --kind-new-bg:#fbf0dc;
-    --kind-new-border:#a8710a;
-    --kind-new-solid:#a8710a;
-    --kind-new-text:#a8710a;
-    --kind-new-code-text:#f0cf8e;
+    --kind-new-bg:#fff7c2;          /* amber 3 */
+    --kind-new-border:#e9c162;      /* amber 7 */
+    --kind-new-solid:#ffc53d;       /* amber 9 */
+    --kind-new-text:#4f3422;        /* amber 12 */
+    --kind-new-on-solid:#4f3422;    /* amber 12: amber 9 needs dark text */
+    --kind-new-code-text:#ffca16;   /* amber dark 11 */
 
     /* "IAD Sans" / "Geist Mono" are inlined by the renderer (IAD_FONTS slot); system stacks follow,
        and the system emoji fonts come last for scenario icons. */
     --font-sans:"IAD Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo","Malgun Gothic",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji";
     --font-mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace,"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji";
 
-    --radius-dot:3px;
-    --radius-tag:5px;
-    --radius-badge:6px;
-    --radius-control:7px;
-    --radius-node:9px;
-    --radius-card:10px;
-    --radius-zone:12px;
-    --radius-internal:14px;
-    --radius-pill:20px;
+    --radius-dot:3px;               /* borderRadius-small */
+    --radius-tag:6px;               /* borderRadius-medium */
+    --radius-badge:6px;             /* borderRadius-medium */
+    --radius-control:6px;           /* borderRadius-medium */
+    --radius-node:6px;              /* borderRadius-medium */
+    --radius-card:12px;             /* borderRadius-large */
+    --radius-zone:12px;             /* borderRadius-large */
+    --radius-internal:12px;         /* borderRadius-large */
+    --radius-pill:9999px;           /* borderRadius-full */
 
-    --space-1:4px;
-    --space-2:6px;
-    --space-3:10px;
-    --space-4:14px;
-    --space-5:22px;
-    --space-6:34px;
+    --space-1:4px;                  /* base-size-4 */
+    --space-2:6px;                  /* base-size-6 */
+    --space-3:8px;                  /* base-size-8 */
+    --space-4:12px;                 /* base-size-12 */
+    --space-5:24px;                 /* base-size-24 */
+    --space-6:32px;                 /* base-size-32 */
 
-    --shadow-card:0 6px 20px rgba(0,0,0,0.06);
-    --shadow-panel:0 6px 20px rgba(0,0,0,0.08);
-    --shadow-active:0 0 0 3px rgba(59,111,209,0.35),0 10px 26px rgba(0,0,0,0.18);
+    --shadow-card:0 1px 1px 0 #25292e1a,0 3px 6px 0 #25292e1f;                        /* shadow-resting-medium */
+    --shadow-panel:0 0 0 1px #d1d9e040,0 6px 12px -3px #25292e0a,0 6px 18px 0 #25292e1f; /* shadow-floating-small */
+    --shadow-active:0 0 0 3px #5eb1ef,0 6px 12px -3px #25292e0a,0 6px 18px 0 #25292e1f; /* blue 8 ring + floating-small */
   }
   [data-theme="dark"]{
-    /* Dark theme slot: values are added in the redesign phase. Until then light tokens apply. */
+    /* Dark theme slot: values are added with the theme toggle. */
   }
 
   /* ==== Base ============================================================== */
@@ -159,7 +166,7 @@
   .node.existing .num{background:var(--kind-existing-solid);}
   .node.existing .tag{background:var(--kind-existing-bg);color:var(--kind-existing-text);}
   .node.new{border-color:var(--kind-new-border);}
-  .node.new .num{background:var(--kind-new-solid);}
+  .node.new .num{background:var(--kind-new-solid);color:var(--kind-new-on-solid);}
   .node.new .tag{background:var(--kind-new-bg);color:var(--kind-new-text);}
 
   .node .blk{
@@ -344,7 +351,7 @@
   }
   .pg-branch{
     display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:var(--radius-tag);margin-left:var(--space-2);
-    background:var(--color-primary-bg);color:var(--color-primary);
+    background:var(--color-primary-bg);color:var(--color-primary-text);
   }
 
   [data-step]{cursor:pointer;}

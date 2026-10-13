@@ -51,6 +51,57 @@ test("template: exactly one :root block and a dark theme slot", () => {
   assert.ok(/\.zone-overlay\{[^}]*color:var\(--line\)/.test(src), "fan arrow color comes from --line");
 });
 
+// Token values per theme, parsed from the template: light = :root, dark = :root overridden by [data-theme="dark"].
+function themeTokens() {
+  const src = readFileSync(TEMPLATE_PATH, "utf8");
+  const block = (sel) => {
+    const m = src.match(new RegExp(`(?:^|\\n)\\s*${sel}\\s*\\{([^}]*)\\}`));
+    assert.ok(m, `missing ${sel} block`);
+    return Object.fromEntries([...m[1].matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(([, k, v]) => [k, v.trim()]));
+  };
+  const light = block(":root");
+  return { light, dark: { ...light, ...block('\\[data-theme="dark"\\]') } };
+}
+
+function contrast(a, b) {
+  const lum = (hex) => {
+    assert.match(hex, /^#[0-9a-f]{6}$/i, `expected an opaque #rrggbb color, got ${hex}`);
+    const [r, g, bl] = [1, 3, 5].map((i) => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+test("tokens: each kind's text is >= 4.5:1 on its own bg and on the neutral surfaces, light and dark", () => {
+  const themes = themeTokens();
+  for (const [theme, t] of Object.entries(themes)) {
+    for (const kind of ["client", "decision", "existing", "new"]) {
+      const text = t[`--kind-${kind}-text`];
+      for (const bg of [`--kind-${kind}-bg`, "--color-surface", "--color-bg"]) {
+        const ratio = contrast(text, t[bg]);
+        assert.ok(ratio >= 4.5, `${theme} --kind-${kind}-text on ${bg}: ${ratio.toFixed(2)}`);
+      }
+    }
+    for (const [fg, bg] of [
+      ["--color-text", "--color-surface"],
+      ["--color-text-muted", "--color-surface"],
+      ["--color-text-muted", "--color-bg"],
+      ["--kind-decision-text", "--kind-decision-tag-bg"],
+      ["--color-primary-text", "--color-primary-bg"],
+      ["--color-code-text", "--color-code-bg"],
+      ["--kind-decision-code-text", "--color-code-bg"],
+      ["--kind-new-code-text", "--color-code-bg"],
+    ]) {
+      const ratio = contrast(t[fg], t[bg]);
+      assert.ok(ratio >= 4.5, `${theme} ${fg} on ${bg}: ${ratio.toFixed(2)}`);
+    }
+  }
+});
+
 test("template: grid columns come from --cols, not inline grid-template-columns", () => {
   const src = readFileSync(TEMPLATE_PATH, "utf8");
   assert.ok(/\.fork-row\{[^}]*repeat\(var\(--cols,4\),1fr\)/.test(src));
