@@ -30,26 +30,95 @@ board. UI strings live in `scripts/lib/i18n.mjs` (`en` and `ko`, identical keys)
 
 ## Tokens
 
-All colors live in the single `:root` block at the top of the template. A `[data-theme="dark"]`
-block follows it (empty for now; dark values arrive with the redesign). Component CSS and JS use
-only `var(--…)` — a test fails on any `#hex`, `rgb(`/`rgba(`/`hsl(`, numeric HTML entity or named
-color outside those two blocks. Values are currently identical to v1.
+All colors live in two blocks at the top of the template: `:root` (light) and `[data-theme="dark"]`
+(only the tokens that differ). Component CSS and JS use only `var(--…)` — a test fails on any `#hex`,
+`rgb(`/`rgba(`/`hsl(`, numeric HTML entity or named color outside those two blocks. Each value carries a
+comment naming its source scale and step.
 
-| Token | Use |
-|---|---|
-| `--color-bg`, `--color-surface`, `--color-surface-2` | page, cards/nodes, badges and hover |
-| `--color-border`, `--color-text`, `--color-text-muted` | lines, text, secondary text |
-| `--color-on-solid` | text on solid fills (step numbers, primary button) |
-| `--color-primary`, `--color-primary-bg` | stepper numbers, primary button, scenario pill |
-| `--color-code-bg`, `--color-code-text` | dark code blocks |
-| `--color-hatch` | diagonal stripes of `.internal` |
-| `--line` | fan arrows (SVG uses `currentColor`; `.zone-overlay` sets `color:var(--line)`) |
-| `--kind-<k>-bg` / `-border` / `-solid` / `-text` | per node kind (`client`, `decision`, `existing`, `new`) |
-| `--kind-decision-tag-bg`, `--kind-decision-code-text`, `--kind-new-code-text`, `--kind-existing-zone-bg` | kind-specific extras |
-| `--font-sans`, `--font-mono` | font stacks |
-| `--radius-*` | `dot`, `tag`, `badge`, `control`, `node`, `card`, `zone`, `internal`, `pill` |
-| `--space-1` … `--space-6` | 4, 6, 10, 14, 22, 34 px |
-| `--shadow-card`, `--shadow-panel`, `--shadow-active` | TL;DR box, playground, active node |
+**Sources.** Colors: [Radix Colors](https://github.com/radix-ui/colors) 3.0.0 (MIT). Spacing, radius and
+shadows: [Primer Primitives](https://github.com/primer/primitives) 11.10.0 (MIT). License texts are in
+`licenses/`. Only the steps listed below are used.
+
+**Scales.** Neutral **slate** (cool gray; it sits next to the blue primary and is closest to the v1
+grays — sand was the alternative). Kinds: client **crimson**, decision **violet**, existing **green**,
+new **amber**. Primary **blue**. Dark mode uses the same step numbers from the Radix dark scales.
+
+| Token | Radix step (light → dark uses the same step of the dark scale) | Use |
+|---|---|---|
+| `--color-bg` | slate 2 (dark: slate 1) | page |
+| `--color-surface` | slate 1 (dark: slate 2) | cards, nodes, playground |
+| `--color-surface-2` | slate 3 | badges, inline code, button hover |
+| `--color-border` | slate 6 | lines and borders |
+| `--color-text` / `--color-text-muted` | slate 12 / slate 11 | text, secondary text |
+| `--color-hatch` | slate 1 (dark: slate 2) | diagonal stripes of `.internal` |
+| `--line` | slate 8 | fan arrows (SVG uses `currentColor`; `.zone-overlay` sets `color:var(--line)`) |
+| `--color-primary` | blue 9 | stepper numbers, primary button |
+| `--color-primary-bg` / `--color-primary-text` | blue 3 / blue 12 (dark: blue 11) | scenario pill, pressed theme toggle |
+| `--color-on-solid` | white | text on step-9 fills |
+| `--color-code-bg` | slate **dark** 1 in both themes | code blocks are dark in both themes |
+| `--color-code-text`, `--kind-decision-code-text`, `--kind-new-code-text` | green / violet / amber **dark** 11 in both themes | code text |
+| `--kind-<k>-bg` | 3 | tinted node background (client, decision), tags, badges |
+| `--kind-decision-tag-bg` | violet 4 | decision tag |
+| `--kind-existing-zone-bg` | green 2 | `.external-zone` |
+| `--kind-<k>-border` | 7 | node and zone borders |
+| `--kind-<k>-solid` | 9 | step badge, legend dot |
+| `--kind-new-on-solid` | amber 12 | text on the amber 9 badge (white is 1.6:1) |
+| `--kind-<k>-text` | 11; **12** for existing and new in light | kind-colored text |
+
+Green 11 and amber 11 reach only 4.21:1 / 4.25:1 on their step-3 background in light mode, so those two
+kinds (and the primary pill, blue 11 = 4.25:1) use step 12 in light. A test parses both blocks and
+requires ≥ 4.5:1 (WCAG AA) for every `--kind-<k>-text` on its `-bg`, `--color-surface` and `--color-bg`,
+light and dark, plus muted text, tags, the pill and code text. Current ratios (text on bg 3 / surface / page):
+
+| Kind | Light | Dark |
+|---|---|---|
+| client (crimson 11) | 4.66 / 5.26 / 5.13 | 7.65 / 8.35 / 8.95 |
+| decision (violet 11) | 5.51 / 6.02 / 5.87 | 7.34 / 8.43 / 9.03 |
+| existing (green 12 light, 11 dark) | 11.00 / 12.01 / 11.71 | 7.86 / 9.38 / 10.06 |
+| new (amber 12 light, 11 dark) | 10.47 / 11.09 / 10.81 | 10.26 / 11.49 / 12.32 |
+
+Known limit: white on blue 9 (primary button, stepper numbers) is 3.26:1 — Radix's intended pairing,
+kept as is; it is not body text.
+
+**Primer scales** (values in px; the Primer name is in the template comment):
+
+| Token | Value | Primer |
+|---|---|---|
+| `--space-1` … `--space-6` | 4, 6, 8, 12, 24, 32 | `base-size-4/6/8/12/24/32` |
+| `--radius-dot` | 3 | `borderRadius-small` |
+| `--radius-tag`, `-badge`, `-control`, `-node` | 6 | `borderRadius-medium` |
+| `--radius-card`, `-zone`, `-internal` | 12 | `borderRadius-large` |
+| `--radius-pill` | 9999 | `borderRadius-full` |
+| `--shadow-card` | `shadow-resting-medium` | TL;DR box |
+| `--shadow-panel` | `shadow-floating-small` | playground |
+| `--shadow-active` | 3px blue 8 ring + `shadow-floating-small` (without its 1px ring) | active node |
+
+Shadows use Primer's light values in `:root` and its dark values in the dark block.
+
+**Fonts.** `--font-sans` = `"IAD Sans"`, then system UI and Korean system fonts, `sans-serif`, then the
+system emoji fonts (Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji) for scenario icons.
+`--font-mono` = `"Geist Mono"`, system monospace, `monospace`, emoji fonts. Both families are inlined by
+the renderer from `assets/fonts/` as variable fonts (`font-weight` ranges 45–930 and 100–900).
+IAD Sans is a subset of Pretendard Variable 1.3.9 renamed because Pretendard is a Reserved Font Name
+under its OFL (see `THIRD_PARTY_NOTICES.md` and `tools/build-fonts/README.md` in the repository);
+Geist Mono 1.7.2 has no Reserved Font Name.
+
+**Rendered size.** Fonts are ~509 KB of woff2 (~680 KB as base64). Rendered examples:
+`minimal.en` 726,346 B, `minimal.ko` 727,023 B, `three-branch.en` 748,498 B, `three-branch.ko`
+750,730 B. All are well under the 1.5 MB threshold the plan set for falling back to system fonts, so
+both fonts stay embedded (decision recorded 2026-10-13).
+
+## Dark mode
+
+- An inline script at the top of `<head>` sets `data-theme="light"|"dark"` on `<html>` before the CSS
+  is parsed (no flash): the saved choice from `localStorage["iad-theme"]` if any, otherwise
+  `prefers-color-scheme`. Without a saved choice the page keeps following OS changes.
+- The sidebar **Dark mode** button (`theme_dark` in the UI tables, `aria-pressed`) flips the attribute
+  and saves the choice. Every `localStorage` access is in `try/catch`: on `file://` pages storage can be
+  blocked, and then the choice simply lasts until reload. The key is shared by all documents of the
+  same origin, so the choice carries over between documents.
+- `color-scheme` is set per theme so native controls (select, scrollbars) follow.
+- Export copies the live `data-theme` and current token values, so images match the theme on screen.
 
 ## Node kinds
 
@@ -86,6 +155,12 @@ Documents may redefine the meanings; the legend text is what readers see.
 - `≤1080px`: the playground sidebar stops being sticky and moves above the content.
 - Fan arrows are redrawn on load, resize and every step change. A fork draws only the hubs and
   targets whose nearest `.fork-zone` is itself, so nested forks do not double-draw.
+- Fan arrows go only to targets in the **first grid row** of the fork. When the columns wrap (2
+  columns) or stack (1 column, ≤900px), lower targets get no arrow, so no line runs through the nodes
+  above them; a stacked fork shows one short connector from the hub into the first column. Arrows
+  stop above a column's `.fork-title` rather than crossing it.
+- `≤1080px`: `.layout` stretches its children; as fit-content flex items the nowrap stepper would
+  otherwise widen the page.
 - `body` keeps `word-break: keep-all` so Korean words do not break mid-word.
 
 ## Export
