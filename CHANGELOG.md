@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.1.0 — 2026-10-13
+
 - Self-check mode: open a rendered page with `#iad-selfcheck` (or call `window.iadSelfCheck()`) to replay
   every scenario × step and get one JSON result (active node, data panel, entry request, fan arrows, horizontal
   overflow, page errors) in `#iad-selfcheck-result` and the console. Agents read this instead of taking screenshots.
@@ -9,8 +11,8 @@
   0 validation errors and `[...]` placeholders; refuses to overwrite without `--force`.
 - Smaller agent read set: `SKILL.md` no longer asks to read `design-system.md`; the CLI details and the v1
   mapping moved out of `format.md` into `references/cli.md` and `references/migration-v1.md`.
-- READMEs: `iad init`, `#iad-selfcheck`, a comparison with a single hand-edited `SKILL.md` template, and an
-  estimated token comparison chart.
+- READMEs: `iad init`, `#iad-selfcheck`, a comparison with a single hand-edited `SKILL.md` template, an
+  estimated token comparison chart, and how to update an installed skill (`npx skills update`).
 - The v2 plan document is no longer part of the repository.
 - Theme toggle is now an icon button (moon / sun) fixed to the top-right corner instead of a text button in
   the sidebar; its label names the action ("Switch to dark mode" / "다크 모드로 전환").
