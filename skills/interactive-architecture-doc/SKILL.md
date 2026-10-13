@@ -40,23 +40,24 @@ ask first instead of inventing content.
 
 ## Procedure
 
-1. Read `references/format.md` (fields and rule codes). Optionally skim
-   `references/design-system.md` for layout constraints.
-2. Copy the closest file from `examples/` (`minimal.*.json` for a linear flow,
-   `three-branch.*.json` for a fork with scenarios, external systems, and all optional sections)
-   next to where the output belongs, e.g. `doc.json`.
-3. Rewrite it with the user's content. Pick `meta.lang` (`ko` or `en`) from the language the
-   user wrote their request in; it only affects UI strings, so write the body in that same language.
-4. Validate: `node scripts/iad.mjs validate doc.json` (add `--json` for machine-readable output).
-   Output lines are `<JSON pointer> <CODE> <message>`. Fix every error and re-run; read warnings
-   too (leftover placeholders, steps with no active node for a scenario).
+1. Gather the checklist items above. Read `references/format.md` (fields and rule codes).
+2. Start the JSON next to where the output belongs:
+   `node scripts/iad.mjs init doc.json --lang <ko|en> --steps N --scenarios id1,id2 [--fork]`
+   (`--fork` for paths that split at a decision: one column per scenario). For a linear flow you may
+   instead copy `examples/minimal.<lang>.json`; open `examples/three-branch.*.json` only when you
+   need a pattern it shows (external systems, details, callouts, tool examples).
+   Pick `--lang` / `meta.lang` from the language the user wrote in; it only sets UI strings, so
+   write the body in that same language.
+3. Fill every `[...]` placeholder with the user's content; add or move nodes as the flow needs.
+4. Validate: `node scripts/iad.mjs validate doc.json` (`--json` for machine-readable output).
+   Lines are `<JSON pointer> <CODE> <message>`. Fix every error; read warnings too (`W_PLACEHOLDER`
+   means something is still unfilled). Other options: `references/cli.md`.
 5. Render: `node scripts/iad.mjs render doc.json` writes `doc.html` next to the JSON
    (`-o path` to change). Render refuses to run while errors remain.
-6. Check in a browser (use `agent-browser` if available; no specific tool is required):
-   - every scenario: press "Next step" to the end; unrelated nodes dim, related nodes highlight
-   - auto-play runs to the end; clicking a node jumps to its step
-   - fork arrows meet node edges, including after narrowing the window
-   - the export buttons produce an image of the current view
+6. Self-check: if a browser tool is available (e.g. `agent-browser`), open `doc.html#iad-selfcheck`
+   and read the text of `#iad-selfcheck-result`: one JSON line, `"ok":true` when every scenario ×
+   step has an active node, data, drawn fan arrows and no overflow. Fix `failures` in the JSON and
+   render again. Take screenshots only when the self-check fails or the user asks for visuals.
 7. Deliver the HTML and keep the JSON next to it.
 
 Paths are relative to the skill folder; run the commands from there or use absolute paths.
@@ -72,7 +73,6 @@ Paths are relative to the skill folder; run the commands from there or use absol
 - Fan arrows: put `fan_hub` on the deciding node and `fan_target` (same id) on the first node
   of each path, all inside the same `fork` block. No JS or HTML changes are needed to add paths.
 - Text fields support only `**bold**` and `` `code` ``; everything else is escaped.
-- Fonts (IAD Sans, a renamed subset of Pretendard, and Geist Mono) are embedded by the renderer.
 
 ## Updating an existing document
 
@@ -82,6 +82,6 @@ Paths are relative to the skill folder; run the commands from there or use absol
    `<`, U+2028 and U+2029 written as `\uXXXX`, which JSON parsers read normally). Save it as
    `doc.json`, then follow case 1.
 3. **Only a v1 HTML exists** (hand-edited template with `TOTAL_STEPS` / `SCENARIOS`): for a
-   typo-level change, edit the HTML directly. For anything larger, convert it once to JSON using
-   the mapping table in `references/migration-v1.md`, render, compare with the original in
+   typo-level change, edit the HTML directly. For anything larger, convert it once to JSON with
+   `references/migration-v1.md` (read it only in this case), render, compare with the original in
    a browser, and from then on work from the JSON.
