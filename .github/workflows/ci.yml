@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # Includes the docs test: relative links, SKILL.md limits, licenses/ <-> THIRD_PARTY_NOTICES.md.
+      - name: Test
+        run: npm test
+
+      - name: Validate examples
+        run: npm run check
+
+      - name: Verify font hashes
+        run: |
+          node -e '
+            const fs = require("fs"), crypto = require("crypto"), path = require("path");
+            const dir = "skills/interactive-architecture-doc/assets/fonts";
+            const expected = JSON.parse(fs.readFileSync("tools/build-fonts/hashes.json", "utf8"));
+            const actual = fs.readdirSync(dir).filter((f) => f.endsWith(".woff2")).sort();
+            let bad = 0;
+            for (const name of Object.keys(expected).sort()) {
+              if (!actual.includes(name)) { console.error("missing font: " + name); bad++; continue; }
+              const sha = crypto.createHash("sha256").update(fs.readFileSync(path.join(dir, name))).digest("hex");
+              if (sha !== expected[name].sha256) { console.error("hash mismatch: " + name + " " + sha); bad++; }
+              else console.log("ok " + name);
+            }
+            for (const name of actual) if (!(name in expected)) { console.error("unlisted font: " + name); bad++; }
+            process.exit(bad ? 1 : 0);
+          '
