@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>[문서 제목] — [한 줄 부제]</title>
+<style>
+  :root{
+    --bg:#f4f5f7;
+    --panel:#ffffff;
+    --panel2:#eef0f4;
+    --border:#d6dae1;
+    --text:#1b1e24;
+    --sub:#66707c;
+    --existing:#1f8f57;
+    --existing-bg:#e6f5ec;
+    --new:#a8710a;
+    --new-bg:#fbf0dc;
+    --client:#c2417a;
+    --client-bg:#fbe6ef;
+    --primary:#3b6fd1;
+    --primary-bg:#e4ecfb;
+    --decision:#8b5cc9;
+    --decision-bg:#f1e8fb;
+    --line:#aab1bc;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    padding:28px 16px 90px;
+    word-break:keep-all;
+    overflow-wrap:break-word;
+  }
+  h1{text-align:center;font-size:20px;font-weight:600;margin:0 0 4px;}
+  .subtitle{text-align:center;color:var(--sub);font-size:13px;margin-bottom:22px;}
+  .subtitle.small{margin-top:0;margin-bottom:26px;font-size:11.5px;}
+
+  .stepper{
+    max-width:1200px;margin:0 auto 14px;
+    display:flex;align-items:center;gap:4px;flex-wrap:nowrap;
+    overflow-x:auto;padding-bottom:2px;
+  }
+  .step{
+    display:flex;align-items:center;gap:6px;flex-shrink:0;white-space:nowrap;
+    background:var(--panel);border:1px solid var(--border);border-radius:20px;
+    padding:6px 12px 6px 8px;font-size:10.8px;color:var(--text);
+  }
+  .step .num{
+    width:20px;height:20px;border-radius:50%;background:var(--primary);color:#fff;
+    font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .step-arrow{color:var(--sub);font-size:14px;flex-shrink:0;}
+
+  .legend{
+    display:flex;justify-content:center;gap:18px;flex-wrap:wrap;
+    margin-bottom:30px;font-size:12px;color:var(--sub);
+  }
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block;}
+  .dot.existing{background:var(--existing);}
+  .dot.new{background:var(--new);}
+  .dot.client{background:var(--client);}
+  .dot.decision{background:var(--decision);}
+
+  .board{max-width:920px;margin:0 auto;}
+
+  .center-row{display:flex;justify-content:center;}
+  .plain-arrow{text-align:center;color:var(--sub);font-size:20px;line-height:1;margin:6px 0;}
+  .arrow-label{display:block;font-size:10.3px;font-weight:600;color:var(--sub);line-height:1.4;margin-top:1px;}
+
+  .node{
+    border-radius:9px;padding:11px 14px;font-size:12.3px;line-height:1.5;
+    border:1.5px solid var(--border);background:var(--panel);position:relative;text-align:center;
+    z-index:1;min-width:0;max-width:100%;
+  }
+  .node .num{
+    position:absolute;top:-10px;left:calc(50% - 11px);
+    width:22px;height:22px;border-radius:50%;color:#fff;font-size:12px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--bg);
+  }
+  .node .tag{
+    display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.03em;
+    padding:1px 7px;border-radius:5px;margin-bottom:6px;
+  }
+  .node.client{border-color:var(--client);background:var(--client-bg);}
+  .node.client .num{background:var(--client);}
+  .node.decision{border-color:var(--decision);background:var(--decision-bg);}
+  .node.decision .num{background:var(--decision);}
+  .node.decision .tag{background:#e5d5f7;color:var(--decision);}
+  .node.existing{border-color:var(--existing);}
+  .node.existing .num{background:var(--existing);}
+  .node.existing .tag{background:var(--existing-bg);color:var(--existing);}
+  .node.new{border-color:var(--new);}
+  .node.new .num{background:var(--new);}
+  .node.new .tag{background:var(--new-bg);color:var(--new);}
+
+  .node code{
+    display:block;background:#0b0d11;border-radius:5px;padding:6px 8px;margin-top:6px;
+    font-size:10.6px;color:#9fd3a5;white-space:pre-wrap;text-align:left;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    overflow-wrap:break-word;word-break:break-word;
+  }
+  .node.new code{color:#f0cf8e;}
+  .node.decision code{color:#d3b6f0;}
+  .note{font-size:10.4px;color:var(--sub);margin-top:6px;}
+
+  .internal{
+    border:1.5px dashed var(--border);
+    border-radius:14px;
+    padding:26px 18px 16px;
+    margin:8px 0;
+    position:relative;
+    background:repeating-linear-gradient(135deg, rgba(0,0,0,0.015) 0 10px, transparent 10px 20px);
+  }
+  .detail-grid{
+    display:grid;grid-template-columns:1fr 1.3fr;gap:16px;margin-top:8px;text-align:left;
+    align-items:start;
+  }
+  .detail-left{min-width:0;}
+  .detail-left code{margin-top:0;}
+  .detail-right{display:flex;flex-direction:column;gap:9px;min-width:0;}
+  .detail-item{border-left:2.5px solid var(--new);padding-left:9px;}
+  .detail-item.alt-item{border-left-color:var(--existing);}
+  .detail-title{font-size:11px;font-weight:700;color:var(--new);}
+  .detail-body{font-size:10.6px;color:var(--sub);line-height:1.55;margin-top:2px;}
+  @media (max-width:640px){ .detail-grid{grid-template-columns:1fr;} }
+
+  .internal .badge{
+    position:absolute;top:-11px;left:16px;
+    background:var(--panel2);border:1px solid var(--border);border-radius:6px;
+    padding:2px 8px;font-size:10.5px;font-weight:700;color:var(--sub);letter-spacing:.02em;
+  }
+
+  .external-zone{
+    border:1.5px dashed var(--existing);
+    border-radius:12px;
+    padding:24px 14px 16px;
+    margin:16px 0;
+    position:relative;
+    background:rgba(31,143,87,0.04);
+  }
+  .external-zone .badge2{
+    position:absolute;top:-11px;left:16px;
+    background:var(--existing-bg);border:1px solid var(--existing);border-radius:6px;
+    padding:2px 8px;font-size:10.5px;font-weight:700;color:var(--existing);letter-spacing:.02em;
+  }
+
+  .fork-zone{position:relative;}
+  .zone-overlay{
+    position:absolute;top:0;left:0;width:100%;height:100%;
+    pointer-events:none;z-index:0;display:block;
+  }
+
+  .fork-row{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-items:start;
+    margin-top:40px;position:relative;z-index:1;
+  }
+  @media (max-width:1180px){
+    .fork-row{grid-template-columns:1fr 1fr;}
+  }
+  .fork-col{display:flex;flex-direction:column;gap:6px;min-width:0;}
+  .fork-title{text-align:center;font-size:10.8px;color:var(--sub);margin-bottom:2px;position:relative;z-index:1;}
+
+  .external-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;align-items:start;}
+  .external-card{
+    background:var(--panel);border:1px solid var(--border);border-radius:9px;
+    padding:10px 12px;font-size:11px;
+  }
+  .external-card .name{font-weight:600;text-align:center;margin-bottom:6px;}
+  .external-list{list-style:disc;margin:0;padding-left:15px;font-size:10.2px;color:var(--text);line-height:1.55;}
+  .external-list li{margin-bottom:3px;}
+  .external-list .ext-tag{display:block;color:var(--sub);font-size:9.2px;}
+
+  .callout{max-width:900px;margin:34px auto 0;display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+  .callout .card{
+    background:var(--panel);border:1px solid var(--border);border-radius:10px;
+    padding:14px 16px;font-size:12.3px;line-height:1.6;
+  }
+  .callout .card h3{margin:0 0 6px;font-size:13px;}
+
+  .considerations{max-width:900px;margin:34px auto 0;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 22px;}
+  .considerations h3{margin:0 0 12px;font-size:14px;}
+  .considerations ol{margin:0;padding-left:20px;}
+  .considerations li{font-size:12.2px;line-height:1.7;margin-bottom:11px;color:var(--text);}
+  .considerations li b{color:var(--new);}
+  .considerations li .why{display:block;color:var(--sub);margin-top:2px;}
+
+  .tldr{
+    max-width:900px;margin:0 auto 28px;background:var(--panel);
+    border:1.5px solid var(--new);border-radius:12px;padding:18px 22px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.06);
+  }
+  .tldr h2{margin:0 0 4px;font-size:14px;}
+  .tldr .headline{font-size:12.8px;color:var(--text);margin-bottom:14px;line-height:1.6;}
+  .tldr .headline b{color:var(--new);}
+  .tldr ol{margin:0;padding-left:19px;}
+  .tldr li{font-size:11.8px;line-height:1.6;margin-bottom:9px;color:var(--text);}
+  .tldr li b{color:var(--new);}
+  .tldr li .sub{display:block;color:var(--sub);margin-top:1px;}
+
+  .tool-examples{max-width:900px;margin:34px auto 0;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 22px;}
+  .tool-examples h3{margin:0 0 4px;font-size:14px;}
+  .tool-examples .lead{font-size:11.5px;color:var(--sub);margin-bottom:16px;}
+  .tool-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+  .tool-card{border:1px solid var(--border);border-radius:9px;padding:12px 14px;background:var(--bg);}
+  .tool-card .tool-name{
+    display:inline-block;font-size:11.5px;font-weight:700;color:var(--new);
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    background:var(--new-bg);border-radius:5px;padding:2px 7px;margin-bottom:8px;
+  }
+  .tool-card pre{
+    background:#0b0d11;color:#f0cf8e;border-radius:7px;padding:11px 12px;margin:0;
+    font-size:10.3px;line-height:1.6;white-space:pre-wrap;overflow-wrap:break-word;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .tool-card .tool-note{font-size:10.3px;color:var(--sub);line-height:1.5;margin-top:8px;}
+  @media (max-width:760px){ .tool-cards{grid-template-columns:1fr;} }
+
+  @media (max-width:900px){
+    .fork-row,.external-row{grid-template-columns:1fr;}
+    .callout{grid-template-columns:1fr;}
+  }
+
+  /* ---- layout: 왼쪽 사이드바(플레이그라운드) + 오른쪽 본문 ---- */
+  .layout{
+    display:flex;gap:22px;align-items:flex-start;
+    max-width:1320px;margin:0 auto;
+  }
+  .sidebar{
+    width:300px;flex-shrink:0;
+    position:sticky;top:10px;
+    max-height:calc(100vh - 20px);
+    overflow-y:auto;
+  }
+  .main{flex:1;min-width:0;}
+  @media (max-width:1080px){
+    .layout{flex-direction:column;}
+    .sidebar{position:static;width:100%;max-height:none;}
+  }
+
+  /* ---- playground (interactive walkthrough) ---- */
+  .playground{
+    background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    padding:14px;box-shadow:0 6px 20px rgba(0,0,0,0.08);
+  }
+  .pg-row{display:flex;flex-direction:column;gap:8px;align-items:stretch;}
+  .pg-row select{
+    flex:1;min-width:160px;padding:9px 10px;border-radius:7px;border:1px solid var(--border);
+    font-size:12.5px;color:var(--text);background:var(--bg);font-weight:600;
+  }
+  .pg-btn{
+    border:1px solid var(--border);background:var(--panel);color:var(--text);
+    border-radius:7px;padding:8px 12px;font-size:12px;cursor:pointer;font-weight:600;
+  }
+  .pg-btn:hover{background:var(--panel2);}
+  .pg-btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .pg-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .pg-btns{display:flex;gap:6px;}
+  .pg-btns .pg-btn{flex:1;padding:8px 6px;}
+  .pg-status{font-size:10.6px;color:var(--sub);line-height:1.5;}
+  .pg-panel{
+    margin-top:10px;border-top:1px dashed var(--border);padding-top:10px;
+  }
+  .pg-panel-title{font-size:11px;font-weight:700;color:var(--sub);margin-bottom:5px;}
+  .pg-panel pre{
+    margin:0;background:#0b0d11;color:#9fd3a5;border-radius:7px;padding:10px 12px;
+    font-size:11.3px;line-height:1.55;white-space:pre-wrap;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    max-height:400px;overflow:auto;
+  }
+  .pg-branch{
+    display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;margin-left:6px;
+    background:var(--primary-bg);color:var(--primary);
+  }
+
+  [data-step]{cursor:pointer;}
+  .node.active{
+    transform:scale(1.035);
+    box-shadow:0 0 0 3px rgba(59,111,209,0.35),0 10px 26px rgba(0,0,0,0.18);
+    z-index:5;
+    transition:transform .18s ease,box-shadow .18s ease;
+  }
+  .node{transition:transform .18s ease,box-shadow .18s ease,opacity .18s ease,filter .18s ease;}
+  .node.altpath{opacity:.35;filter:grayscale(60%);}
+</style>
+</head>
+<body>
+
+<!--
+  이 파일은 채워 넣는 스캐폴드다. [대괄호] 표시된 자리와 아래 스크립트의
+  SCENARIOS 객체를 실제 아키텍처 내용으로 바꿔라. 구조/CSS/JS 엔진 자체는
+  그대로 두고 재사용하면 된다 (design-system.md 참고).
+-->
+
+<div class="layout">
+<aside class="sidebar">
+  <div class="playground">
+    <div class="pg-row">
+      <select id="pgPrompt">
+        <option value="[예시 입력 1 — 간단한 경우]" data-branch="simple">💬 [분기 1 이름] — "[예시 입력 1]"</option>
+        <option value="[예시 입력 2 — 복잡한 경우 A]" data-branch="branch-a">🅰️ [분기 2 이름] — "[예시 입력 2]"</option>
+        <option value="[예시 입력 3 — 복잡한 경우 B]" data-branch="branch-b">🅱️ [분기 3 이름] — "[예시 입력 3]"</option>
+      </select>
+      <div class="pg-btns">
+        <button class="pg-btn" id="pgPrev">← 이전</button>
+        <button class="pg-btn primary" id="pgNext">다음 단계 →</button>
+      </div>
+      <div class="pg-btns">
+        <button class="pg-btn" id="pgAutoPlay">▶ 자동 재생</button>
+        <button class="pg-btn" id="pgReset">처음부터</button>
+      </div>
+      <span class="pg-status" id="pgStatus">단계 0/7 · 박스를 직접 클릭해도 이동합니다</span>
+    </div>
+    <div class="pg-panel">
+      <div class="pg-panel-title">선택한 시나리오의 경로<span class="pg-branch" id="pgBranchLabel">-</span></div>
+      <div class="pg-panel-title" style="margin-top:8px;">현재 단계에서 흐르는 데이터</div>
+      <pre id="pgData">위 드롭다운에서 시나리오를 고르고 "다음 단계 →"를 누르거나, 오른쪽 박스를 직접 클릭해보세요.</pre>
+    </div>
+  </div>
+</aside>
+
+<div class="main">
+
+<h1>[문서 제목]</h1>
+<div class="subtitle">[핵심 설계를 한 줄로 요약하는 부제]</div>
+
+<div class="tldr">
+  <h2>TL;DR — 핵심 전략</h2>
+  <div class="headline">"<b>[전체 설계를 관통하는 한 문장]</b>" — 이 한 문장이 전체 설계의 핵심입니다.</div>
+  <ol>
+    <li><b>[근거 1 요약]</b>
+      <span class="sub">[근거 1 부연 설명]</span>
+    </li>
+    <li><b>[근거 2 요약]</b>
+      <span class="sub">[근거 2 부연 설명]</span>
+    </li>
+    <li><b>[근거 3 요약]</b>
+      <span class="sub">[근거 3 부연 설명]</span>
+    </li>
+  </ol>
+</div>
+
+<div class="stepper">
+  <div class="step"><span class="num">1</span>[1단계 이름]</div>
+  <span class="step-arrow">→</span>
+  <div class="step"><span class="num">2</span>[2단계 이름]</div>
+  <span class="step-arrow">→</span>
+  <div class="step"><span class="num">3</span>[3단계 — 판단]</div>
+  <span class="step-arrow">→</span>
+  <div class="step"><span class="num">4</span>[4단계 — 분기별 실행]</div>
+  <span class="step-arrow">→</span>
+  <div class="step"><span class="num">5</span>[5단계 — 일부 분기만 재실행]</div>
+  <span class="step-arrow">→</span>
+  <div class="step"><span class="num">6</span>[6단계 — 응답 조립]</div>
+  <span class="step-arrow">→</span>
+  <div class="step"><span class="num">7</span>[7단계 — 클라이언트 수신]</div>
+</div>
+<div class="subtitle small">박스마다 붙은 번호는 위 단계와 대응됩니다 — 같은 번호가 여러 박스에 있으면 "같은 단계인데 실행 주체만 다르다"는 뜻입니다</div>
+
+<div class="legend">
+  <span><i class="dot client"></i> [client 범주가 실제로 뜻하는 것]</span>
+  <span><i class="dot decision"></i> [decision 범주가 실제로 뜻하는 것]</span>
+  <span><i class="dot existing"></i> [existing 범주가 실제로 뜻하는 것]</span>
+  <span><i class="dot new"></i> [new 범주가 실제로 뜻하는 것]</span>
+</div>
+
+<div class="board">
+
+  <div class="center-row">
+    <div class="node client" data-step="1" style="width:100%;">
+      <span class="num">1</span>
+      <span class="tag">[1단계 태그]</span>
+      [클라이언트가 실제로 보내는 요청 설명]
+      <code id="entryCode">[요청 페이로드 예시]</code>
+      <div class="note">[이 요청에서 클라이언트가 지정하지 않는 것 등 보충 설명]</div>
+    </div>
+  </div>
+
+  <div class="plain-arrow">↓</div>
+
+  <div class="internal">
+    <span class="badge">[내부에서만 조율되는 흐름이라는 라벨]</span>
+
+    <div class="center-row" style="width:100%;">
+      <div class="node new" data-step="2" style="width:100%;">
+        <span class="num">2</span>
+        <span class="tag">[2단계 태그 — 내부에서 결정]</span>
+
+        <div class="detail-grid">
+          <div class="detail-left">
+            <code>[내부적으로 결정되는 설정값 예시]</code>
+          </div>
+          <div class="detail-right">
+            <div class="detail-item">
+              <div class="detail-title">[하위 결정 1 제목]</div>
+              <div class="detail-body">[하위 결정 1 설명 — 기본 경로]</div>
+            </div>
+            <div class="detail-item alt-item">
+              <div class="detail-title" style="color:var(--existing);">[하위 결정 2 제목]</div>
+              <div class="detail-body">[하위 결정 2 설명 — 위임/대체 경로]</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="note">[이 값들이 코드/설정 어디에 고정돼 있는지]</div>
+      </div>
+    </div>
+
+    <div class="plain-arrow">↓<span class="arrow-label">[① 호출 — 다음 단계로 넘어가는 조건/트리거]</span></div>
+
+    <div class="fork-zone">
+      <svg class="zone-overlay" data-fan-svg></svg>
+
+      <div class="center-row">
+        <div class="node decision" data-fan-hub="hub1" data-step="3" style="width:92%;">
+          <span class="num">3</span>
+          <span class="tag">[판단 지점 태그]</span>
+          [무엇을 판단하는 지점인지 설명]
+          <div class="note" style="text-align:left;">[판단이 어떻게 이뤄지는지 — 별도 분류기인지, 모델 자체 판단인지 등]</div>
+        </div>
+      </div>
+
+      <div class="fork-row" style="grid-template-columns:repeat(3,1fr);">
+        <div class="fork-col">
+          <div class="fork-title">[분기 1 이름 — 단순 경로]</div>
+          <div class="node decision" data-fan-target="hub1" data-step="3" data-branch="simple">
+            <span class="num">3</span>
+            <span class="tag">[분기 1 판단 결과]</span>
+            [이 분기로 갈리는 조건]
+          </div>
+          <div class="plain-arrow" style="margin:2px 0;">↓</div>
+          <div class="node existing" data-step="4" data-branch="simple">
+            <span class="num">4</span>
+            <span class="tag">[분기 1 실행 — 즉시 완료]</span>
+            [이 경로는 왜 여기서 바로 끝나는지]
+            <div class="note">[이 분기만 갖는 특이사항]</div>
+          </div>
+        </div>
+        <div class="fork-col">
+          <div class="fork-title">[분기 2 이름 — 복잡한 경로 A]</div>
+          <div class="node decision" data-fan-target="hub1" data-step="3" data-branch="branch-a">
+            <span class="num">3</span>
+            <span class="tag">[분기 2 판단 결과]</span>
+            [이 분기로 갈리는 조건]
+          </div>
+          <div class="plain-arrow" style="margin:2px 0;">↓<span class="arrow-label">zone 밖에서 계속</span></div>
+        </div>
+        <div class="fork-col">
+          <div class="fork-title">[분기 3 이름 — 복잡한 경로 B]</div>
+          <div class="node decision" data-fan-target="hub1" data-step="3" data-branch="branch-b">
+            <span class="num">3</span>
+            <span class="tag">[분기 3 판단 결과]</span>
+            [이 분기로 갈리는 조건]
+          </div>
+          <div class="plain-arrow" style="margin:2px 0;">↓<span class="arrow-label">zone 밖에서 계속</span></div>
+        </div>
+      </div>
+
+      <div class="plain-arrow">↓</div>
+
+      <div class="external-zone">
+        <span class="badge2">[여기부터 시스템 완전히 바깥 — 외부 시스템이 처리하는 영역]</span>
+        <div class="external-row" style="grid-template-columns:repeat(2,1fr);">
+          <div class="external-card">
+            <div class="name">[외부 시스템 1]</div>
+            <ul class="external-list">
+              <li>[제공 기능·API 1]<span class="ext-tag">[용도]</span></li>
+              <li>[제공 기능·API 2]<span class="ext-tag">[용도]</span></li>
+            </ul>
+          </div>
+          <div class="external-card">
+            <div class="name">[외부 시스템 2]</div>
+            <ul class="external-list">
+              <li>[제공 기능·API 1]<span class="ext-tag">[용도]</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="plain-arrow">↓<span class="arrow-label">[분기 2·3만 재등판이 필요한 이유]</span></div>
+
+      <div class="fork-row" style="grid-template-columns:repeat(2,1fr);">
+        <div class="fork-col">
+          <div class="fork-title">[분기 2 재실행]</div>
+          <div class="node new" data-step="5" data-branch="branch-a">
+            <span class="num">5</span>
+            <span class="tag">[재등판 — 별도 컴포넌트 호출]</span>
+            [무엇을 다시 호출하는지]
+          </div>
+        </div>
+        <div class="fork-col">
+          <div class="fork-title">[분기 3 재실행]</div>
+          <div class="node new" data-step="5" data-branch="branch-b">
+            <span class="num">5</span>
+            <span class="tag">[재등판 — 별도 컴포넌트 호출]</span>
+            [무엇을 다시 호출하는지]
+          </div>
+        </div>
+      </div>
+
+      <div class="center-row">
+        <div class="node new" data-step="6" style="width:70%;">
+          <span class="num">6</span>
+          <span class="tag">[응답 조립 태그]</span>
+          [모든 분기가 결국 어떤 공통 스키마로 합쳐지는지]
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="plain-arrow">↓</div>
+
+  <div class="center-row">
+    <div class="node client" data-step="7" style="width:80%;">
+      <span class="num">7</span>
+      [클라이언트가 최종적으로 받는 것]
+      <div class="note">[분기에 따라 추가로 필요한 후속 동작이 있다면 설명]</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="callout">
+  <div class="card">
+    <h3 style="color:var(--existing)">[클라이언트 관점 요약 제목]</h3>
+    [클라이언트가 신경 쓰지 않아도 되는 것과, 실제로 보내야 하는 것]
+  </div>
+  <div class="card">
+    <h3>[시스템이 떠안는 책임 제목]</h3>
+    [내부적으로 흡수하는 복잡도 — 판단/재실행/에러 처리 등]
+  </div>
+</div>
+
+<div class="considerations">
+  <h3>설계 과정에서 검토·결정했던 사항들</h3>
+  <ol>
+    <li><b>[결정 1]</b>
+      <span class="why">[결정 1의 근거 — 검토했던 대안 포함]</span>
+    </li>
+    <li><b>[결정 2]</b>
+      <span class="why">[결정 2의 근거]</span>
+    </li>
+    <li><b>[결정 3]</b>
+      <span class="why">[결정 3의 근거]</span>
+    </li>
+  </ol>
+</div>
+
+<div class="tool-examples">
+  <h3>[API/함수 정의 예시 제목]</h3>
+  <div class="lead">[이 예시들이 실제로 어디에 정의돼 있는지]</div>
+  <div class="tool-cards">
+    <div class="tool-card">
+      <span class="tool-name">[함수/엔드포인트 이름 1]</span>
+      <pre>{
+  "...": "[실제 스키마로 교체]"
+}</pre>
+      <div class="tool-note">[이 정의가 어느 단계에서 쓰이는지]</div>
+    </div>
+    <div class="tool-card">
+      <span class="tool-name">[함수/엔드포인트 이름 2]</span>
+      <pre>{
+  "...": "[실제 스키마로 교체]"
+}</pre>
+      <div class="tool-note">[이 정의가 어느 단계에서 쓰이는지]</div>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<script>
+// ---- 화살표 그리기: data-fan-hub / data-fan-target 속성만으로 동작한다.
+// 분기가 늘어나도 이 스크립트는 수정할 필요 없음 — HTML에 속성만 추가하면 된다.
+(function () {
+  var LINE_COLOR = "#aab1bc";
+
+  function centerX(el, refLeft) {
+    var r = el.getBoundingClientRect();
+    return r.left + r.width / 2 - refLeft;
+  }
+  function topY(el, refTop) { return el.getBoundingClientRect().top - refTop; }
+  function bottomY(el, refTop) { return el.getBoundingClientRect().bottom - refTop; }
+
+  function arrowHead(x, yTip, color) {
+    return '<polygon points="' + (x - 5) + ',' + (yTip - 7) + ' ' + (x + 5) + ',' + (yTip - 7) + ' ' + x + ',' + yTip + '" fill="' + color + '"/>';
+  }
+
+  function drawZone(zone) {
+    var svg = zone.querySelector('[data-fan-svg]');
+    if (!svg) return;
+    var zr = zone.getBoundingClientRect();
+    var w = zone.clientWidth, h = zone.clientHeight;
+    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+    svg.setAttribute("preserveAspectRatio", "none");
+
+    var html = "";
+    var hubs = zone.querySelectorAll('[data-fan-hub]');
+    hubs.forEach(function (hub) {
+      var hubId = hub.getAttribute('data-fan-hub');
+      var targets = zone.querySelectorAll('[data-fan-target="' + hubId + '"]');
+      if (!targets.length) return;
+
+      var fromX = centerX(hub, zr.left), fromY = bottomY(hub, zr.top);
+      var targetPoints = Array.prototype.map.call(targets, function (el) {
+        return { x: centerX(el, zr.left), y: topY(el, zr.top) };
+      });
+      var barY = fromY + 16;
+      var xs = targetPoints.map(function (t) { return t.x; }).concat([fromX]);
+      var barMin = Math.min.apply(null, xs);
+      var barMax = Math.max.apply(null, xs);
+
+      html += '<line x1="' + fromX + '" y1="' + fromY + '" x2="' + fromX + '" y2="' + barY + '" stroke="' + LINE_COLOR + '" stroke-width="2"/>';
+      html += '<line x1="' + barMin + '" y1="' + barY + '" x2="' + barMax + '" y2="' + barY + '" stroke="' + LINE_COLOR + '" stroke-width="2"/>';
+      targetPoints.forEach(function (t) {
+        html += '<line x1="' + t.x + '" y1="' + barY + '" x2="' + t.x + '" y2="' + (t.y - 7) + '" stroke="' + LINE_COLOR + '" stroke-width="2"/>' + arrowHead(t.x, t.y, LINE_COLOR);
+      });
+    });
+
+    svg.innerHTML = html;
+  }
+
+  function draw() {
+    document.querySelectorAll('.fork-zone').forEach(drawZone);
+  }
+
+  window.draw = draw; // 두 번째 <script>의 render()가 이 draw()를 호출한다
+
+  var t;
+  window.addEventListener("resize", function () { clearTimeout(t); t = setTimeout(draw, 100); });
+  window.addEventListener("load", draw);
+  document.addEventListener("DOMContentLoaded", draw);
+})();
+</script>
+
+<script>
+// ---- 플레이그라운드: 시나리오별로 단계를 재생한다.
+// 아래 SCENARIOS만 채우면 되고, 그 아래 로직은 그대로 재사용한다.
+(function () {
+  var TOTAL_STEPS = 7; // 위 .stepper의 단계 개수와 반드시 일치시킨다
+  var AUTOPLAY_INTERVAL_MS = 1800;
+
+  // [필수 편집 지점] 시나리오(=드롭다운 <option>의 data-branch)별로,
+  // 각 단계에서 보여줄 텍스트/코드를 채운다. 단계를 생략하면 빈 문자열로 처리된다.
+  var SCENARIOS = {
+    "simple": {
+      label: "[분기 1 이름]",
+      steps: {
+        1: "[1단계에서 이 시나리오가 보내는 실제 요청]",
+        2: "[2단계에서 내부적으로 결정되는 값]",
+        3: "[3단계 — 판단 결과: 이 시나리오는 왜 '단순 경로'로 판단되는지]",
+        4: "[4단계 — 즉시 완료되는 응답]",
+        6: "[6단계 — 최종 조립된 응답 스키마]",
+        7: "[7단계 — 클라이언트가 받는 것]"
+      }
+    },
+    "branch-a": {
+      label: "[분기 2 이름]",
+      steps: {
+        1: "[1단계 요청]",
+        2: "[2단계 내부 결정]",
+        3: "[3단계 — 판단 결과: 왜 분기 A로 갈리는지, tool_call 등 판단 신호]",
+        4: "[4단계 — 이 경로는 여기서 안 끝남, 5단계로 이어짐]",
+        5: "[5단계 — 재등판: 어떤 컴포넌트를 다시 호출하는지]",
+        6: "[6단계 — 최종 조립된 응답 스키마]",
+        7: "[7단계 — 클라이언트가 받는 것 (후속 폴링 필요 여부 등)]"
+      }
+    },
+    "branch-b": {
+      label: "[분기 3 이름]",
+      steps: {
+        1: "[1단계 요청]",
+        2: "[2단계 내부 결정]",
+        3: "[3단계 — 판단 결과: 왜 분기 B로 갈리는지]",
+        4: "[4단계 — 이 경로는 여기서 안 끝남, 5단계로 이어짐]",
+        5: "[5단계 — 재등판: 어떤 컴포넌트를 다시 호출하는지]",
+        6: "[6단계 — 최종 조립된 응답 스키마]",
+        7: "[7단계 — 클라이언트가 받는 것]"
+      }
+    }
+  };
+
+  var currentStep = 0;
+  var autoPlayTimer = null;
+  var promptEl = document.getElementById("pgPrompt");
+  var prevBtn = document.getElementById("pgPrev");
+  var nextBtn = document.getElementById("pgNext");
+  var resetBtn = document.getElementById("pgReset");
+  var autoPlayBtn = document.getElementById("pgAutoPlay");
+  var statusEl = document.getElementById("pgStatus");
+  var branchLabelEl = document.getElementById("pgBranchLabel");
+  var dataEl = document.getElementById("pgData");
+  var entryCodeEl = document.getElementById("entryCode");
+
+  function currentBranch() {
+    return promptEl.options[promptEl.selectedIndex].getAttribute("data-branch");
+  }
+
+  function selectBranch(branch) {
+    // 박스를 직접 클릭했을 때, 그 박스가 속한 시나리오의 옵션으로 드롭다운을 전환한다
+    for (var i = 0; i < promptEl.options.length; i++) {
+      if (promptEl.options[i].getAttribute("data-branch") === branch) {
+        promptEl.selectedIndex = i;
+        return;
+      }
+    }
+  }
+
+  function esc(s) { return (s || "").replace(/"/g, '\\"'); }
+
+  // [선택 편집 지점] 1단계 노드 안의 실제 요청 예시를 어떻게 보여줄지.
+  // 필요 없으면 entryCodeEl 관련 코드를 지워도 된다.
+  function buildEntryRequest(promptText) {
+    return 'POST /v1/[endpoint]\n{ "input": "' + esc(promptText) + '" }';
+  }
+
+  function buildPayload(step, branch) {
+    var scenario = SCENARIOS[branch];
+    if (!scenario || !scenario.steps) return "";
+    return scenario.steps[step] || "";
+  }
+
+  function render() {
+    var branch = currentBranch();
+    var scenario = SCENARIOS[branch];
+    branchLabelEl.textContent = scenario ? scenario.label : "-";
+
+    if (entryCodeEl) {
+      entryCodeEl.textContent = buildEntryRequest(promptEl.value);
+    }
+
+    var allStepNodes = document.querySelectorAll("[data-step]");
+    allStepNodes.forEach(function (el) {
+      el.classList.remove("active", "altpath");
+    });
+
+    prevBtn.disabled = currentStep <= 0;
+    nextBtn.disabled = currentStep >= TOTAL_STEPS;
+    nextBtn.textContent = currentStep >= TOTAL_STEPS ? "끝" : "다음 단계 →";
+
+    if (currentStep === 0) {
+      statusEl.textContent = "단계 0/" + TOTAL_STEPS + " · 박스를 직접 클릭해도 이동합니다";
+      dataEl.textContent = '위 드롭다운에서 시나리오를 고르고 "다음 단계 →"를 누르거나, 아래 박스를 직접 클릭해보세요.';
+      window.draw();
+      return;
+    }
+
+    statusEl.textContent = "단계 " + currentStep + "/" + TOTAL_STEPS + " · 경로: " + (scenario ? scenario.label : branch);
+
+    // 분기가 갈린 뒤에는, 현재 시나리오와 무관한 노드를 흐리게 표시한다
+    allStepNodes.forEach(function (el) {
+      var b = el.getAttribute("data-branch");
+      if (b && b.split(",").indexOf(branch) === -1) {
+        el.classList.add("altpath");
+      }
+    });
+
+    allStepNodes.forEach(function (el) {
+      var stepAttr = parseInt(el.getAttribute("data-step"), 10);
+      if (stepAttr !== currentStep) return;
+      var b = el.getAttribute("data-branch");
+      if (b && b.split(",").indexOf(branch) === -1) return;
+      el.classList.remove("altpath");
+      el.classList.add("active");
+    });
+
+    dataEl.textContent = buildPayload(currentStep, branch) || "(이 단계에서 이 시나리오는 별도로 보여줄 데이터가 없습니다)";
+
+    var activeEl = document.querySelector("[data-step].active");
+    if (activeEl) {
+      activeEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    window.draw();
+    setTimeout(window.draw, 260); // transform·스크롤 트랜지션이 끝난 뒤 좌표를 다시 맞춘다
+  }
+
+  function stopAutoPlay() {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+      autoPlayBtn.textContent = "▶ 자동 재생";
+      autoPlayBtn.classList.remove("primary");
+    }
+  }
+
+  function startAutoPlay() {
+    if (currentStep >= TOTAL_STEPS) { currentStep = 0; }
+    autoPlayBtn.textContent = "⏸ 일시정지";
+    autoPlayBtn.classList.add("primary");
+    currentStep++;
+    render();
+    autoPlayTimer = setInterval(function () {
+      if (currentStep >= TOTAL_STEPS) { stopAutoPlay(); return; }
+      currentStep++;
+      render();
+      if (currentStep >= TOTAL_STEPS) { stopAutoPlay(); }
+    }, AUTOPLAY_INTERVAL_MS);
+  }
+
+  nextBtn.addEventListener("click", function () {
+    stopAutoPlay();
+    if (currentStep < TOTAL_STEPS) { currentStep++; render(); }
+  });
+  prevBtn.addEventListener("click", function () {
+    stopAutoPlay();
+    if (currentStep > 0) { currentStep--; render(); }
+  });
+  resetBtn.addEventListener("click", function () {
+    stopAutoPlay();
+    currentStep = 0; render();
+  });
+  autoPlayBtn.addEventListener("click", function () {
+    if (autoPlayTimer) { stopAutoPlay(); } else { startAutoPlay(); }
+  });
+  promptEl.addEventListener("change", function () {
+    stopAutoPlay();
+    render();
+  });
+
+  document.addEventListener("click", function (e) {
+    if (e.target.closest("#pgAutoPlay")) return;
+    var el = e.target.closest("[data-step]");
+    if (!el) return;
+    stopAutoPlay();
+    var b = el.getAttribute("data-branch");
+    if (b) { selectBranch(b.split(",")[0]); }
+    currentStep = parseInt(el.getAttribute("data-step"), 10);
+    render();
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>

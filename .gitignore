@@ -1,0 +1,10 @@
+.omc/
+.DS_Store
+node_modules/
+# render outputs
+*.html
+!skills/interactive-architecture-doc/assets/template.html
+!skills/interactive-architecture-doc/reference/template.html
+# font build venv / downloads
+tools/build-fonts/.venv/
+tools/build-fonts/.cache/
