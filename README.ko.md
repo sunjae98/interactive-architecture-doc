@@ -69,6 +69,23 @@ npx skills add sunjae98/interactive-architecture-doc
 
 요구사항: Node.js 18 이상, 에이전트의 셸 접근. 생성된 HTML은 의존성이 없고 더블클릭만으로 오프라인에서 열립니다.
 
+### 업데이트
+
+설치했던 범위(프로젝트 또는 전역)와 같은 범위로 업데이트합니다.
+
+```sh
+npx skills update interactive-architecture-doc       # 프로젝트/전역 중 선택을 물어봄
+npx skills update interactive-architecture-doc -p -y # 프로젝트 설치 (프로젝트 루트에서 실행)
+npx skills update interactive-architecture-doc -g -y # 전역(사용자) 설치
+```
+
+- 스킬 이름을 빼고 `npx skills update`만 실행하면 설치된 스킬 전체를 업데이트합니다.
+- 업데이트는 이 저장소의 최신 `main`을 가져옵니다. 바뀐 내용은 [CHANGELOG.md](CHANGELOG.md)를 참고하세요.
+- `--copy`로 설치했다면 업데이트 후 `.agents/skills/`를 가리키는 심볼릭 링크로 바뀔 수 있습니다. 복사본을
+  유지하려면 대신 다시 설치하세요: `npx skills add sunjae98/interactive-architecture-doc --copy -y`.
+- 이미 렌더한 문서는 그대로 동작합니다. 템플릿 변경(테마, 내보내기, self-check)을 반영하려면 업데이트된 스킬로
+  `doc.json`을 다시 렌더하세요.
+
 ## 사용법
 
 Claude Code에서는 슬래시 명령으로 스킬을 직접 호출합니다.

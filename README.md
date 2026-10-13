@@ -73,6 +73,23 @@ npx skills add sunjae98/interactive-architecture-doc
 Requirements: Node.js 18+ and shell access for the agent. The generated HTML has no dependencies and
 opens offline by double-click.
 
+### Update
+
+Run the update in the same scope you installed into:
+
+```sh
+npx skills update interactive-architecture-doc       # asks project or global
+npx skills update interactive-architecture-doc -p -y # project install (run in the project root)
+npx skills update interactive-architecture-doc -g -y # global (user-level) install
+```
+
+- Without a skill name, `npx skills update` updates every installed skill.
+- The update pulls the latest `main` of this repository. See [CHANGELOG.md](CHANGELOG.md) for what changed.
+- If you installed with `--copy`, the update may switch the install to a symlink into `.agents/skills/`.
+  To keep a plain copy, reinstall instead: `npx skills add sunjae98/interactive-architecture-doc --copy -y`.
+- Documents you already rendered keep working; to pick up template changes (theme, export, self-check),
+  render their `doc.json` again with the updated skill.
+
 ## Usage
 
 In Claude Code, invoke the skill explicitly with its slash command:
