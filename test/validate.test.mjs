@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { validate, RULES } from "../skills/interactive-architecture-doc/scripts/lib/validate.mjs";
+import { validate, RULES, formatIssue } from "../skills/interactive-architecture-doc/scripts/lib/validate.mjs";
 import { inline, escapeHtml, embedJson, hasPlaceholder } from "../skills/interactive-architecture-doc/scripts/lib/markup.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -69,6 +69,12 @@ const FIXTURES = [
   ["E_EMPTY", (d) => { d.board[0].body = "   "; }],
   ["E_UNKNOWN_KEY", (d) => { d.board[0].bdoy = "typo"; }],
   ["E_UNKNOWN_KEY", (d) => { d.extra = true; }],
+  // Object.prototype names are unknown keys too (no `in` lookups through the prototype chain)
+  ["E_UNKNOWN_KEY", (d) => { d.board[0].constructor = "x"; }],
+  ["E_UNKNOWN_KEY", (d) => { d.meta.toString = "x"; }],
+  ["E_UNKNOWN_KEY", (d) => { d.legend.hasOwnProperty = "x"; }],
+  ["E_UNKNOWN_KEY", (d) => { d.board[1] = JSON.parse('{"type":"arrow","__proto__":{"label":"x"}}'); }],
+  ["E_UNKNOWN_KEY", (d) => { d.tldr = JSON.parse('{"__proto__":{"headline":"h","points":[]},"headline":"h","points":[{"title":"p","detail":"d"}]}'); }],
   ["E_UNKNOWN_BLOCK", (d) => { d.board.push({ type: "diamond" }); }],
   ["E_UNKNOWN_KIND", (d) => { d.board[0].kind = "server"; }],
   ["E_LANG", (d) => { d.meta.lang = "ja"; }],
@@ -90,6 +96,9 @@ const FIXTURES = [
     // hub in one fork, target in a different fork
     d.board.push({ type: "fork", children: [{ type: "node", kind: "new", step: 3, body: "x", fan_target: "hub" }] });
   }],
+  // a node cannot satisfy its own fan wiring
+  ["E_FAN_TARGET_NO_HUB", (d) => { hubNode(d).fan_target = "hub"; }],
+  ["E_FAN_HUB_NO_TARGET", (d) => { delete colNode(d, 0).fan_target; delete colNode(d, 1).fan_target; hubNode(d).fan_target = "hub"; }],
   ["E_FAN_OUTSIDE_FORK", (d) => { d.board[0].fan_hub = "solo"; }],
   ["E_LEGEND_MISSING_KIND", (d) => { delete d.legend.decision; }],
   ["E_WHY_EMPTY", (d) => { d.considerations.items[0].why = " "; }],
@@ -146,6 +155,45 @@ test("JSON pointers escape ~ and /", () => {
   doc.scenarios[0].steps["a/b~c"] = "x";
   const r = validate(doc);
   assert.ok(r.errors.some((e) => e.path === "/scenarios/0/steps/a~1b~0c" && e.code === "E_SCENARIO_STEP_KEY"));
+});
+
+test("required keys inherited through __proto__ do not count as present", () => {
+  const doc = clone(BASE);
+  doc.meta = JSON.parse('{"__proto__":{"title":"T"},"lang":"en","entry_request":"x {{input}}"}');
+  const r = validate(doc);
+  assert.ok(r.errors.some((e) => e.path === "/meta/title" && e.code === "E_REQUIRED"), JSON.stringify(r.errors));
+  assert.ok(r.errors.some((e) => e.path === "/meta/__proto__" && e.code === "E_UNKNOWN_KEY"));
+});
+
+test("messages escape control characters in echoed keys and values", () => {
+  const ESC = "\u001b[31m";
+  const doc = clone(BASE);
+  doc.board[0][ESC] = "x";
+  doc.board[0].kind = ESC + "red";
+  const r = validate(doc);
+  assert.equal(r.ok, false);
+  const lines = r.errors.map(formatIssue);
+  assert.ok(lines.length >= 2);
+  for (const issue of r.errors) assert.ok(!issue.message.includes("\u001b"), issue.message);
+  for (const line of lines) assert.ok(!/[\u0000-\u001f\u007f]/.test(line), JSON.stringify(line));
+  assert.ok(lines.some((l) => l.includes("E_UNKNOWN_KEY") && l.includes("\\u001b[31m")), lines.join("\n"));
+});
+
+test("placeholder detection is linear on long adversarial input", () => {
+  const inputs = [
+    "[" + "a".repeat(50000),
+    "[" + "a ".repeat(25000),
+    "x[".repeat(25000),
+    "[ ".repeat(25000),
+    "[" + " ".repeat(50000) + "...",
+    ("[" + "a".repeat(199)).repeat(250),
+  ];
+  for (const s of inputs) {
+    const t0 = process.hrtime.bigint();
+    hasPlaceholder(s);
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    assert.ok(ms < 200, `${ms.toFixed(1)}ms for ${JSON.stringify(s.slice(0, 12))}... (${s.length} chars)`);
+  }
 });
 
 test("non-object root is a type error", () => {
@@ -218,6 +266,14 @@ test("CLI: errors exit 1 with `pointer CODE message` lines, --json gives {ok, er
     assert.deepEqual(Object.keys(parsed), ["ok", "errors", "warnings"]);
     assert.equal(parsed.ok, false);
     assert.equal(parsed.errors[0].code, "E_UNKNOWN_KIND");
+    // terminal escapes in author keys never reach the terminal raw
+    doc.board[0].kind = "client";
+    doc.board[0]["\u001b[31m"] = 1;
+    writeFileSync(file, JSON.stringify(doc));
+    const esc = run("validate", file);
+    assert.equal(esc.status, 1);
+    assert.ok(!esc.stdout.includes("\u001b") && !esc.stderr.includes("\u001b"), esc.stdout);
+    assert.match(esc.stdout, /E_UNKNOWN_KEY unknown key "\\u001b\[31m"/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

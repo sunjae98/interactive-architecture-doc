@@ -93,6 +93,11 @@ const ptr = (path, key) => path + "/" + String(key).replace(/~/g, "~0").replace(
 const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const typeName = (v) => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v);
 const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+// Quote author-supplied keys/values in messages; JSON escaping keeps control characters
+// (e.g. terminal escape sequences) out of CLI output.
+const q = (v) => JSON.stringify(String(v));
+// Control characters in a JSON pointer (keys are author data) are shown as \uXXXX.
+const escapeControls = (s) => s.replace(/[\u0000-\u001f\u007f-\u009f]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
 
 function report(out, path, code, message) {
   const list = RULE_LEVEL[code] === "warning" ? out.warnings : out.errors;
@@ -102,14 +107,14 @@ function report(out, path, code, message) {
 function checkObject(v, d, path, out) {
   if (!isPlainObject(v)) return report(out, path, "E_TYPE", `expected object, got ${typeName(v)}`);
   for (const key of Object.keys(v)) {
-    if (!(key in d.req) && !(key in d.opt)) report(out, ptr(path, key), "E_UNKNOWN_KEY", `unknown key "${key}"`);
+    if (!Object.hasOwn(d.req, key) && !Object.hasOwn(d.opt, key)) report(out, ptr(path, key), "E_UNKNOWN_KEY", `unknown key ${q(key)}`);
   }
   for (const [key, sub] of Object.entries(d.req)) {
-    if (!(key in v)) report(out, ptr(path, key), "E_REQUIRED", `missing required field "${key}"`);
+    if (!Object.hasOwn(v, key)) report(out, ptr(path, key), "E_REQUIRED", `missing required field "${key}"`);
     else check(v[key], sub, ptr(path, key), out);
   }
   for (const [key, sub] of Object.entries(d.opt)) {
-    if (key in v) check(v[key], sub, ptr(path, key), out);
+    if (Object.hasOwn(v, key)) check(v[key], sub, ptr(path, key), out);
   }
 }
 
@@ -130,7 +135,7 @@ function check(v, d, path, out) {
       return;
     case "enum":
       if (typeof v !== "string") return report(out, path, "E_TYPE", `expected string, got ${typeName(v)}`);
-      if (!d.values.includes(v)) report(out, path, d.code, `"${v}" is not one of: ${d.values.join(", ")}`);
+      if (!d.values.includes(v)) report(out, path, d.code, `${q(v)} is not one of: ${d.values.join(", ")}`);
       return;
     case "arr":
       if (!Array.isArray(v)) return report(out, path, "E_TYPE", `expected array, got ${typeName(v)}`);
@@ -145,10 +150,10 @@ function check(v, d, path, out) {
       return checkObject(v, d, path, out);
     case "block": {
       if (!isPlainObject(v)) return report(out, path, "E_TYPE", `expected block object, got ${typeName(v)}`);
-      if (!("type" in v)) return report(out, ptr(path, "type"), "E_REQUIRED", 'missing required field "type"');
+      if (!Object.hasOwn(v, "type")) return report(out, ptr(path, "type"), "E_REQUIRED", 'missing required field "type"');
       if (typeof v.type !== "string") return report(out, ptr(path, "type"), "E_TYPE", `expected string, got ${typeName(v.type)}`);
       if (!Object.hasOwn(BLOCKS, v.type)) {
-        return report(out, ptr(path, "type"), "E_UNKNOWN_BLOCK", `unknown block type "${v.type}" (expected one of: ${BLOCK_TYPES.join(", ")})`);
+        return report(out, ptr(path, "type"), "E_UNKNOWN_BLOCK", `unknown block type ${q(v.type)} (expected one of: ${BLOCK_TYPES.join(", ")})`);
       }
       return checkObject(v, BLOCKS[v.type], path, out);
     }
@@ -188,8 +193,8 @@ function checkSemantics(doc, out) {
   const scenarioIds = new Set();
   doc.scenarios.forEach((s, i) => {
     const p = `/scenarios/${i}/id`;
-    if (!KEBAB.test(s.id)) report(out, p, "E_ID_FORMAT", `scenario id "${s.id}" must be kebab-case`);
-    if (scenarioIds.has(s.id)) report(out, p, "E_ID_DUPLICATE", `scenario id "${s.id}" is already used`);
+    if (!KEBAB.test(s.id)) report(out, p, "E_ID_FORMAT", `scenario id ${q(s.id)} must be kebab-case`);
+    if (scenarioIds.has(s.id)) report(out, p, "E_ID_DUPLICATE", `scenario id ${q(s.id)} is already used`);
     scenarioIds.add(s.id);
   });
 
@@ -203,13 +208,13 @@ function checkSemantics(doc, out) {
     if (node.step < 1 || node.step > N) report(out, path + "/step", "E_STEP_RANGE", `step ${node.step} is outside 1..${N}`);
     else covered.add(node.step);
     (node.branches || []).forEach((b, j) => {
-      if (!scenarioIds.has(b)) report(out, `${path}/branches/${j}`, "E_BRANCH_UNKNOWN", `"${b}" is not a scenario id`);
+      if (!scenarioIds.has(b)) report(out, `${path}/branches/${j}`, "E_BRANCH_UNKNOWN", `${q(b)} is not a scenario id`);
     });
     for (const key of ["fan_hub", "fan_target"]) {
-      if (key in node && !KEBAB.test(node[key])) report(out, `${path}/${key}`, "E_ID_FORMAT", `${key} "${node[key]}" must be kebab-case`);
+      if (key in node && !KEBAB.test(node[key])) report(out, `${path}/${key}`, "E_ID_FORMAT", `${key} ${q(node[key])} must be kebab-case`);
     }
     if ("fan_hub" in node) {
-      if (hubIds.has(node.fan_hub)) report(out, path + "/fan_hub", "E_ID_DUPLICATE", `fan_hub "${node.fan_hub}" is already used`);
+      if (hubIds.has(node.fan_hub)) report(out, path + "/fan_hub", "E_ID_DUPLICATE", `fan_hub ${q(node.fan_hub)} is already used`);
       hubIds.add(node.fan_hub);
     }
     if (node.entry === true) entries.push(path);
@@ -226,12 +231,13 @@ function checkSemantics(doc, out) {
       report(out, `${path}/${key}`, "E_FAN_OUTSIDE_FORK", `${key} is only allowed on nodes inside a fork block`);
       continue;
     }
-    const sameFork = nodes.filter((n) => n.fork === fork);
-    if ("fan_hub" in node && !sameFork.some((n) => n.node.fan_target === node.fan_hub)) {
-      report(out, path + "/fan_hub", "E_FAN_HUB_NO_TARGET", `fan_hub "${node.fan_hub}" has no fan_target in the same fork`);
+    // a node never satisfies its own hub/target
+    const others = nodes.filter((n) => n.fork === fork && n.node !== node);
+    if ("fan_hub" in node && !others.some((n) => n.node.fan_target === node.fan_hub)) {
+      report(out, path + "/fan_hub", "E_FAN_HUB_NO_TARGET", `fan_hub ${q(node.fan_hub)} has no fan_target on another node in the same fork`);
     }
-    if ("fan_target" in node && !sameFork.some((n) => n.node.fan_hub === node.fan_target)) {
-      report(out, path + "/fan_target", "E_FAN_TARGET_NO_HUB", `fan_target "${node.fan_target}" has no fan_hub in the same fork`);
+    if ("fan_target" in node && !others.some((n) => n.node.fan_hub === node.fan_target)) {
+      report(out, path + "/fan_target", "E_FAN_TARGET_NO_HUB", `fan_target ${q(node.fan_target)} has no fan_hub on another node in the same fork`);
     }
   }
 
@@ -264,15 +270,15 @@ function checkSemantics(doc, out) {
     const missing = [];
     for (const key of Object.keys(s.steps)) {
       const n = /^[1-9][0-9]*$/.test(key) ? Number(key) : NaN;
-      if (!(n >= 1 && n <= N)) report(out, ptr(`/scenarios/${i}/steps`, key), "E_SCENARIO_STEP_KEY", `"${key}" is not a step number in 1..${N}`);
+      if (!(n >= 1 && n <= N)) report(out, ptr(`/scenarios/${i}/steps`, key), "E_SCENARIO_STEP_KEY", `${q(key)} is not a step number in 1..${N}`);
     }
     for (let st = 1; st <= N; st++) {
       if (!Object.hasOwn(s.steps, String(st))) missing.push(st);
       const active = nodes.some(({ node }) => node.step === st && (!node.branches || node.branches.includes(s.id)));
-      if (!active) report(out, `/scenarios/${i}`, "W_SCENARIO_NO_ACTIVE", `scenario "${s.id}" has no active node at step ${st}`);
+      if (!active) report(out, `/scenarios/${i}`, "W_SCENARIO_NO_ACTIVE", `scenario ${q(s.id)} has no active node at step ${st}`);
     }
     if (missing.length) {
-      report(out, `/scenarios/${i}/steps`, "W_SCENARIO_STEP_MISSING", `scenario "${s.id}" has no text for step(s) ${missing.join(", ")}`);
+      report(out, `/scenarios/${i}/steps`, "W_SCENARIO_STEP_MISSING", `scenario ${q(s.id)} has no text for step(s) ${missing.join(", ")}`);
     }
   });
 
@@ -292,5 +298,5 @@ export function validate(doc) {
 }
 
 export function formatIssue(issue) {
-  return `${issue.path || "(root)"} ${issue.code} ${issue.message}`;
+  return escapeControls(`${issue.path || "(root)"} ${issue.code} ${issue.message}`);
 }

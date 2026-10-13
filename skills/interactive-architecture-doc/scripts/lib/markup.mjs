@@ -38,12 +38,15 @@ export function embedJson(value) {
 
 // Leftover scaffold markers: `[...]`, `[some words]` (not code-like brackets such as
 // `["a"]`, `[1, 2]`, `items[i]`), and the word TODO.
-const PLACEHOLDER_RES = [
-  /\[\s*(?:\.\.\.|…)\s*\]/,
-  /(?:^|[^\w\]\[])\[[^\[\]"'`{}(),:;=<>\n]*\p{L}[^\[\]"'`{}(),:;=<>\n]*\]/u,
-  /\bTODO\b/,
-];
+// Every pattern is linear: one bounded quantifier per bracket (<= 200 chars inside), and the
+// letter check runs on the captured text instead of inside the regex (no nested backtracking).
+const ELLIPSIS_RE = /\[[ \t]{0,20}(?:\.\.\.|…)[ \t]{0,20}\]/;
+const BRACKET_RE = /(?:^|[^\w\]\[])\[([^\[\]"'`{}(),:;=<>\n]{1,200})\]/gu;
+const LETTER_RE = /\p{L}/u;
+const TODO_RE = /\bTODO\b/;
 
 export function hasPlaceholder(value) {
-  return PLACEHOLDER_RES.some((re) => re.test(value));
+  if (ELLIPSIS_RE.test(value) || TODO_RE.test(value)) return true;
+  for (const m of value.matchAll(BRACKET_RE)) if (LETTER_RE.test(m[1])) return true;
+  return false;
 }
