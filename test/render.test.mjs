@@ -103,28 +103,15 @@ test("tokens: each kind's text is >= 4.5:1 on its own bg and on the neutral surf
   }
 });
 
-test("theme: early head script picks saved theme or OS preference, toggle persists it guardedly", () => {
+test("theme: toggle button and UI strings exist (behaviour: test/runtime.test.mjs)", () => {
   const src = readFileSync(TEMPLATE_PATH, "utf8");
-  const head = src.slice(0, src.indexOf("</head>"));
-  const early = head.match(/<script>([\s\S]*?)<\/script>/);
-  assert.ok(early, "inline theme script in <head>");
-  assert.ok(head.indexOf("<script>") < head.indexOf("<style>"), "theme is set before the CSS is parsed");
-  for (const needle of ['localStorage.getItem("iad-theme")', "(prefers-color-scheme: dark)", 'setAttribute("data-theme", theme)']) {
-    assert.ok(early[1].includes(needle), needle);
-  }
-  assert.ok(/try \{ theme = localStorage\.getItem/.test(early[1]), "storage read is guarded");
   assert.ok(src.includes('<button class="pg-btn pg-theme" id="pgTheme" aria-pressed="false">{{t:theme_dark}}</button>'));
-  assert.ok(/try \{ localStorage\.setItem\("iad-theme", next\); \} catch/.test(src), "storage write is guarded");
   for (const lang of ["en", "ko"]) assert.equal(typeof UI[lang].theme_dark, "string", `${lang}.theme_dark`);
-  // export copies the live theme
-  assert.ok(src.includes('root.setAttribute("data-theme", html.getAttribute("data-theme"))'));
 });
 
-test("template: fan arrows only reach first-row targets and stop above column titles", () => {
+test("template: no horizontal overflow in the column layout (fan targets: test/runtime.test.mjs)", () => {
   const src = readFileSync(TEMPLATE_PATH, "utf8");
-  assert.ok(src.includes("targets = firstRowTargets("), "wrapped/stacked rows get no crossing arrows");
-  assert.ok(src.includes('var title = col && col.querySelector(".fork-title");'), "arrows end above the column title");
-  assert.ok(/@media \(max-width:1080px\)\{\s*\.layout\{flex-direction:column;align-items:stretch;\}/.test(src), "no horizontal overflow in the column layout");
+  assert.ok(/@media \(max-width:1080px\)\{\s*\.layout\{flex-direction:column;align-items:stretch;\}/.test(src));
 });
 
 test("template: grid columns come from --cols, not inline grid-template-columns", () => {
@@ -397,27 +384,21 @@ test("export: sidebar has PNG / SVG / copy buttons and a live status area", () =
   assert.ok(src.includes("{{t:export_title}}"));
 });
 
-test("export: runtime follows the capture recipe", () => {
+test("export: export-only CSS overrides; copy builds its ClipboardItem synchronously", () => {
   const src = readFileSync(TEMPLATE_PATH, "utf8");
-  for (const needle of [
-    "window.draw(); // fan arrows",
-    "window.matchMedia(rule.media.mediaText).matches",
-    "<foreignObject",
-    'xmlns="http://www.w3.org/2000/svg"',
-    "new XMLSerializer().serializeToString(root)",
-    '"data:image/svg+xml;charset=utf-8," + encodeURIComponent(ex.svg)',
-    "exportScale(ex.width, ex.height, window.devicePixelRatio)",
-    "EXPORT_MAX_PIXELS = 16000000",
-    'new ClipboardItem({ "image/png": png })',
-    'if (blob) resolve(blob); else reject(new Error("toBlob returned null"))',
-  ]) {
-    assert.ok(src.includes(needle), needle);
-  }
-  // export-only overrides and a caption that is hidden on the live page
+  // a caption that is hidden on the live page
   assert.ok(/\.export-caption\{display:none;\}/.test(src));
   assert.ok(/\.iad-export \.export-caption\{\s*display:block;/.test(src));
   assert.ok(/\.iad-export \*,[^{]*\{transition:none !important;animation:none !important;\}/.test(src));
   assert.ok(/\.iad-export \.stepper\{[^}]*flex-wrap:wrap;[^}]*position:static;/.test(src));
+  // Safari needs the ClipboardItem inside the click handler, before any await/then/timer.
+  const copy = src.slice(src.indexOf('exportCopyBtn.addEventListener("click"'));
+  const item = copy.indexOf("new ClipboardItem(");
+  assert.ok(item > 0);
+  for (const deferral of ["afterPaint(", "setTimeout(", ".then(", "await "]) {
+    const at = copy.indexOf(deferral);
+    assert.ok(at === -1 || at > item, `${deferral} before ClipboardItem`);
+  }
 });
 
 test("export: i18n tables carry every export string in both languages", () => {
