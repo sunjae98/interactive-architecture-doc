@@ -50,7 +50,13 @@ interactive-architecture-doc은 대신 JSON 형식, 검증기, 렌더러, 브라
 | 수정 | HTML을 다시 손으로 편집 | JSON을 고치고 다시 렌더; JSON이 HTML에 들어 있어 복원 가능 |
 | 배포 | 프로젝트마다 폴더 복사 (사본끼리 어긋남) | `npx skills add` / `npx skills update` 한 줄로 설치와 업데이트 |
 
-- 수치는 파일 크기(바이트)이며 정확한 토큰 수가 아닙니다.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/token-comparison-dark.svg">
+  <img alt="포크 문서 1개(시나리오 3개 x 7단계)를 만들 때의 추정 토큰: 단일 SKILL.md + 템플릿 수작업 편집은 읽기 약 11.6K, 쓰기 약 8.5K(합계 20.2K), interactive-architecture-doc은 읽기 약 5.2K, 쓰기 약 3.0K(합계 8.2K)." src="docs/token-comparison-light.svg" width="720">
+</picture>
+
+- 표의 수치는 파일 크기(바이트)이고, 그래프는 바이트 / 4로 토큰을 추정한 값입니다. 둘 다 정확한 토크나이저
+  수치는 아닙니다. 그래프는 `node tools/charts/token-chart.mjs`로 다시 만듭니다.
 - 오픈소스 저장소로 관리합니다: 버전별 릴리스와 [CHANGELOG](CHANGELOG.md), Node 18/20/22 CI(테스트, 예제 검증,
   폰트 해시), 개발용 파일(테스트, 폰트 빌드 도구, CI)은 설치되는 스킬 폴더에 들어가지 않습니다.
 - 트레이드오프: 에이전트에 Node.js 18 이상과 셸 접근이 필요합니다(템플릿만 쓰는 스킬은 파일 편집만 필요).

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="296" viewBox="0 0 720 296" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<title id="t">Estimated tokens per forked document</title>
+<desc id="d">Reads: Single SKILL.md + hand-edited template 11629, interactive-architecture-doc 5242; Writes: Single SKILL.md + hand-edited template 8535, interactive-architecture-doc 2961; Total: Single SKILL.md + hand-edited template 20165, interactive-architecture-doc 8204. Tokens estimated as bytes / 4.</desc>
+<rect width="720" height="296" rx="8" fill="#1a1a19"/>
+<text x="24" y="30" font-size="15" font-weight="600" fill="#f0efec">Estimated tokens to create one forked document</text>
+<rect x="24" y="44" width="10" height="10" rx="2" fill="#3987e5"/>
+<text x="40" y="53" font-size="12" fill="#c3c2b7">Single SKILL.md + hand-edited template</text>
+<rect x="310.79999999999995" y="44" width="10" height="10" rx="2" fill="#d95926"/>
+<text x="326.79999999999995" y="53" font-size="12" fill="#c3c2b7">interactive-architecture-doc</text>
+<line x1="72" y1="70" x2="72" y2="244" stroke="#383835" stroke-width="1"/>
+<text x="72" y="260" font-size="11" fill="#898781" text-anchor="middle">0</text>
+<line x1="188.8" y1="70" x2="188.8" y2="244" stroke="#2c2c2a" stroke-width="1"/>
+<text x="188.8" y="260" font-size="11" fill="#898781" text-anchor="middle">5.0K</text>
+<line x1="305.6" y1="70" x2="305.6" y2="244" stroke="#2c2c2a" stroke-width="1"/>
+<text x="305.6" y="260" font-size="11" fill="#898781" text-anchor="middle">10.0K</text>
+<line x1="422.4" y1="70" x2="422.4" y2="244" stroke="#2c2c2a" stroke-width="1"/>
+<text x="422.4" y="260" font-size="11" fill="#898781" text-anchor="middle">15.0K</text>
+<line x1="539.2" y1="70" x2="539.2" y2="244" stroke="#2c2c2a" stroke-width="1"/>
+<text x="539.2" y="260" font-size="11" fill="#898781" text-anchor="middle">20.0K</text>
+<line x1="656" y1="70" x2="656" y2="244" stroke="#2c2c2a" stroke-width="1"/>
+<text x="656" y="260" font-size="11" fill="#898781" text-anchor="middle">25.0K</text>
+<text x="62" y="99" font-size="12" font-weight="400" fill="#f0efec" text-anchor="end">Reads</text>
+<path d="M72,76h267.65344a4,4 0 0 1 4,4v10a4,4 0 0 1 -4,4h-267.65344z" fill="#3987e5"><title>Reads · Single SKILL.md + hand-edited template: ~11629 tokens</title></path>
+<text x="349.65344" y="89" font-size="11" fill="#c3c2b7">11.6K</text>
+<path d="M72,96h118.45312000000001a4,4 0 0 1 4,4v10a4,4 0 0 1 -4,4h-118.45312000000001z" fill="#d95926"><title>Reads · interactive-architecture-doc: ~5242 tokens</title></path>
+<text x="200.45312" y="109" font-size="11" fill="#c3c2b7">5.2K</text>
+<text x="62" y="159" font-size="12" font-weight="400" fill="#f0efec" text-anchor="end">Writes</text>
+<path d="M72,136h195.37760000000003a4,4 0 0 1 4,4v10a4,4 0 0 1 -4,4h-195.37760000000003z" fill="#3987e5"><title>Writes · Single SKILL.md + hand-edited template: ~8535 tokens</title></path>
+<text x="277.37760000000003" y="149" font-size="11" fill="#c3c2b7">8.5K</text>
+<path d="M72,156h65.16896a4,4 0 0 1 4,4v10a4,4 0 0 1 -4,4h-65.16896z" fill="#d95926"><title>Writes · interactive-architecture-doc: ~2961 tokens</title></path>
+<text x="147.16896" y="169" font-size="11" fill="#c3c2b7">3.0K</text>
+<text x="62" y="219" font-size="12" font-weight="600" fill="#f0efec" text-anchor="end">Total</text>
+<path d="M72,196h467.0544a4,4 0 0 1 4,4v10a4,4 0 0 1 -4,4h-467.0544z" fill="#3987e5"><title>Total · Single SKILL.md + hand-edited template: ~20165 tokens</title></path>
+<text x="549.0544" y="209" font-size="11" fill="#c3c2b7">20.2K</text>
+<path d="M72,216h187.64544a4,4 0 0 1 4,4v10a4,4 0 0 1 -4,4h-187.64544z" fill="#d95926"><title>Total · interactive-architecture-doc: ~8204 tokens</title></path>
+<text x="269.64544" y="229" font-size="11" fill="#c3c2b7">8.2K</text>
+<text x="24" y="284" font-size="11" fill="#898781">3 scenarios × 7 steps. Estimate: file bytes / 4, not exact tokenizer counts.</text>
+</svg>

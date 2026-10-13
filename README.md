@@ -52,7 +52,13 @@ and a browser self-check.
 | Updates | re-edit the HTML | edit the JSON and render again; the JSON is embedded in the HTML and can be recovered |
 | Distribution | folder copied into each project (copies drift) | one-line install and updates with `npx skills add` / `npx skills update` |
 
-- Figures are file sizes in bytes, not exact token counts.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/token-comparison-dark.svg">
+  <img alt="Estimated tokens for one forked document (3 scenarios x 7 steps): single SKILL.md + hand-edited template reads about 11.6K and writes about 8.5K (20.2K total); interactive-architecture-doc reads about 5.2K and writes about 3.0K (8.2K total)." src="docs/token-comparison-light.svg" width="720">
+</picture>
+
+- Table figures are file sizes in bytes; the chart estimates tokens as bytes / 4. Neither is an exact
+  tokenizer count. Regenerate the chart with `node tools/charts/token-chart.mjs`.
 - Maintained as an open-source repository: versioned releases with a [CHANGELOG](CHANGELOG.md), CI on
   Node 18/20/22 (tests, example validation, font hashes), and development files (tests, font build tool, CI)
   kept out of the installed skill folder.

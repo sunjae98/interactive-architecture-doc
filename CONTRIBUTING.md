@@ -46,3 +46,9 @@ licenses or versions change, update `THIRD_PARTY_NOTICES.md` and the files in
 
 Keep `README.md` and `README.ko.md` in sync. `SKILL.md` is written in English for agents and must stay
 within 150 lines. All relative links in markdown files must resolve (tested).
+
+## Regenerating the token chart
+
+`docs/token-comparison-{light,dark}.svg` in the README are generated from the current file sizes:
+`node tools/charts/token-chart.mjs`. Rerun it when `SKILL.md`, `references/format.md`, the examples, or
+`iad init` output change, and commit the SVGs.
