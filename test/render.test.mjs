@@ -153,6 +153,18 @@ test("render: fonts slot is empty without fonts and inlines woff2 when present",
   }
 });
 
+test("render: bundled fonts are inlined as IAD Sans and Geist Mono and named by the font tokens", () => {
+  const css = fontFaces();
+  assert.equal(count(css, /@font-face\{/g), 2);
+  assert.ok(css.includes('font-family:"IAD Sans";src:url(data:font/woff2;base64,'));
+  assert.ok(css.includes('font-family:"Geist Mono";src:url(data:font/woff2;base64,'));
+  assert.ok(/font-family:"IAD Sans";[^}]*font-weight:45 930;/.test(css), "variable weight range");
+  assert.ok(!/pretendard/i.test(css), "Reserved Font Name must not be used for the subset");
+  const src = readFileSync(TEMPLATE_PATH, "utf8");
+  assert.match(src, /--font-sans:"IAD Sans",[^;]*sans-serif,"Apple Color Emoji"/);
+  assert.match(src, /--font-mono:"Geist Mono",[^;]*monospace,"Apple Color Emoji"/);
+});
+
 test("CLI render: default output next to the JSON, atomic write leaves no temp files", () => {
   const dir = tmp();
   try {

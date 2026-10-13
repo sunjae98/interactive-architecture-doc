@@ -23,15 +23,24 @@ export class ValidationFailed extends Error {
 }
 
 // ---- fonts ------------------------------------------------------------------
-// Every assets/fonts/*.woff2 is inlined as base64. The family name is the file's basename
-// (e.g. "Pretendard.woff2" -> font-family "Pretendard"). No fonts -> empty slot.
+// Every assets/fonts/*.woff2 is inlined as base64. Known files get their family name and weight
+// range (both bundled fonts are variable); any other file uses its basename as the family.
+// No fonts -> empty slot. --font-sans / --font-mono in the template name these families.
+const FONT_FACES = {
+  "iad-sans.woff2": { family: "IAD Sans", weight: "45 930" },
+  "geist-mono.woff2": { family: "Geist Mono", weight: "100 900" },
+};
+
 export function fontFaces(dir = FONTS_DIR) {
   if (!existsSync(dir)) return "";
   const files = readdirSync(dir).filter((f) => f.endsWith(".woff2")).sort();
   if (!files.length) return "";
   const faces = files.map((f) => {
     const data = readFileSync(join(dir, f)).toString("base64");
-    return `@font-face{font-family:"${basename(f, ".woff2")}";src:url(data:font/woff2;base64,${data}) format("woff2");font-display:swap;}`;
+    const known = FONT_FACES[f];
+    const family = known ? known.family : basename(f, ".woff2");
+    const weight = known ? `font-weight:${known.weight};` : "";
+    return `@font-face{font-family:"${family}";src:url(data:font/woff2;base64,${data}) format("woff2");${weight}font-display:swap;}`;
   });
   return `<style id="iad-fonts">\n${faces.join("\n")}\n</style>`;
 }

@@ -13,7 +13,7 @@ slot is a render error.
 |---|---|
 | `{{IAD_LANG}}` | `meta.lang` (`en` default) — `<html lang>` |
 | `{{IAD_TITLE}}` | `meta.title — subtitle` as plain text |
-| `{{IAD_FONTS}}` | `<style>` with `@font-face` rules for every `assets/fonts/*.woff2` (base64), or empty when there are none. The family name is the file's basename |
+| `{{IAD_FONTS}}` | `<style>` with `@font-face` rules for every `assets/fonts/*.woff2` (base64), or empty when there are none. `iad-sans.woff2` → family "IAD Sans", `geist-mono.woff2` → "Geist Mono" (with their variable weight ranges); any other file uses its basename |
 | `{{IAD_HEADER}}` | `<h1>` + subtitle |
 | `{{IAD_TLDR}}` | `.tldr` box, or empty |
 | `{{IAD_STEPPER}}` | `.stepper` with one `.step` per `steps[]` entry |

@@ -51,6 +51,27 @@ def fetch(font):
     return data
 
 
+# OFL clause 3: a Modified Version must not use a Reserved Font Name. Rewrite the naming records
+# (family, full, unique ID, PostScript, typographic family, variation PS prefix, fvar instance PS
+# names) to the neutral name from the spec. Copyright, trademark and license records are kept as-is.
+def rename(f, r):
+    name = f["name"]
+    old_family = name.getDebugName(16) or name.getDebugName(1)
+    old_ps = name.getDebugName(25) or old_family.replace(" ", "")
+    ps_ids = {6, 25}
+    if "fvar" in f:
+        ps_ids |= {i.postscriptNameID for i in f["fvar"].instances}
+    family_ids = {1, 4, 16, 18, 21}
+    for rec in name.names:
+        if rec.nameID in family_ids:
+            rec.string = rec.toUnicode().replace(old_family, r["family"])
+        elif rec.nameID == 3 or rec.nameID in ps_ids:
+            rec.string = rec.toUnicode().replace(old_ps, r["postscript"])
+    for rec in name.names:
+        if rec.nameID in family_ids | ps_ids | {3}:
+            assert r["reservedName"] not in rec.toUnicode(), (rec.nameID, rec.toUnicode())
+
+
 def build(font):
     with zipfile.ZipFile(io.BytesIO(fetch(font))) as z:
         ttf = z.read(font["member"])
@@ -69,6 +90,8 @@ def build(font):
     s = subset.Subsetter(opts)
     s.populate(unicodes=sorted(cps))
     s.subset(f)
+    if "rename" in font:
+        rename(f, font["rename"])
     f.flavor = "woff2"
     buf = io.BytesIO()
     f.save(buf)

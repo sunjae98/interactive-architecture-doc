@@ -27,13 +27,19 @@ recalculated), so `hashes.json` should be unchanged after a clean rebuild.
   under strict KS X 1001 (EUC-KR lead byte 0xB0-0xC8, trail byte 0xA1-0xFE; Python's `euc-kr` codec is CP949,
   so the script filters out the UHC extension).
 - Layout features are kept (`*`), hinting is dropped, output is woff2.
+- `rename` (Pretendard only): Pretendard's OFL declares "Pretendard" a Reserved Font Name, which a
+  Modified Version (our subset) must not use. The script rewrites the naming records — family (IDs 1, 16),
+  full name (4), unique ID (3), PostScript name (6), variations PostScript prefix (25) and the fvar
+  instance PostScript names — to `IAD Sans` / `IADSans`, and asserts the reserved name is gone from them.
+  Copyright (0), trademark (7), designer and license records are kept unchanged.
+  Geist Mono's OFL declares no Reserved Font Name, so it keeps its name.
 
 ## Outputs (`skills/interactive-architecture-doc/assets/fonts/`)
 
 | file | source | axes |
 |------|--------|------|
-| `pretendard.woff2` | Pretendard Variable v1.3.9 | wght 45-930 |
-| `geist-mono.woff2` | Geist Mono v1.7.2 | wght 100-900 |
+| `iad-sans.woff2` (family "IAD Sans") | Pretendard Variable v1.3.9, renamed | wght 45-930 |
+| `geist-mono.woff2` (family "Geist Mono") | Geist Mono v1.7.2 | wght 100-900 |
 
 Both are variable fonts (one file covers weights 400/600/700). Update the pins in `fonts.spec.json`
 (version, URL, archive SHA-256) to bump a font, rebuild, and commit the new woff2 plus `hashes.json`.
