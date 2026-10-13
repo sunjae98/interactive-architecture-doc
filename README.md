@@ -45,10 +45,16 @@ opens offline by double-click.
 
 ## Usage
 
-Ask your agent, for example:
+In Claude Code, invoke the skill explicitly with its slash command:
 
-> Make an interactive architecture document for our upload pipeline: the client sends a file, the
-> gateway decides between image/audio/video handling, and an external moderation service is called.
+```text
+/interactive-architecture-doc Make an interactive architecture document for our upload pipeline: the client
+sends a file, the gateway decides between image/audio/video handling, and an external moderation service is called.
+```
+
+You can also just describe what you want ("make an interactive architecture document for …"); the agent picks
+the skill from its description. Other agents that support skills load it the same way, but the explicit
+invocation syntax depends on the agent.
 
 The agent follows `skills/interactive-architecture-doc/SKILL.md`: it gathers the details, copies the closest
 file from `examples/`, writes `doc.json`, and runs
