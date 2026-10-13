@@ -116,7 +116,7 @@ function renderBlock(b, inColumn) {
 
 // ---- page sections ----------------------------------------------------------
 function renderHeader(meta) {
-  return `<h1>${escapeHtml(meta.title)}</h1>` + (meta.subtitle ? `\n<div class="subtitle">${inline(meta.subtitle)}</div>` : "");
+  return `<h1 data-export>${escapeHtml(meta.title)}</h1>` + (meta.subtitle ? `\n<div class="subtitle" data-export>${inline(meta.subtitle)}</div>` : "");
 }
 
 function renderTldr(tldr, ui) {
@@ -134,12 +134,12 @@ function renderTldr(tldr, ui) {
 
 function renderStepper(steps) {
   const items = steps.map((s, i) => `<div class="step"><span class="num">${i + 1}</span>${inline(s.label)}</div>`);
-  return `<div class="stepper">\n${items.join('\n<span class="step-arrow">→</span>\n')}\n</div>`;
+  return `<div class="stepper" data-export>\n${items.join('\n<span class="step-arrow">→</span>\n')}\n</div>`;
 }
 
 function renderLegend(legend) {
   const items = KINDS.filter((k) => k in legend).map((k) => `<span><i class="dot ${k}"></i> ${inline(legend[k])}</span>`);
-  return `<div class="legend">\n${items.join("\n")}\n</div>`;
+  return `<div class="legend" data-export>\n${items.join("\n")}\n</div>`;
 }
 
 function renderSections(doc) {

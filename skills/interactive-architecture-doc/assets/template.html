@@ -353,6 +353,24 @@
     z-index:5;
   }
   .node.altpath{opacity:.35;filter:grayscale(60%);}
+
+  /* ==== Export (current view -> PNG / SVG / clipboard) ==================== */
+  .pg-export-status{font-size:10.6px;color:var(--color-text-muted);line-height:1.5;margin-top:var(--space-2);min-height:1.5em;}
+  .pg-export-status[data-state="error"]{color:var(--kind-client-text);}
+  .export-caption{display:none;}
+  /* Export-only overrides: the runtime clones every [data-export] element into .iad-export. */
+  .iad-export{
+    background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans);
+    word-break:keep-all;overflow-wrap:break-word;
+  }
+  .iad-export *,.iad-export *::before,.iad-export *::after{transition:none !important;animation:none !important;}
+  .iad-export .stepper{flex-wrap:wrap;justify-content:center;overflow:visible;position:static;}
+  .iad-export .legend{position:static;}
+  .iad-export [data-step]{cursor:default;}
+  .iad-export .export-caption{
+    display:block;text-align:center;margin-top:var(--space-5);
+    font-size:12px;font-weight:600;color:var(--color-text-muted);
+  }
 </style>
 </head>
 <body>
@@ -377,6 +395,15 @@
       <div class="pg-panel-title">{{t:data_title}}</div>
       <pre id="pgData">{{t:data_idle}}</pre>
     </div>
+    <div class="pg-panel">
+      <div class="pg-panel-title">{{t:export_title}}</div>
+      <div class="pg-btns">
+        <button class="pg-btn" id="pgExportPng">{{t:export_png}}</button>
+        <button class="pg-btn" id="pgExportSvg">{{t:export_svg}}</button>
+        <button class="pg-btn" id="pgExportCopy">{{t:export_copy}}</button>
+      </div>
+      <div class="pg-export-status" id="pgExportStatus" role="status" aria-live="polite"></div>
+    </div>
   </div>
 </aside>
 
@@ -386,9 +413,10 @@
 {{IAD_STEPPER}}
 <div class="subtitle small">{{t:steps_hint}}</div>
 {{IAD_LEGEND}}
-<div class="board">
+<div class="board" data-export>
 {{IAD_BOARD}}
 </div>
+<div class="export-caption" data-export></div>
 {{IAD_SECTIONS}}
 </div>
 </div>
@@ -600,6 +628,224 @@
   });
 
   render();
+
+  // ---- Export: the current view (scenario + step) as PNG, SVG or a clipboard image.
+  // Every [data-export] element is cloned into one .iad-export root at the live width, the page CSS
+  // is inlined (with @media resolved against the live viewport) and the result is wrapped in
+  // <svg><foreignObject>. PNG rasterizes that SVG through a data: URL so the canvas stays untainted.
+  var EXPORT_PAD = 24;               // px around the captured content
+  var EXPORT_MAX_PIXELS = 16000000;  // ~16MP canvas area cap (Safari's limit)
+  var EXPORT_MAX_SIDE = 16384;       // per-side canvas cap shared by current browsers
+  var exportPngBtn = document.getElementById("pgExportPng");
+  var exportSvgBtn = document.getElementById("pgExportSvg");
+  var exportCopyBtn = document.getElementById("pgExportCopy");
+  var exportStatusEl = document.getElementById("pgExportStatus");
+  var captionEl = document.querySelector(".export-caption");
+
+  function setExportStatus(text, isError) {
+    exportStatusEl.textContent = text;
+    if (isError) exportStatusEl.setAttribute("data-state", "error");
+    else exportStatusEl.removeAttribute("data-state");
+  }
+
+  function setExportBusy(busy) {
+    [exportPngBtn, exportSvgBtn, exportCopyBtn].forEach(function (b) { b.disabled = busy; });
+    if (busy) setExportStatus(t("export_busy"), false);
+  }
+
+  function errorReason(e) {
+    if (!e) return "?";
+    return e.name && e.name !== "Error" ? e.name : (e.message || String(e));
+  }
+
+  // Flattens stylesheet rules: @media / @supports are kept only when they match right now, so the
+  // export looks like the live page even though the SVG has its own viewport. Token names declared
+  // in :root / [data-theme] rules are collected so their current values can be inlined.
+  function collectRules(rules, css, tokens) {
+    Array.prototype.forEach.call(rules, function (rule) {
+      if (window.CSSMediaRule && rule instanceof CSSMediaRule) {
+        if (window.matchMedia(rule.media.mediaText).matches) collectRules(rule.cssRules, css, tokens);
+        return;
+      }
+      if (window.CSSSupportsRule && rule instanceof CSSSupportsRule) {
+        if (window.CSS && CSS.supports(rule.conditionText)) collectRules(rule.cssRules, css, tokens);
+        return;
+      }
+      if (rule.style && /:root|\[data-theme/.test(rule.selectorText || "")) {
+        for (var i = 0; i < rule.style.length; i++) {
+          if (rule.style[i].indexOf("--") === 0) tokens[rule.style[i]] = true;
+        }
+      }
+      css.push(rule.cssText);
+    });
+  }
+
+  function sanitizeFilePart(s) {
+    return String(s)
+      .replace(/[\u0000-\u001f\u007f<>:"\/\\|?*]+/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-{2,}/g, "-")
+      .replace(/^[-.]+|[-.]+$/g, "")
+      .slice(0, 80);
+  }
+
+  function exportFileBase(sc) {
+    var parts = [sanitizeFilePart(DOC.meta.title), sanitizeFilePart(sc.id), "step" + currentStep];
+    return parts.filter(Boolean).join("-");
+  }
+
+  // Synchronous: returns { svg, width, height, base }.
+  function buildExport() {
+    window.draw(); // fan arrows must match the live layout before cloning
+    var sc = currentScenario();
+    captionEl.textContent = t("export_caption", {
+      scenario: (sc.icon ? sc.icon + " " : "") + sc.label,
+      step: currentStep,
+      total: TOTAL_STEPS
+    });
+
+    var css = [];
+    var tokens = {};
+    Array.prototype.forEach.call(document.styleSheets, function (sheet) {
+      var rules;
+      try { rules = sheet.cssRules; } catch (e) { return; } // unreadable sheet: skip
+      if (rules) collectRules(rules, css, tokens);
+    });
+
+    var html = document.documentElement;
+    var live = getComputedStyle(html);
+    var width = Math.ceil(document.querySelector(".main").getBoundingClientRect().width) + 2 * EXPORT_PAD;
+    var decl = "width:" + width + "px;padding:" + EXPORT_PAD + "px;";
+    Object.keys(tokens).forEach(function (name) {
+      var v = live.getPropertyValue(name).trim();
+      if (v) decl += name + ":" + v + ";";
+    });
+
+    var root = document.createElement("div");
+    root.className = "iad-export";
+    root.setAttribute("lang", html.getAttribute("lang") || "en");
+    if (html.getAttribute("data-theme")) root.setAttribute("data-theme", html.getAttribute("data-theme"));
+    root.setAttribute("style", decl);
+    var styleEl = document.createElement("style");
+    styleEl.textContent = css.join("\n");
+    root.appendChild(styleEl);
+    document.querySelectorAll("[data-export]").forEach(function (el) { root.appendChild(el.cloneNode(true)); });
+
+    // measure the height off-screen at the fixed width
+    var host = document.createElement("div");
+    host.setAttribute("aria-hidden", "true");
+    host.style.cssText = "position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;";
+    host.appendChild(root);
+    document.body.appendChild(host);
+    var height = Math.ceil(root.getBoundingClientRect().height);
+    document.body.removeChild(host);
+    host.removeChild(root);
+
+    var svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height +
+      '" viewBox="0 0 ' + width + " " + height + '"><foreignObject x="0" y="0" width="' + width +
+      '" height="' + height + '">' + new XMLSerializer().serializeToString(root) + "</foreignObject></svg>";
+    return { svg: svg, width: width, height: height, base: exportFileBase(sc) };
+  }
+
+  function exportScale(w, h) {
+    var s = Math.min(window.devicePixelRatio || 1, 2);
+    s = Math.min(s, Math.sqrt(EXPORT_MAX_PIXELS / (w * h)), EXPORT_MAX_SIDE / Math.max(w, h));
+    return s;
+  }
+
+  function renderPng(ex) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var s = exportScale(ex.width, ex.height);
+          var canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.floor(ex.width * s));
+          canvas.height = Math.max(1, Math.floor(ex.height * s));
+          var ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("no 2d context");
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(function (blob) {
+            if (blob) resolve(blob); else reject(new Error("toBlob returned null"));
+          }, "image/png");
+        } catch (e) {
+          reject(e); // SecurityError when the browser taints foreignObject canvases
+        }
+      };
+      img.onerror = function () { reject(new Error("SVG image did not load")); };
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(ex.svg);
+    });
+  }
+
+  function saveBlob(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+  }
+
+  exportPngBtn.addEventListener("click", function () {
+    setExportBusy(true);
+    var name = "export.png";
+    new Promise(function (resolve) {
+      var ex = buildExport();
+      name = ex.base + ".png";
+      resolve(renderPng(ex));
+    }).then(function (blob) {
+      saveBlob(blob, name);
+      setExportBusy(false);
+      setExportStatus(t("export_saved", { file: name }), false);
+    }, function (e) {
+      setExportBusy(false);
+      setExportStatus(t("export_png_failed", { reason: errorReason(e) }), true);
+    });
+  });
+
+  exportSvgBtn.addEventListener("click", function () {
+    try {
+      var ex = buildExport();
+      saveBlob(new Blob([ex.svg], { type: "image/svg+xml" }), ex.base + ".svg");
+      setExportStatus(t("export_saved", { file: ex.base + ".svg" }), false);
+    } catch (e) {
+      setExportStatus(t("export_svg_failed", { reason: errorReason(e) }), true);
+    }
+  });
+
+  exportCopyBtn.addEventListener("click", function () {
+    if (!navigator.clipboard || !navigator.clipboard.write || typeof ClipboardItem === "undefined") {
+      setExportStatus(t("export_clip_unsupported"), true);
+      return;
+    }
+    // The ClipboardItem must be created synchronously inside the click (user activation, Safari),
+    // so it gets a promise for the PNG instead of the finished blob.
+    var png;
+    try { png = renderPng(buildExport()); } catch (e) { png = Promise.reject(e); }
+    png.catch(function () {}); // handled below; avoids an unhandled-rejection report
+    var write;
+    try {
+      write = navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    } catch (e) {
+      write = Promise.reject(e);
+    }
+    setExportBusy(true);
+    write.then(function () {
+      setExportBusy(false);
+      setExportStatus(t("export_copied"), false);
+    }, function (e) {
+      png.then(function () {
+        setExportBusy(false);
+        setExportStatus(t("export_clip_denied", { reason: errorReason(e) }), true);
+      }, function (pngError) {
+        setExportBusy(false);
+        setExportStatus(t("export_png_failed", { reason: errorReason(pngError) }), true);
+      });
+    });
+  });
 })();
 </script>
 

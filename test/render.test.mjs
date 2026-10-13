@@ -191,3 +191,61 @@ test("CLI render: errors exit 1 and write nothing; --json reports them", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("export: sidebar has PNG / SVG / copy buttons and a live status area", () => {
+  const src = readFileSync(TEMPLATE_PATH, "utf8");
+  assert.ok(src.includes('<button class="pg-btn" id="pgExportPng">{{t:export_png}}</button>'));
+  assert.ok(src.includes('<button class="pg-btn" id="pgExportSvg">{{t:export_svg}}</button>'));
+  assert.ok(src.includes('<button class="pg-btn" id="pgExportCopy">{{t:export_copy}}</button>'));
+  assert.ok(/<div class="pg-export-status" id="pgExportStatus" role="status" aria-live="polite"><\/div>/.test(src));
+  assert.ok(src.includes("{{t:export_title}}"));
+});
+
+test("export: runtime follows the capture recipe", () => {
+  const src = readFileSync(TEMPLATE_PATH, "utf8");
+  for (const needle of [
+    "window.draw(); // fan arrows",
+    "window.matchMedia(rule.media.mediaText).matches",
+    "<foreignObject",
+    'xmlns="http://www.w3.org/2000/svg"',
+    "new XMLSerializer().serializeToString(root)",
+    '"data:image/svg+xml;charset=utf-8," + encodeURIComponent(ex.svg)',
+    "Math.min(window.devicePixelRatio || 1, 2)",
+    "EXPORT_MAX_PIXELS = 16000000",
+    'new ClipboardItem({ "image/png": png })',
+    'if (blob) resolve(blob); else reject(new Error("toBlob returned null"))',
+  ]) {
+    assert.ok(src.includes(needle), needle);
+  }
+  // export-only overrides and a caption that is hidden on the live page
+  assert.ok(/\.export-caption\{display:none;\}/.test(src));
+  assert.ok(/\.iad-export \.export-caption\{\s*display:block;/.test(src));
+  assert.ok(/\.iad-export \*,[^{]*\{transition:none !important;animation:none !important;\}/.test(src));
+  assert.ok(/\.iad-export \.stepper\{[^}]*flex-wrap:wrap;[^}]*position:static;/.test(src));
+});
+
+test("export: i18n tables carry every export string in both languages", () => {
+  const keys = [
+    "export_title", "export_png", "export_svg", "export_copy", "export_caption", "export_busy", "export_saved",
+    "export_copied", "export_png_failed", "export_svg_failed", "export_clip_unsupported", "export_clip_denied",
+  ];
+  for (const lang of ["en", "ko"]) for (const k of keys) assert.equal(typeof UI[lang][k], "string", `${lang}.${k}`);
+  for (const lang of ["en", "ko"]) {
+    assert.match(UI[lang].export_caption, /\{scenario\}.*\{step\}\/\{total\}/);
+    // every failure message points to an alternative
+    for (const k of ["export_png_failed", "export_clip_unsupported", "export_clip_denied"]) assert.match(UI[lang][k], /SVG/);
+  }
+});
+
+for (const file of exampleFiles) {
+  test(`render ${file}: data-export marks exactly h1, subtitle, stepper, legend, board and caption`, () => {
+    const doc = load(file);
+    const { html } = renderHtml(doc);
+    const body = html.split("</style>").pop();
+    const marked = [...body.matchAll(/<(\w+)(?: class="([^"]+)")? data-export[ >]/g)].map(([, tag, cls]) => (cls ? `${tag}.${cls}` : tag));
+    const expected = ["h1", ...(doc.meta.subtitle ? ["div.subtitle"] : []), "div.stepper", "div.legend", "div.board", "div.export-caption"];
+    assert.deepEqual(marked, expected);
+    assert.ok(body.includes('<div class="export-caption" data-export></div>'), "caption slot is empty until export");
+    assert.ok(!/class="(tldr|callout|considerations|tool-examples|sidebar|playground)"[^>]*data-export/.test(body));
+  });
+}
