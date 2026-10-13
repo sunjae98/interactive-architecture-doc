@@ -36,17 +36,18 @@ flowchart LR
 - `render` re-runs validation and refuses to write if there are errors.
 - The JSON is embedded in the HTML (`#iad-data`), so the source can be recovered from the HTML file.
 
-## Why scripts instead of a single hand-edited skill
+## Why not a single `SKILL.md` with a template?
 
-Version 1 was a single `SKILL.md` plus an ~840-line `template.html` that the agent copied and edited by hand.
-This repository replaces that with a JSON format, a validator, a renderer, and a browser self-check.
+A common way to build this kind of skill is a single `SKILL.md` plus a large HTML template that the agent copies
+and edits by hand. interactive-architecture-doc instead gives the agent a JSON format, a validator, a renderer,
+and a browser self-check.
 
-| | v1: one skill, hand-edited template | This repository |
+| | Single `SKILL.md` + hand-edited template | interactive-architecture-doc |
 |---|---|---|
-| Consistency | step count / `TOTAL_STEPS`, `data-step` / `data-branch`, fan hub/target pairs, `<option>` / `SCENARIOS` keys kept in sync by hand | all generated from one JSON definition |
+| Consistency | step count / step total, `data-step` / `data-branch`, fan hub/target pairs, scenario options and keys kept in sync by hand | all generated from one JSON definition |
 | Validation | mismatches found by clicking through the page | rejected before render with a JSON pointer and rule code, e.g. `/board/3 E_FAN_TARGET_NO_HUB` |
 | Verification | manual clicking, many screenshots | `doc.html#iad-selfcheck` replays every scenario × step and returns one JSON line |
-| Agent reads | ≈46 KB (`SKILL.md` 7.9 KB + `design-system.md` 4.5 KB + `template.html` 34 KB) | ≈15–21 KB (`SKILL.md` 5.8 KB + `format.md` 7.9 KB + `iad init` skeleton 1.8–7.2 KB); the 46 KB `template.html` is used only by the renderer |
+| Agent reads | ≈46 KB (`SKILL.md` + reference notes + a ~34 KB HTML template) | ≈15–21 KB (`SKILL.md` 5.8 KB + `format.md` 7.9 KB + `iad init` skeleton 1.8–7.2 KB); the template is used only by the renderer |
 | Agent writes | ~34 KB+ of HTML | a small JSON file (≈2–12 KB) |
 | Updates | re-edit the HTML | edit the JSON and render again; the JSON is embedded in the HTML and can be recovered |
 | Distribution | folder copied into each project (copies drift) | one-line install and updates with `npx skills add` / `npx skills update` |
@@ -55,7 +56,7 @@ This repository replaces that with a JSON format, a validator, a renderer, and a
 - Maintained as an open-source repository: versioned releases with a [CHANGELOG](CHANGELOG.md), CI on
   Node 18/20/22 (tests, example validation, font hashes), and development files (tests, font build tool, CI)
   kept out of the installed skill folder.
-- Trade-off: the agent needs Node.js 18+ and shell access; v1 needed only file editing.
+- Trade-off: the agent needs Node.js 18+ and shell access; a template-only skill needs only file editing.
 
 ## Install
 

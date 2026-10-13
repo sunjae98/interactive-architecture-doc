@@ -35,17 +35,17 @@ flowchart LR
 - `render`는 검증을 다시 실행하고, 에러가 있으면 파일을 쓰지 않습니다.
 - JSON은 HTML 안(`#iad-data`)에 함께 들어가므로 HTML 파일만 있어도 원본을 복원할 수 있습니다.
 
-## 단일 스킬(수작업) 방식 대비 장점
+## 단일 `SKILL.md` + 템플릿 방식과 비교
 
-버전 1은 `SKILL.md` 하나와 약 840줄짜리 `template.html`로 이루어져, 에이전트가 템플릿을 복사해 손으로 고치는
-방식이었습니다. 이 저장소는 이를 JSON 형식, 검증기, 렌더러, 브라우저 셀프체크로 대체합니다.
+이런 스킬은 흔히 `SKILL.md` 하나와 큰 HTML 템플릿으로 만들고, 에이전트가 템플릿을 복사해 손으로 고칩니다.
+interactive-architecture-doc은 대신 JSON 형식, 검증기, 렌더러, 브라우저 셀프체크를 제공합니다.
 
-| | v1: 단일 스킬, 템플릿 수작업 편집 | 이 저장소 |
+| | 단일 `SKILL.md` + 템플릿 수작업 편집 | interactive-architecture-doc |
 |---|---|---|
-| 일관성 | 단계 수 / `TOTAL_STEPS`, `data-step` / `data-branch`, fan hub/target 쌍, `<option>` / `SCENARIOS` 키를 손으로 맞춤 | 모두 하나의 JSON 정의에서 생성 |
+| 일관성 | 단계 수 / 단계 총합, `data-step` / `data-branch`, fan hub/target 쌍, 시나리오 옵션과 키를 손으로 맞춤 | 모두 하나의 JSON 정의에서 생성 |
 | 검증 | 페이지를 클릭해 보며 불일치 발견 | 렌더 전에 JSON pointer와 규칙 코드로 거부 (예: `/board/3 E_FAN_TARGET_NO_HUB`) |
 | 확인 | 수동 클릭, 스크린샷 여러 장 | `doc.html#iad-selfcheck`가 모든 시나리오 × 단계를 재생하고 JSON 한 줄로 결과 반환 |
-| 에이전트가 읽는 양 | ≈46 KB (`SKILL.md` 7.9 KB + `design-system.md` 4.5 KB + `template.html` 34 KB) | ≈15–21 KB (`SKILL.md` 5.8 KB + `format.md` 7.9 KB + `iad init` 뼈대 1.8–7.2 KB); 46 KB `template.html`은 렌더러만 사용 |
+| 에이전트가 읽는 양 | ≈46 KB (`SKILL.md` + 참고 문서 + 약 34 KB HTML 템플릿) | ≈15–21 KB (`SKILL.md` 5.8 KB + `format.md` 7.9 KB + `iad init` 뼈대 1.8–7.2 KB); 템플릿은 렌더러만 사용 |
 | 에이전트가 쓰는 양 | HTML ~34 KB 이상 | 작은 JSON 파일 (≈2–12 KB) |
 | 수정 | HTML을 다시 손으로 편집 | JSON을 고치고 다시 렌더; JSON이 HTML에 들어 있어 복원 가능 |
 | 배포 | 프로젝트마다 폴더 복사 (사본끼리 어긋남) | `npx skills add` / `npx skills update` 한 줄로 설치와 업데이트 |
@@ -53,7 +53,7 @@ flowchart LR
 - 수치는 파일 크기(바이트)이며 정확한 토큰 수가 아닙니다.
 - 오픈소스 저장소로 관리합니다: 버전별 릴리스와 [CHANGELOG](CHANGELOG.md), Node 18/20/22 CI(테스트, 예제 검증,
   폰트 해시), 개발용 파일(테스트, 폰트 빌드 도구, CI)은 설치되는 스킬 폴더에 들어가지 않습니다.
-- 트레이드오프: 에이전트에 Node.js 18 이상과 셸 접근이 필요합니다(v1은 파일 편집만 필요했습니다).
+- 트레이드오프: 에이전트에 Node.js 18 이상과 셸 접근이 필요합니다(템플릿만 쓰는 스킬은 파일 편집만 필요).
 
 ## 설치
 
