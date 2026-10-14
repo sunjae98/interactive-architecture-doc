@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Request Router Overview</title>
+<script>
+(function () {
+  var theme = null;
+  try { theme = localStorage.getItem("iad-theme"); } catch (e) { /* storage unavailable */ }
+  if (theme !== "light" && theme !== "dark") {
+    theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  document.documentElement.setAttribute("data-theme", theme);
+})();
+</script>
+<style>
+  :root{
+    --bg:#ffffff; --surface:#ffffff; --surface-2:#f9f9fb; --border:#d9d9e0; --line:#b9bbc6;
+    --text:#1c2024; --muted:#60646c; --outer:#1c2024; --on-outer:#edeef0; --on-outer-muted:#b0b4ba;
+    --pill-bg:#f0f0f3; --pill-border:#d9d9e0;
+    --accent:#0090ff; --accent-bg:#e6f4fe; --accent-text:#0d74ce;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo",sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#111113; --surface:#18191b; --surface-2:#18191b; --border:#363a3f; --line:#5a6169;
+      --text:#edeef0; --muted:#b0b4ba; --outer:#edeef0; --on-outer:#111113; --on-outer-muted:#60646c;
+      --pill-bg:#212225; --pill-border:#363a3f;
+      --accent:#3b9eff; --accent-bg:#0d2847; --accent-text:#70b8ff; color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#111113; --surface:#18191b; --surface-2:#18191b; --border:#363a3f; --line:#5a6169;
+    --text:#edeef0; --muted:#b0b4ba; --outer:#edeef0; --on-outer:#111113; --on-outer-muted:#60646c;
+    --pill-bg:#212225; --pill-border:#363a3f;
+    --accent:#3b9eff; --accent-bg:#0d2847; --accent-text:#70b8ff; color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased}
+  main{max-width:920px;margin:0 auto;padding-block:40px 56px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+  .caption code{font-family:var(--font-mono);font-size:13px}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}
+  h1{font-size:20px;margin:0 0 4px;letter-spacing:-.01em}
+  .sub{margin:0;color:var(--muted);font-size:14px;line-height:1.5}
+  /* Theme toggle: same as the walkthrough template. Round icon button; shows the theme you switch to. */
+  .theme-toggle{flex:none;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;padding:0;
+    border:1px solid var(--border);border-radius:9999px;background:var(--surface);color:var(--text);
+    box-shadow:0 0 0 1px #d1d9e040,0 6px 12px -3px #25292e0a,0 6px 18px 0 #25292e1f;cursor:pointer}
+  .theme-toggle:hover{background:var(--surface-2)}
+  .theme-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .theme-toggle svg{width:18px;height:18px;display:block}
+  .theme-toggle .icon-sun{display:none}
+  [data-theme="dark"] .theme-toggle .icon-sun{display:block}
+  [data-theme="dark"] .theme-toggle .icon-moon{display:none}
+  .tabs{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);margin-bottom:16px;flex-wrap:wrap}
+  .tabs button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer}
+  .tabs button[aria-selected="true"]{background:var(--surface);color:var(--text);box-shadow:0 0 0 1px var(--border)}
+  .figure{border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:8px;overflow-x:auto}
+  #dg{display:block;width:100%;min-width:640px;height:auto}
+  .caption{margin:12px 2px 0;color:var(--muted);font-size:14px;line-height:1.5;min-height:42px}
+  .caption b{color:var(--text);font-weight:600}
+
+  /* diagram */
+  .node rect.box{fill:var(--surface);stroke:var(--border);stroke-width:1}
+  .node.outer rect.box{fill:var(--outer);stroke:none}
+  .node .title{font:600 15px var(--font-sans);fill:var(--text)}
+  .node .code{font:12px var(--font-mono);fill:var(--muted)}
+  .node.outer .title{fill:var(--on-outer);font-family:var(--font-mono);letter-spacing:.04em}
+  .node.outer .code{fill:var(--on-outer-muted)}
+  .card .head{fill:var(--surface-2);stroke:var(--border)}
+  .card .row{fill:var(--surface-2)}
+  .card .rowtext{font:12px var(--font-mono);fill:var(--text)}
+  .edge path{fill:none;stroke:var(--line);stroke-width:1.5}
+  .edge .arrow{fill:var(--line)}
+  .pill rect{fill:var(--pill-bg);stroke:var(--pill-border)}
+  .pill text{font:600 12px var(--font-mono);fill:var(--text)}
+  .group rect{fill:none;stroke:var(--line);stroke-dasharray:5 4;stroke-width:1}
+  .group text,.boundary text{font:600 11px var(--font-mono);fill:var(--muted);letter-spacing:.08em}
+  .boundary line{stroke:var(--line);stroke-dasharray:2 5;stroke-width:1.5;stroke-linecap:round}
+  .group-bg{fill:var(--bg)}
+
+  /* path highlight (Neon style): same layout, only the path is colored */
+  .node,.edge{transition:opacity .2s}
+  svg.has-path .node:not(.on),svg.has-path .edge:not(.on){opacity:.28}
+  svg.has-path .edge.on path{stroke:var(--accent);stroke-width:2}
+  svg.has-path .edge.on .arrow{fill:var(--accent)}
+  svg.has-path .edge.on .pill rect{fill:var(--accent-bg);stroke:var(--accent)}
+  svg.has-path .edge.on .pill text{fill:var(--accent-text)}
+  svg.has-path .node.on:not(.outer) rect.box{stroke:var(--accent);stroke-width:1.5}
+  svg.has-path .card.on .head{fill:var(--accent-bg);stroke:var(--accent)}
+  svg.has-path .card.on .head-text{fill:var(--accent-text)}
+
+  .ir{margin-top:32px}
+  .ir summary{cursor:pointer;color:var(--muted);font-size:13px}
+  .ir pre{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;font:12px/1.5 var(--font-mono);overflow:auto;max-height:420px}
+</style>
+<main>
+  <header>
+    <div>
+      <h1 id="title"></h1>
+      <p class="sub" id="subtitle"></p>
+    </div>
+    <button class="theme-toggle" id="theme" type="button" aria-label="Switch to dark theme" title="Switch to dark theme">
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+  </header>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="figure"><svg id="dg" xmlns="http://www.w3.org/2000/svg" role="img"></svg></div>
+  <p class="caption" id="caption" aria-live="polite"></p>
+  <details class="ir"><summary>Proposed overview IR (the JSON this page is rendered from)</summary><pre id="irsrc"></pre></details>
+</main>
+
+<script type="application/json" id="iad-data">
+{
+  "meta": {
+    "style": "overview",
+    "title": "Request Router",
+    "subtitle": "One endpoint. The router picks one of three paths and always returns the same envelope."
+  },
+  "layers": [
+    { "id": "client", "nodes": [
+      { "id": "client", "title": "CLIENT", "code": "web · mobile · CLI", "span": 3, "tone": "outer" }
+    ]},
+    { "id": "classify", "group": "router", "nodes": [
+      { "id": "classifier", "title": "Classifier", "code": "rules-v2 → model fallback", "span": 3 }
+    ]},
+    { "id": "paths", "group": "router", "nodes": [
+      { "id": "simple", "title": "FAQ handler", "rows": ["faq_handler.answer()", "cache.set()"] },
+      { "id": "lookup", "title": "Search + summarize", "rows": ["search.query()", "summarizer.run()"] },
+      { "id": "job", "title": "Background job", "rows": ["jobs.enqueue()", "status_store.put()"] }
+    ]},
+    { "id": "external", "boundary": "EXTERNAL SERVICES", "nodes": [
+      { "id": "search", "col": 2, "title": "SEARCH SERVICE", "code": "GET /search", "tone": "outer" },
+      { "id": "jobq", "col": 3, "title": "JOB QUEUE", "code": "POST /jobs", "tone": "outer" }
+    ]}
+  ],
+  "groups": [
+    { "id": "router", "label": "ROUTER" }
+  ],
+  "edges": [
+    { "from": "client", "to": "classifier", "label": "POST /v1/ask", "lane": "left" },
+    { "from": "classifier", "to": "client", "label": "{status, answer, links}", "lane": "right",
+      "label_by_path": { "simple": "200 · status: done", "lookup": "200 · done + links", "job": "202 · status_url" } },
+    { "from": "classifier", "to": "simple", "label": "simple" },
+    { "from": "classifier", "to": "lookup", "label": "lookup" },
+    { "from": "classifier", "to": "job", "label": "job" },
+    { "from": "lookup", "to": "search", "label": "query" },
+    { "from": "job", "to": "jobq", "label": "enqueue" }
+  ],
+  "paths": [
+    { "id": "simple", "label": "Simple answer", "nodes": ["client", "classifier", "simple"],
+      "caption": "**Simple answer** — the FAQ handler answers from data the router already has, then caches it. No external calls." },
+    { "id": "lookup", "label": "Needs a lookup", "nodes": ["client", "classifier", "lookup", "search"],
+      "caption": "**Needs a lookup** — the router queries the search service and summarizes the top hits into one line." },
+    { "id": "job", "label": "Long-running job", "nodes": ["client", "classifier", "job", "jobq"],
+      "caption": "**Long-running job** — the work is queued and the client gets `202` with a `status_url` to poll." }
+  ],
+  "caption": "The client never chooses a path. The **classifier** routes every request; only the lookup and job paths leave the router."
+}
+</script>
+
+<script>
+(() => {
+  const doc = JSON.parse(document.getElementById('iad-data').textContent);
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('dg');
+  const el = (tag, attrs = {}, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+
+  // ---- layout constants: a 3-column grid, layers stacked top to bottom ----
+  const W = 880, PAD = 48, COLS = 3, GAP = 40;
+  const colW = (W - PAD * 2 - GAP * (COLS - 1)) / COLS;
+  const colX = c => PAD + (c - 1) * (colW + GAP);
+  const NODE_H = 64, ROW_H = 30, HEAD_H = 40, LAYER_GAP = 108;
+
+  const nodes = {};
+  let y = 28;
+  const groupSpans = {};
+  const boundaries = [];
+  doc.layers.forEach((layer, li) => {
+    if (layer.boundary) { boundaries.push({ y: y - LAYER_GAP / 2 + 6, label: layer.boundary }); }
+    let col = 1, layerH = NODE_H;
+    for (const n of layer.nodes) {
+      const span = n.span || 1;
+      const c = n.col || col;
+      const h = n.rows ? HEAD_H + 12 + n.rows.length * (ROW_H + 6) + 6 : NODE_H;
+      layerH = Math.max(layerH, h);
+      nodes[n.id] = { ...n, x: colX(c), y, w: colW * span + GAP * (span - 1), h };
+      col = c + span;
+    }
+    if (layer.group) {
+      const g = groupSpans[layer.group] ||= { top: y, bottom: 0 };
+      g.bottom = y + layerH;
+    }
+    y += layerH + LAYER_GAP;
+  });
+  const H = y - LAYER_GAP + 28;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  // ---- groups (Temporal style dashed box) and boundaries (Convex style dotted line) ----
+  const rails = boundaries.map(b => b.y);
+  for (const g of doc.groups) {
+    const s = groupSpans[g.id];
+    rails.push(s.top - 36, s.bottom + 24);
+    const gg = el('g', { class: 'group' }, svg);
+    el('rect', { x: 24, y: s.top - 36, width: W - 48, height: s.bottom - s.top + 60, rx: 12 }, gg);
+    const label = el('text', { x: 40, y: s.top - 14 }, gg); label.textContent = g.label;
+  }
+  for (const b of boundaries) {
+    const bg = el('g', { class: 'boundary' }, svg);
+    el('line', { x1: 24, x2: W - 24, y1: b.y, y2: b.y }, bg);
+    const t = el('text', { x: 24, y: b.y + 20 }, bg); t.textContent = b.label;
+  }
+
+  // ---- edges (drawn before nodes so nodes sit on top) ----
+  const edgeEls = [];
+  const pillW = s => s.length * 7.4 + 20;
+  for (const e of doc.edges) {
+    const a = nodes[e.from], b = nodes[e.to];
+    const up = a.y > b.y;
+    const top = up ? b : a, bot = up ? a : b;
+    const narrow = top.w <= bot.w ? top : bot;
+    let x = narrow.x + narrow.w / 2;
+    if (e.lane === 'left') x -= 90;
+    if (e.lane === 'right') x += 90;
+    const y1 = top.y + top.h, y2 = bot.y;
+    const g = el('g', { class: 'edge' }, svg);
+    el('path', { d: `M${x},${y1} V${y2}` }, g);
+    const ay = up ? y1 : y2;
+    const dir = up ? 1 : -1;
+    el('path', { class: 'arrow', d: `M${x - 5},${ay + dir * 8} L${x},${ay} L${x + 5},${ay + dir * 8} Z` }, g);
+    const pill = el('g', { class: 'pill' }, g);
+    // put the label in the longest stretch of the edge not crossed by a group border or boundary line
+    const cuts = [y1, ...rails.filter(r => r > y1 && r < y2).sort((p, q) => p - q), y2];
+    let best = [y1, y2], len = -1;
+    for (let i = 0; i < cuts.length - 1; i++) if (cuts[i + 1] - cuts[i] > len) { len = cuts[i + 1] - cuts[i]; best = [cuts[i], cuts[i + 1]]; }
+    const my = (best[0] + best[1]) / 2;
+    const rect = el('rect', { y: my - 12, height: 24, rx: 12 }, pill);
+    const text = el('text', { x, y: my + 4, 'text-anchor': 'middle' }, pill);
+    const setLabel = s => {
+      text.textContent = s;
+      const w = pillW(s);
+      rect.setAttribute('x', x - w / 2); rect.setAttribute('width', w);
+    };
+    setLabel(e.label);
+    edgeEls.push({ e, g, setLabel });
+  }
+
+  // ---- nodes ----
+  const nodeEls = {};
+  for (const n of Object.values(nodes)) {
+    const g = el('g', { class: 'node' + (n.tone === 'outer' ? ' outer' : '') + (n.rows ? ' card' : '') }, svg);
+    nodeEls[n.id] = g;
+    if (n.rows) {
+      el('rect', { class: 'box', x: n.x, y: n.y, width: n.w, height: n.h, rx: 8 }, g);
+      el('path', { class: 'head', d: `M${n.x},${n.y + HEAD_H} V${n.y + 8} a8,8 0 0 1 8,-8 H${n.x + n.w - 8} a8,8 0 0 1 8,8 V${n.y + HEAD_H} Z` }, g);
+      const t = el('text', { class: 'title head-text', x: n.x + 14, y: n.y + 25 }, g); t.textContent = n.title;
+      n.rows.forEach((r, i) => {
+        const ry = n.y + HEAD_H + 12 + i * (ROW_H + 6);
+        el('rect', { class: 'row', x: n.x + 12, y: ry, width: n.w - 24, height: ROW_H, rx: 6 }, g);
+        const rt = el('text', { class: 'rowtext', x: n.x + 24, y: ry + 19 }, g); rt.textContent = r;
+      });
+    } else {
+      el('rect', { class: 'box', x: n.x, y: n.y, width: n.w, height: n.h, rx: 10 }, g);
+      const t = el('text', { class: 'title', x: n.x + n.w / 2, y: n.y + 28, 'text-anchor': 'middle' }, g); t.textContent = n.title;
+      const c = el('text', { class: 'code', x: n.x + n.w / 2, y: n.y + 47, 'text-anchor': 'middle' }, g); c.textContent = n.code;
+    }
+  }
+
+  // ---- tabs + path highlight ----
+  const md = s => s.replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]))
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>');
+  const tabs = document.getElementById('tabs');
+  const caption = document.getElementById('caption');
+  const options = [{ id: null, label: 'Overview' }, ...doc.paths];
+  const select = id => {
+    const p = doc.paths.find(p => p.id === id);
+    svg.classList.toggle('has-path', !!p);
+    const on = new Set(p ? p.nodes : []);
+    for (const [nid, g] of Object.entries(nodeEls)) g.classList.toggle('on', on.has(nid));
+    for (const { e, g, setLabel } of edgeEls) {
+      g.classList.toggle('on', on.has(e.from) && on.has(e.to));
+      setLabel(p && e.label_by_path?.[p.id] || e.label);
+    }
+    caption.innerHTML = md(p ? p.caption : doc.caption);
+    [...tabs.children].forEach(b => b.setAttribute('aria-selected', String(b.dataset.id === String(id))));
+  };
+  for (const o of options) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.role = 'tab'; b.textContent = o.label; b.dataset.id = String(o.id);
+    b.onclick = () => { select(o.id); try { history.replaceState(null, '', o.id ? '#' + o.id : location.pathname); } catch {} };
+    tabs.appendChild(b);
+  }
+
+  document.getElementById('title').textContent = doc.meta.title;
+  document.getElementById('subtitle').textContent = doc.meta.subtitle;
+  document.getElementById('irsrc').textContent = JSON.stringify(doc, null, 2);
+  const root = document.documentElement;
+  const themeBtn = document.getElementById('theme');
+  const syncThemeButton = () => {
+    const label = root.dataset.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+    themeBtn.setAttribute('aria-label', label);
+    themeBtn.setAttribute('title', label);
+  };
+  themeBtn.onclick = () => {
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('iad-theme', root.dataset.theme); } catch {}
+    syncThemeButton();
+  };
+  // follow the OS until the reader picks a theme
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', e => {
+    let saved = null;
+    try { saved = localStorage.getItem('iad-theme'); } catch {}
+    if (saved) return;
+    root.dataset.theme = e.matches ? 'dark' : 'light';
+    syncThemeButton();
+  });
+  syncThemeButton();
+  const initial = location.hash.slice(1);
+  select(doc.paths.some(p => p.id === initial) ? initial : null);
+})();
+</script>
+</html>
