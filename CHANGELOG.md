@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.2.0 — 2026-10-15
+
 - Two document styles. **Walkthrough** is the existing step-by-step document for tech specs and design
   reviews, and stays the default. **Overview** is new: one layered diagram for product docs, feature pages and
   READMEs, with tabs that highlight a path through the same layout (`doc.html#<path-id>` opens one), a caption
