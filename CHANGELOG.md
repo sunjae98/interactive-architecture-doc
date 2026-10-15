@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Two document styles. **Walkthrough** is the existing step-by-step document for tech specs and design
+  reviews, and stays the default. **Overview** is new: one layered diagram for product docs, feature pages and
+  READMEs, with tabs that highlight a path through the same layout (`doc.html#<path-id>` opens one), a caption
+  per view, and export of the diagram itself as SVG, PNG or a clipboard image.
+- `meta.style` (`walkthrough` | `overview`) selects the format; documents without it render as before.
+  Overview format: `references/format-overview.md`, example: `examples/request-router.overview.*.json`.
+- `iad init --style overview [--paths a,b]` writes an overview skeleton. Walkthrough-only options
+  (`--steps`, `--scenarios`, `--fork`) and the overview-only `--paths` are rejected for the other style.
+- New rule codes: `E_STYLE`, and for overview documents `E_NODE_UNKNOWN`, `E_PATH_UNKNOWN`,
+  `E_GROUP_UNKNOWN`, `E_LAYOUT`, `E_EDGE_LAYER`, `E_EDGE_ALIGN`, `W_TEXT_LONG`, `W_PATH_DISCONNECTED`.
+- `SKILL.md` starts by picking the style from the request, and asks once when the request does not say.
+- The overview self-check (`#iad-selfcheck`) checks each path's highlight, edge labels and page overflow.
+- READMEs describe both styles, with Overview screenshots.
+
 ## 2.1.0 — 2026-10-13
 
 - Self-check mode: open a rendered page with `#iad-selfcheck` (or call `window.iadSelfCheck()`) to replay

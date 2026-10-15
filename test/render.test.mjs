@@ -30,7 +30,8 @@ function countBlocks(blocks, type) {
   return n;
 }
 
-const exampleFiles = readdirSync(EXAMPLES).filter((f) => f.endsWith(".json"));
+// walkthrough examples; overview examples are covered by test/overview.test.mjs
+const exampleFiles = readdirSync(EXAMPLES).filter((f) => f.endsWith(".json") && load(f).meta.style !== "overview");
 
 test("template: no hardcoded colors outside :root and theme blocks", () => {
   const src = readFileSync(TEMPLATE_PATH, "utf8");

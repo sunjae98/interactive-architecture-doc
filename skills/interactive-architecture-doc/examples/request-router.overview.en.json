@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "style": "overview",
+    "title": "Request Router",
+    "subtitle": "One endpoint. The router picks one of three paths and always returns the same envelope.",
+    "lang": "en"
+  },
+  "layers": [
+    { "nodes": [
+      { "id": "client", "title": "CLIENT", "code": "web · mobile · CLI", "span": 3, "tone": "outer" }
+    ]},
+    { "group": "router", "nodes": [
+      { "id": "classifier", "title": "Classifier", "code": "rules-v2 → model fallback", "span": 3 }
+    ]},
+    { "group": "router", "nodes": [
+      { "id": "simple", "title": "FAQ handler", "rows": ["faq_handler.answer()", "cache.set()"] },
+      { "id": "lookup", "title": "Search + summarize", "rows": ["search.query()", "summarizer.run()"] },
+      { "id": "job", "title": "Background job", "rows": ["jobs.enqueue()", "status_store.put()"] }
+    ]},
+    { "boundary": "EXTERNAL SERVICES", "nodes": [
+      { "id": "search", "col": 2, "title": "SEARCH SERVICE", "code": "GET /search", "tone": "outer" },
+      { "id": "jobq", "col": 3, "title": "JOB QUEUE", "code": "POST /jobs", "tone": "outer" }
+    ]}
+  ],
+  "groups": [
+    { "id": "router", "label": "ROUTER" }
+  ],
+  "edges": [
+    { "from": "client", "to": "classifier", "label": "POST /v1/ask" },
+    { "from": "classifier", "to": "client", "label": "{status, answer, links}",
+      "label_by_path": { "simple": "200 · status: done", "lookup": "200 · done + links", "job": "202 · status_url" } },
+    { "from": "classifier", "to": "simple", "label": "simple" },
+    { "from": "classifier", "to": "lookup", "label": "lookup" },
+    { "from": "classifier", "to": "job", "label": "job" },
+    { "from": "lookup", "to": "search", "label": "query" },
+    { "from": "job", "to": "jobq", "label": "enqueue" }
+  ],
+  "paths": [
+    { "id": "simple", "label": "Simple answer", "nodes": ["client", "classifier", "simple"],
+      "caption": "**Simple answer**: the FAQ handler answers from data the router already has, then caches it. No external calls." },
+    { "id": "lookup", "label": "Needs a lookup", "nodes": ["client", "classifier", "lookup", "search"],
+      "caption": "**Needs a lookup**: the router queries the search service and summarizes the top hits into one line." },
+    { "id": "job", "label": "Long-running job", "nodes": ["client", "classifier", "job", "jobq"],
+      "caption": "**Long-running job**: the work is queued and the client gets `202` with a `status_url` to poll." }
+  ],
+  "caption": "The client never chooses a path. The **classifier** routes every request; only the lookup and job paths leave the router."
+}

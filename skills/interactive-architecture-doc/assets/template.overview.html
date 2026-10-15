@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="{{IAD_LANG}}">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="{{IAD_CSP}}">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="interactive-architecture-doc">
+<title>{{IAD_TITLE}}</title>
+<script>
+// Theme before first paint (no flash): the saved choice, else the OS preference. localStorage can
+// throw on file:// (blocked storage), so every access is guarded.
+(function () {
+  var theme = null;
+  try { theme = localStorage.getItem("iad-theme"); } catch (e) { /* storage unavailable */ }
+  if (theme !== "light" && theme !== "dark") {
+    theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  document.documentElement.setAttribute("data-theme", theme);
+})();
+</script>
+<script>
+// Page errors from load onward, read by the self-check (#iad-selfcheck). Capped so a noisy page stays small.
+(function () {
+  var errors = window.__iadErrors = [];
+  function add(type, message) { if (errors.length < 50) errors.push({ type: type, message: String(message) }); }
+  window.addEventListener("error", function (e) {
+    add("error", (e.message || "error") + (e.filename ? " @ " + e.filename + ":" + e.lineno : ""));
+  });
+  window.addEventListener("unhandledrejection", function (e) {
+    var r = e.reason;
+    add("unhandledrejection", r && r.message ? r.message : r);
+  });
+  document.addEventListener("securitypolicyviolation", function (e) {
+    add("csp", e.violatedDirective + " blocked " + (e.blockedURI || "inline"));
+  });
+})();
+</script>
+{{IAD_FONTS}}
+<style>
+  /* ==== Design tokens ======================================================
+     Overview style. The ONLY place colors may appear; component CSS and JS reference tokens.
+     Same sources as the walkthrough template: Radix Colors 3.0.0 (MIT) slate and blue,
+     Primer Primitives 11.10.0 (MIT) shadows. One accent (blue) marks the highlighted path. */
+  :root{
+    color-scheme:light;
+    --color-bg:#f9f9fb;             /* slate 2 */
+    --color-surface:#fcfcfd;        /* slate 1 */
+    --color-surface-2:#f0f0f3;      /* slate 3 */
+    --color-border:#d9d9e0;         /* slate 6 */
+    --color-text:#1c2024;           /* slate 12 */
+    --color-text-muted:#60646c;     /* slate 11 */
+    --color-primary:#0090ff;        /* blue 9 */
+    --color-primary-bg:#e6f4fe;     /* blue 3 */
+    --color-primary-text:#113264;   /* blue 12 (blue 11 is 4.25:1 on blue 3) */
+    --color-error:#cb1d63;          /* crimson 11 */
+    --line:#b9bbc6;                 /* slate 8 */
+
+    /* nodes outside the system (tone: outer) are solid: dark on light, light on dark */
+    --outer-bg:#1c2024;             /* slate 12 */
+    --outer-text:#fcfcfd;           /* slate 1 */
+    --outer-text-muted:#b9bbc6;     /* slate 8 */
+
+    --font-sans:"IAD Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    --font-mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+
+    --shadow-panel:0 0 0 1px #d1d9e040,0 6px 12px -3px #25292e0a,0 6px 18px 0 #25292e1f; /* shadow-floating-small */
+  }
+  [data-theme="dark"]{
+    color-scheme:dark;
+    --color-bg:#111113;             /* slate dark 1 */
+    --color-surface:#18191b;        /* slate dark 2 */
+    --color-surface-2:#212225;      /* slate dark 3 */
+    --color-border:#363a3f;         /* slate dark 6 */
+    --color-text:#edeef0;           /* slate dark 12 */
+    --color-text-muted:#b0b4ba;     /* slate dark 11 */
+    --color-primary-bg:#0d2847;     /* blue dark 3 */
+    --color-primary-text:#70b8ff;   /* blue dark 11 */
+    --color-error:#ff92ad;          /* crimson dark 11 */
+    --line:#5a6169;                 /* slate dark 8 */
+    --outer-bg:#edeef0;             /* slate dark 12 */
+    --outer-text:#111113;           /* slate dark 1 */
+    --outer-text-muted:#60646c;     /* slate 11 */
+    --shadow-panel:0 0 0 1px #3d444d,0 6px 12px -3px #01040966,0 6px 18px 0 #01040966; /* shadow-floating-small (dark) */
+  }
+
+  /* ==== Page ============================================================== */
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .ov-page{max-width:960px;margin:0 auto;padding:40px 16px 64px;display:flex;flex-direction:column;gap:16px;}
+  .ov-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
+  .ov-header h1{font-size:20px;margin:0 0 4px;letter-spacing:-.01em;text-wrap:balance;}
+  .ov-header .subtitle{margin:0;color:var(--color-text-muted);font-size:14px;line-height:1.5;}
+  code.ic{font-family:var(--font-mono);font-size:.92em;}
+
+  /* Theme toggle: same icon button as the walkthrough template. Shows the theme you switch to. */
+  .theme-toggle{
+    flex:none;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;padding:0;
+    border:1px solid var(--color-border);border-radius:9999px;
+    background:var(--color-surface);color:var(--color-text);box-shadow:var(--shadow-panel);cursor:pointer;
+  }
+  .theme-toggle:hover{background:var(--color-surface-2);}
+  .theme-toggle:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px;}
+  .theme-toggle svg{width:18px;height:18px;display:block;}
+  .theme-toggle .icon-sun{display:none;}
+  [data-theme="dark"] .theme-toggle .icon-sun{display:block;}
+  [data-theme="dark"] .theme-toggle .icon-moon{display:none;}
+
+  .ov-tabs{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;align-self:flex-start;max-width:100%;
+    border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);}
+  .ov-tab{border:0;background:transparent;color:var(--color-text-muted);font:inherit;font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;}
+  .ov-tab[aria-selected="true"]{background:var(--color-surface);color:var(--color-text);box-shadow:0 0 0 1px var(--color-border);}
+  .ov-tab:focus-visible{outline:2px solid var(--color-primary);outline-offset:1px;}
+
+  .ov-figure{margin:0;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface);padding:8px;overflow-x:auto;}
+  .ov-figure > .ov-diagram{display:block;width:100%;min-width:640px;height:auto;}
+  .ov-caption{margin:0 2px;color:var(--color-text-muted);font-size:14px;line-height:1.55;max-width:72ch;}
+  .ov-caption b{color:var(--color-text);font-weight:600;}
+
+  .ov-export{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;color:var(--color-text-muted);}
+  .ov-export-title{font-weight:600;}
+  .ov-btn{border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text);font:inherit;font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;}
+  .ov-btn:hover{background:var(--color-surface-2);}
+  .ov-btn:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px;}
+  .ov-btn:disabled{opacity:.5;cursor:default;}
+  .ov-export-status{min-height:1.5em;}
+  .ov-export-status[data-state="error"]{color:var(--color-error);}
+
+  /* ==== Diagram ===========================================================
+     Every rule starts with .ov-diagram: the export copies exactly these rules into the SVG file.
+     Text sizes match TEXT in scripts/lib/layout.mjs (used to warn about overflow). */
+  .ov-diagram .ov-box{fill:var(--color-surface);stroke:var(--color-border);stroke-width:1;}
+  .ov-diagram .ov-outer .ov-box{fill:var(--outer-bg);stroke:none;}
+  .ov-diagram .ov-title{font:600 15px var(--font-sans);fill:var(--color-text);}
+  .ov-diagram .ov-outer .ov-title{fill:var(--outer-text);font-family:var(--font-mono);letter-spacing:.04em;}
+  .ov-diagram .ov-code{font:12px var(--font-mono);fill:var(--color-text-muted);}
+  .ov-diagram .ov-outer .ov-code{fill:var(--outer-text-muted);}
+  .ov-diagram .ov-head{fill:var(--color-surface-2);stroke:var(--color-border);}
+  .ov-diagram .ov-row{fill:var(--color-surface-2);}
+  .ov-diagram .ov-row-text{fill:var(--color-text);}
+  .ov-diagram .ov-line{fill:none;stroke:var(--line);stroke-width:1.5;}
+  .ov-diagram .ov-arrow{fill:var(--line);}
+  .ov-diagram .ov-pill rect{fill:var(--color-surface-2);stroke:var(--color-border);}
+  .ov-diagram .ov-pill text{font:600 12px var(--font-mono);fill:var(--color-text);}
+  .ov-diagram .ov-group rect{fill:none;stroke:var(--line);stroke-width:1;stroke-dasharray:5 4;}
+  .ov-diagram .ov-label{font:600 11px var(--font-mono);fill:var(--color-text-muted);letter-spacing:.08em;}
+  .ov-diagram .ov-boundary line{stroke:var(--line);stroke-width:1.5;stroke-dasharray:2 5;stroke-linecap:round;}
+  /* path highlight: same layout, only the selected path is colored */
+  .ov-diagram .ov-node,.ov-diagram .ov-edge{transition:opacity .2s;}
+  .ov-diagram.has-path .ov-node:not(.on),.ov-diagram.has-path .ov-edge:not(.on){opacity:.28;}
+  .ov-diagram.has-path .ov-edge.on .ov-line{stroke:var(--color-primary);stroke-width:2;}
+  .ov-diagram.has-path .ov-edge.on .ov-arrow{fill:var(--color-primary);}
+  .ov-diagram.has-path .ov-edge.on .ov-pill rect{fill:var(--color-primary-bg);stroke:var(--color-primary);}
+  .ov-diagram.has-path .ov-edge.on .ov-pill text{fill:var(--color-primary-text);}
+  .ov-diagram.has-path .ov-node.on:not(.ov-outer) .ov-box{stroke:var(--color-primary);stroke-width:1.5;}
+  .ov-diagram.has-path .ov-card.on .ov-head{fill:var(--color-primary-bg);stroke:var(--color-primary);}
+  .ov-diagram.has-path .ov-card.on .ov-head-text{fill:var(--color-primary-text);}
+  @media (prefers-reduced-motion:reduce){.ov-diagram .ov-node,.ov-diagram .ov-edge{transition:none;}}
+
+  /* ==== Self-check (#iad-selfcheck): result stays in the DOM for tools, hidden from view ==== */
+  #iad-selfcheck-result{
+    position:absolute;left:0;top:0;width:1px;height:1px;margin:0;padding:0;border:0;
+    overflow:hidden;clip-path:inset(50%);white-space:pre;
+  }
+</style>
+</head>
+<body>
+<main class="ov-page">
+<header class="ov-header">
+<div>
+{{IAD_HEADER}}
+</div>
+<button class="theme-toggle" id="pgTheme" type="button" aria-label="{{t:theme_to_dark}}" title="{{t:theme_to_dark}}">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+</button>
+</header>
+{{IAD_OV_TABS}}
+<figure class="ov-figure">
+{{IAD_OV_DIAGRAM}}
+</figure>
+{{IAD_OV_CAPTIONS}}
+<div class="ov-export">
+  <span class="ov-export-title">{{t:export_title}}</span>
+  <button class="ov-btn" id="pgExportPng" type="button">{{t:export_png}}</button>
+  <button class="ov-btn" id="pgExportSvg" type="button">{{t:export_svg}}</button>
+  <button class="ov-btn" id="pgExportCopy" type="button">{{t:export_copy}}</button>
+  <span class="ov-export-status" id="pgExportStatus" role="status" aria-live="polite"></span>
+</div>
+</main>
+<script type="application/json" id="iad-data">{{IAD_DATA}}</script>
+<script type="application/json" id="iad-i18n">{{IAD_I18N}}</script>
+<script>
+// ---- Overview runtime: path highlight, captions, theme, export, self-check.
+// Everything comes from #iad-data (the IR), #iad-i18n (UI strings) and the static SVG; nothing to edit here.
+(function () {
+  var DOC = JSON.parse(document.getElementById("iad-data").textContent);
+  var UI = JSON.parse(document.getElementById("iad-i18n").textContent);
+  var PATHS = DOC.paths || [];
+  var PATH_IDS = PATHS.map(function (p) { return p.id; });
+  var svg = document.getElementById("ovDiagram");
+  var current = "";
+
+  // ---- BEGIN pure helpers (no DOM access; test/runtime.test.mjs runs this block in node:vm) ----
+  var EXPORT_MAX_PIXELS = 16000000;  // ~16MP canvas area cap (Safari's limit)
+  var EXPORT_MAX_SIDE = 16384;       // per-side canvas cap shared by current browsers
+
+  // UI string with {name} placeholders filled; unknown placeholders are kept as-is.
+  function t(key, params) {
+    return String(UI[key]).replace(/\{(\w+)\}/g, function (m, name) {
+      return params && Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : m;
+    });
+  }
+
+  // "#lookup" -> "lookup" when it is a path id, else "" (the overview).
+  function pathFromHash(hash, ids) {
+    var id = String(hash || "").replace(/^#/, "");
+    return ids.indexOf(id) >= 0 ? id : "";
+  }
+
+  // Which label of an edge is visible: the selected path's own variant, else the default label.
+  // labels: the data-for value of each pill ("" for the default). Returns the index to show, or -1.
+  function visibleLabel(labels, pathId) {
+    var own = pathId ? labels.indexOf(pathId) : -1;
+    return own >= 0 ? own : labels.indexOf("");
+  }
+
+  function sanitizeFilePart(s) {
+    return String(s)
+      .replace(/[\u0000-\u001f\u007f<>:"\/\\|?*]+/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-{2,}/g, "-")
+      .replace(/^[-.]+|[-.]+$/g, "")
+      .slice(0, 80);
+  }
+
+  // Canvas scale: 2x for crisp docs images, shrunk to the canvas area / side caps.
+  function exportScale(w, h) {
+    return Math.min(2, Math.sqrt(EXPORT_MAX_PIXELS / (w * h)), EXPORT_MAX_SIDE / Math.max(w, h));
+  }
+
+  // One path (or the overview, id "") as observed in the DOM -> failures.
+  // obs: {members, on[], edgesOn, labels[{edge, visible}], overflow}
+  function judgePath(id, obs, out) {
+    function add(check, detail) { out.push({ path: id, check: check, detail: detail }); }
+    obs.members.forEach(function (n) { if (obs.on.indexOf(n) < 0) add("path-nodes", n + " is not highlighted"); });
+    if (obs.members.length > 1 && obs.edgesOn === 0) add("path-edges", "no edge is highlighted");
+    obs.labels.forEach(function (l) { if (l.visible !== 1) add("edge-label", l.edge + " shows " + l.visible + " labels"); });
+    if (obs.overflow) add("overflow", "the page scrolls horizontally");
+  }
+  // ---- END pure helpers ----
+
+  var nodeEls = Array.prototype.slice.call(svg.querySelectorAll("[data-node]"));
+  var edgeEls = Array.prototype.slice.call(svg.querySelectorAll(".ov-edge"));
+  var tabEls = Array.prototype.slice.call(document.querySelectorAll(".ov-tab"));
+  var captionEls = Array.prototype.slice.call(document.querySelectorAll("[data-caption]"));
+
+  function select(id) {
+    var path = null;
+    PATHS.forEach(function (p) { if (p.id === id) path = p; });
+    current = path ? path.id : "";
+    var members = path ? path.nodes : [];
+    svg.classList.toggle("has-path", !!path);
+    nodeEls.forEach(function (el) { el.classList.toggle("on", members.indexOf(el.getAttribute("data-node")) >= 0); });
+    edgeEls.forEach(function (el) {
+      var on = members.indexOf(el.getAttribute("data-from")) >= 0 && members.indexOf(el.getAttribute("data-to")) >= 0;
+      el.classList.toggle("on", on);
+      var pills = Array.prototype.slice.call(el.querySelectorAll(".ov-pill"));
+      var show = visibleLabel(pills.map(function (p) { return p.getAttribute("data-for") || ""; }), current);
+      pills.forEach(function (p, i) {
+        if (i === show) p.removeAttribute("display"); else p.setAttribute("display", "none");
+      });
+    });
+    tabEls.forEach(function (b) {
+      var sel = (b.getAttribute("data-path") || "") === current;
+      b.setAttribute("aria-selected", String(sel));
+      b.setAttribute("tabindex", sel ? "0" : "-1");
+    });
+    var own = captionEls.some(function (c) { return c.getAttribute("data-caption") === current; });
+    captionEls.forEach(function (c) { c.hidden = c.getAttribute("data-caption") !== (own ? current : ""); });
+  }
+
+  tabEls.forEach(function (b, i) {
+    b.addEventListener("click", function () {
+      var id = b.getAttribute("data-path") || "";
+      select(id);
+      try { history.replaceState(null, "", id ? "#" + id : location.pathname + location.search); } catch (e) { /* file:// in some browsers */ }
+    });
+    b.addEventListener("keydown", function (e) {
+      var d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      var next = tabEls[(i + d + tabEls.length) % tabEls.length];
+      next.focus();
+      next.click();
+    });
+  });
+  window.addEventListener("hashchange", function () {
+    if (location.hash !== "#iad-selfcheck") select(pathFromHash(location.hash, PATH_IDS));
+  });
+  select(pathFromHash(location.hash, PATH_IDS));
+
+  // ---- Theme toggle: flips data-theme on <html> (set early in <head>) and remembers the choice.
+  // Without a saved choice the page keeps following the OS preference.
+  var themeBtn = document.getElementById("pgTheme");
+  var rootEl = document.documentElement;
+  function syncThemeButton() {
+    var label = t(rootEl.getAttribute("data-theme") === "dark" ? "theme_to_light" : "theme_to_dark");
+    themeBtn.setAttribute("aria-label", label);
+    themeBtn.setAttribute("title", label);
+  }
+  function savedTheme() {
+    try { return localStorage.getItem("iad-theme"); } catch (e) { return null; }
+  }
+  themeBtn.addEventListener("click", function () {
+    var next = rootEl.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    rootEl.setAttribute("data-theme", next);
+    try { localStorage.setItem("iad-theme", next); } catch (e) { /* not persisted on this page */ }
+    syncThemeButton();
+  });
+  if (window.matchMedia) {
+    var darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    var onSchemeChange = function (e) {
+      if (savedTheme()) return;
+      rootEl.setAttribute("data-theme", e.matches ? "dark" : "light");
+      syncThemeButton();
+    };
+    if (darkQuery.addEventListener) darkQuery.addEventListener("change", onSchemeChange);
+    else if (darkQuery.addListener) darkQuery.addListener(onSchemeChange);
+  }
+  syncThemeButton();
+
+  // ---- Self-check: shows the overview and every path, and reports what it saw.
+  // The result is JSON in <pre id="iad-selfcheck-result" data-state="pass|fail"> and one console line.
+  function observe(id) {
+    var path = null;
+    PATHS.forEach(function (p) { if (p.id === id) path = p; });
+    return {
+      members: path ? path.nodes : [],
+      on: nodeEls.filter(function (el) { return el.classList.contains("on"); }).map(function (el) { return el.getAttribute("data-node"); }),
+      edgesOn: edgeEls.filter(function (el) { return el.classList.contains("on"); }).length,
+      labels: edgeEls.filter(function (el) { return el.querySelector(".ov-pill"); }).map(function (el) {
+        return {
+          edge: el.getAttribute("data-from") + "->" + el.getAttribute("data-to"),
+          visible: Array.prototype.filter.call(el.querySelectorAll(".ov-pill"), function (p) { return p.getAttribute("display") !== "none"; }).length
+        };
+      }),
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+    };
+  }
+  function selfCheck() {
+    return new Promise(function (resolve) {
+      if (document.readyState === "complete") resolve(); else window.addEventListener("load", function () { resolve(); });
+    }).then(function () { return document.fonts && document.fonts.ready; }).then(function () {
+      var saved = current;
+      var failures = [];
+      [""].concat(PATH_IDS).forEach(function (id) {
+        select(id);
+        judgePath(id, observe(id), failures);
+      });
+      select(saved);
+      var errors = (window.__iadErrors || []).slice();
+      var result = { ok: !failures.length && !errors.length, checked: PATH_IDS.length + 1, paths: PATH_IDS.length, failures: failures, errors: errors };
+      var json = JSON.stringify(result);
+      var pre = document.getElementById("iad-selfcheck-result");
+      if (!pre) {
+        pre = document.createElement("pre");
+        pre.id = "iad-selfcheck-result";
+        document.body.appendChild(pre);
+      }
+      pre.textContent = json;
+      pre.setAttribute("data-state", result.ok ? "pass" : "fail");
+      console.log("IAD_SELFCHECK " + json);
+      return result;
+    });
+  }
+  window.iadSelfCheck = selfCheck;
+  function selfCheckFromHash() { if (location.hash === "#iad-selfcheck") selfCheck(); }
+  window.addEventListener("hashchange", selfCheckFromHash);
+  selfCheckFromHash();
+
+  // ---- Export: the diagram in its current view (theme + selected path) as PNG, SVG or a clipboard
+  // image. The SVG is a copy of the live one with the .ov-diagram rules, the embedded fonts and the
+  // current token values inlined, so it renders the same anywhere (docs sites, image viewers).
+  var exportPngBtn = document.getElementById("pgExportPng");
+  var exportSvgBtn = document.getElementById("pgExportSvg");
+  var exportCopyBtn = document.getElementById("pgExportCopy");
+  var exportStatusEl = document.getElementById("pgExportStatus");
+
+  function setExportStatus(text, isError) {
+    exportStatusEl.textContent = text;
+    if (isError) exportStatusEl.setAttribute("data-state", "error");
+    else exportStatusEl.removeAttribute("data-state");
+  }
+  function setExportBusy(busy) {
+    [exportPngBtn, exportSvgBtn, exportCopyBtn].forEach(function (b) { b.disabled = busy; });
+    if (busy) setExportStatus(t("export_busy"), false);
+  }
+  function errorReason(e) {
+    if (!e) return "?";
+    return e.name && e.name !== "Error" ? e.name : (e.message || String(e));
+  }
+
+  function buildExport() {
+    var css = [];
+    var tokens = {};
+    Array.prototype.forEach.call(document.styleSheets, function (sheet) {
+      var rules;
+      try { rules = sheet.cssRules; } catch (e) { return; } // unreadable sheet: skip
+      Array.prototype.forEach.call(rules || [], function (rule) {
+        var sel = rule.selectorText || "";
+        if (rule.type === 5) css.push(rule.cssText); // @font-face
+        else if (/^:root$|\[data-theme/.test(sel)) {
+          for (var i = 0; i < rule.style.length; i++) if (rule.style[i].indexOf("--") === 0) tokens[rule.style[i]] = true;
+        } else if (sel.indexOf(".ov-diagram") === 0 && sel.indexOf(".ov-figure") < 0) css.push(rule.cssText);
+      });
+    });
+    var live = getComputedStyle(rootEl);
+    var decl = "";
+    Object.keys(tokens).forEach(function (name) {
+      var v = live.getPropertyValue(name).trim();
+      if (v) decl += name + ":" + v + ";";
+    });
+    var vb = svg.viewBox.baseVal;
+    var clone = svg.cloneNode(true);
+    clone.removeAttribute("id");
+    clone.setAttribute("width", vb.width);
+    clone.setAttribute("height", vb.height);
+    clone.setAttribute("style", decl);
+    var ns = "http://www.w3.org/2000/svg";
+    var styleEl = document.createElementNS(ns, "style");
+    styleEl.textContent = css.join("\n") + "\n.ov-diagram .ov-node,.ov-diagram .ov-edge{transition:none;}";
+    var bg = document.createElementNS(ns, "rect");
+    bg.setAttribute("width", "100%");
+    bg.setAttribute("height", "100%");
+    bg.setAttribute("style", "fill:var(--color-surface)");
+    clone.insertBefore(bg, clone.firstChild);
+    clone.insertBefore(styleEl, clone.firstChild);
+    var base = [sanitizeFilePart(DOC.meta.title), sanitizeFilePart(current || "overview")].filter(Boolean).join("-");
+    return { svg: new XMLSerializer().serializeToString(clone), width: vb.width, height: vb.height, base: base };
+  }
+
+  function renderPng(ex) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      function paint() {
+        try {
+          var s = exportScale(ex.width, ex.height);
+          var canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.floor(ex.width * s));
+          canvas.height = Math.max(1, Math.floor(ex.height * s));
+          var ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("no 2d context");
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(function (blob) {
+            if (blob) resolve(blob); else reject(new Error("toBlob returned null"));
+          }, "image/png");
+        } catch (e) {
+          reject(e);
+        }
+      }
+      img.onload = function () {
+        // decode() lets embedded fonts finish before the first draw (first-export font race)
+        if (img.decode) img.decode().then(paint, paint); else paint();
+      };
+      img.onerror = function () { reject(new Error("SVG image did not load")); };
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(ex.svg);
+    });
+  }
+
+  function saveBlob(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+  }
+
+  exportPngBtn.addEventListener("click", function () {
+    setExportBusy(true);
+    var name = "export.png";
+    Promise.resolve().then(function () {
+      var ex = buildExport();
+      name = ex.base + ".png";
+      return renderPng(ex);
+    }).then(function (blob) {
+      saveBlob(blob, name);
+      setExportBusy(false);
+      setExportStatus(t("export_saved", { file: name }), false);
+    }, function (e) {
+      setExportBusy(false);
+      setExportStatus(t("export_png_failed", { reason: errorReason(e) }), true);
+    });
+  });
+
+  exportSvgBtn.addEventListener("click", function () {
+    setExportBusy(true);
+    try {
+      var ex = buildExport();
+      saveBlob(new Blob([ex.svg], { type: "image/svg+xml" }), ex.base + ".svg");
+      setExportBusy(false);
+      setExportStatus(t("export_saved", { file: ex.base + ".svg" }), false);
+    } catch (e) {
+      setExportBusy(false);
+      setExportStatus(t("export_svg_failed", { reason: errorReason(e) }), true);
+    }
+  });
+
+  exportCopyBtn.addEventListener("click", function () {
+    if (!navigator.clipboard || !navigator.clipboard.write || typeof ClipboardItem === "undefined") {
+      setExportStatus(t("export_clip_unsupported"), true);
+      return;
+    }
+    // The ClipboardItem must be created synchronously inside the click (user activation, Safari),
+    // so it gets a promise for the PNG instead of the finished blob.
+    var png;
+    try { png = renderPng(buildExport()); } catch (e) { png = Promise.reject(e); }
+    png.catch(function () {}); // handled below; avoids an unhandled-rejection report
+    var write;
+    try {
+      write = navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    } catch (e) {
+      write = Promise.reject(e);
+    }
+    setExportBusy(true);
+    write.then(function () {
+      setExportBusy(false);
+      setExportStatus(t("export_copied"), false);
+    }, function (e) {
+      png.then(function () {
+        setExportBusy(false);
+        setExportStatus(t("export_clip_denied", { reason: errorReason(e) }), true);
+      }, function (pngError) {
+        setExportBusy(false);
+        setExportStatus(t("export_png_failed", { reason: errorReason(pngError) }), true);
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>

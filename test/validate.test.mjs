@@ -112,14 +112,84 @@ const FIXTURES = [
   ["W_ENTRY_NO_INPUT", (d) => { d.meta.entry_request = "POST /x"; }],
 ];
 
+// Overview style (`meta.style: "overview"`): a small valid document and its own fixtures.
+const OVERVIEW_BASE = {
+  meta: { style: "overview", title: "Base", lang: "en" },
+  layers: [
+    { nodes: [{ id: "client", title: "CLIENT", code: "app", span: 3, tone: "outer" }] },
+    { group: "sys", nodes: [{ id: "api", title: "API", code: "POST /x", span: 3 }] },
+    { group: "sys", nodes: [{ id: "a", title: "A", rows: ["a()"] }, { id: "b", title: "B", rows: ["b()"] }] },
+    { boundary: "EXTERNAL", nodes: [{ id: "db", col: 2, title: "DB", code: "sql", tone: "outer" }] },
+  ],
+  groups: [{ id: "sys", label: "SYSTEM" }],
+  edges: [
+    { from: "client", to: "api", label: "req" },
+    { from: "api", to: "client", label: "res", label_by_path: { pa: "200" } },
+    { from: "api", to: "a", label: "a" },
+    { from: "api", to: "b", label: "b" },
+    { from: "b", to: "db", label: "read" },
+  ],
+  paths: [
+    { id: "pa", label: "Path A", nodes: ["client", "api", "a"], caption: "**A** path" },
+    { id: "pb", label: "Path B", nodes: ["client", "api", "b", "db"] },
+  ],
+  caption: "Overview of `Base`.",
+};
+const ov = (code, mutate) => [code, mutate, OVERVIEW_BASE];
+
+const OVERVIEW_FIXTURES = [
+  ov("E_STYLE", (d) => { d.meta.style = "poster"; }),
+  ov("E_REQUIRED", (d) => { delete d.layers; }),
+  ov("E_UNKNOWN_KEY", (d) => { d.layers[0].nodes[0].kind = "client"; }),
+  ov("E_UNKNOWN_KEY", (d) => { d.board = []; }),
+  ov("E_ENUM", (d) => { d.layers[1].nodes[0].tone = "loud"; }),
+  ov("E_LANG", (d) => { d.meta.lang = "ja"; }),
+  ov("E_ID_FORMAT", (d) => { d.layers[1].nodes[0].id = "Api"; }),
+  ov("E_ID_FORMAT", (d) => { d.paths[0].id = "Path A"; delete d.edges[1].label_by_path; }),
+  ov("E_ID_DUPLICATE", (d) => { d.layers[2].nodes[1].id = "a"; }),
+  ov("E_ID_DUPLICATE", (d) => { d.groups.push({ id: "sys", label: "again" }); }),
+  ov("E_NODE_UNKNOWN", (d) => { d.edges[0].to = "nope"; }),
+  ov("E_NODE_UNKNOWN", (d) => { d.paths[0].nodes.push("ghost"); }),
+  ov("E_PATH_UNKNOWN", (d) => { d.edges[1].label_by_path.pz = "x"; }),
+  ov("E_GROUP_UNKNOWN", (d) => { d.layers[1].group = "other"; }),
+  ov("E_GROUP_UNKNOWN", (d) => { delete d.layers[2].group; d.layers[3].group = "sys"; }),
+  ov("E_LAYOUT", (d) => { d.meta.columns = 5; }),
+  ov("E_LAYOUT", (d) => { d.layers[2].nodes[1].col = 1; }),
+  ov("E_LAYOUT", (d) => { d.layers[1].nodes[0].span = 4; }),
+  ov("E_LAYOUT", (d) => { d.layers[0].boundary = "TOP"; }),
+  ov("E_LAYOUT", (d) => { d.layers[2].nodes[0].code = "x"; }),
+  ov("E_LAYOUT", (d) => { d.layers[2].nodes[0].tone = "outer"; }),
+  ov("E_EDGE_LAYER", (d) => { d.edges.push({ from: "client", to: "a" }); }),
+  ov("E_EDGE_LAYER", (d) => { d.edges.push({ from: "a", to: "b" }); }),
+  ov("E_EDGE_ALIGN", (d) => { d.edges.push({ from: "a", to: "db" }); }),
+  ov("W_TEXT_LONG", (d) => { d.layers[2].nodes[0].title = "A component name that is far too long for one column"; }),
+  ov("W_TEXT_LONG", (d) => { d.layers[2].nodes[0].rows = ["a_really_long_function_name_for_this_card()"]; }),
+  ov("W_TEXT_LONG", (d) => { d.edges[0].label = "a very long request label that runs into the response"; }),
+  ov("W_PATH_DISCONNECTED", (d) => { d.paths[0].nodes.push("db"); }),
+  ov("W_PLACEHOLDER", (d) => { d.caption = "[What the diagram shows]"; }),
+];
+
 test("base fixture is valid with no warnings", () => {
   const r = validate(clone(BASE));
   assert.deepEqual(r, { ok: true, errors: [], warnings: [] });
 });
 
-for (const [code, mutate] of FIXTURES) {
+test("overview base fixture is valid with no warnings", () => {
+  const r = validate(clone(OVERVIEW_BASE));
+  assert.deepEqual(r, { ok: true, errors: [], warnings: [] });
+});
+
+test("meta.style walkthrough is the default; an unknown style is E_STYLE for both formats", () => {
+  const d = clone(BASE);
+  d.meta.style = "walkthrough";
+  assert.deepEqual(validate(d), { ok: true, errors: [], warnings: [] });
+  d.meta.style = "poster";
+  assert.deepEqual(validate(d).errors.map((e) => e.code), ["E_STYLE"]);
+});
+
+for (const [code, mutate, base = BASE] of [...FIXTURES, ...OVERVIEW_FIXTURES]) {
   test(`fixture triggers ${code}: ${mutate.toString().slice(8, 70)}`, () => {
-    const doc = clone(BASE);
+    const doc = clone(base);
     mutate(doc);
     const r = validate(doc);
     const list = code.startsWith("E_") ? r.errors : r.warnings;
@@ -133,17 +203,17 @@ for (const [code, mutate] of FIXTURES) {
 }
 
 test("every rule code has at least one failing fixture", () => {
-  const covered = new Set(FIXTURES.map(([c]) => c));
+  const covered = new Set([...FIXTURES, ...OVERVIEW_FIXTURES].map(([c]) => c));
   const missing = RULES.map((r) => r.code).filter((c) => !covered.has(c));
   assert.deepEqual(missing, []);
 });
 
-test("RULES and the rule table in references/format.md match", () => {
-  const md = readFileSync(join(SKILL, "references/format.md"), "utf8");
+test("RULES and the rule tables in references/format.md + format-overview.md match", () => {
+  const md = ["format.md", "format-overview.md"].map((f) => readFileSync(join(SKILL, "references", f), "utf8")).join("\n");
   const rows = [...md.matchAll(/^\|\s*`([EW]_[A-Z_]+)`\s*\|\s*(error|warning)\s*\|/gm)].map((m) => `${m[1]}:${m[2]}`);
   const rules = RULES.map((r) => `${r.code}:${r.level}`);
   assert.deepEqual([...rows].sort(), [...rules].sort());
-  assert.equal(new Set(rows).size, rows.length, "duplicate rows in format.md");
+  assert.equal(new Set(rows).size, rows.length, "a rule is listed in both format files");
 });
 
 test("rule codes are prefixed by their level", () => {

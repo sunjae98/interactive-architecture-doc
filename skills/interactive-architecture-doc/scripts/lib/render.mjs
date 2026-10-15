@@ -6,12 +6,14 @@ import { readFileSync, writeFileSync, renameSync, unlinkSync, readdirSync, exist
 import { randomBytes, createHash } from "node:crypto";
 import { dirname, join, basename, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { validate, KINDS } from "./validate.mjs";
+import { validate, isOverview, KINDS } from "./validate.mjs";
 import { escapeHtml, inline, plainText, embedJson } from "./markup.mjs";
 import { uiStrings } from "./i18n.mjs";
+import { renderDiagram, renderTabs, renderCaptions } from "./overview.mjs";
 
 const SKILL_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const TEMPLATE_PATH = join(SKILL_DIR, "assets", "template.html");
+export const OVERVIEW_TEMPLATE_PATH = join(SKILL_DIR, "assets", "template.overview.html");
 export const FONTS_DIR = join(SKILL_DIR, "assets", "fonts");
 
 const SLOT_RE = /\{\{(IAD_[A-Z0-9_]+|t:[a-z0-9_]+)\}\}/g;
@@ -217,10 +219,14 @@ export function contentSecurityPolicy(template) {
 }
 
 // ---- public API -------------------------------------------------------------
-export function renderHtml(doc, { templatePath = TEMPLATE_PATH, fontsDir = FONTS_DIR } = {}) {
+// `meta.style` picks the template and the style-specific slots; the shared slots (language, title,
+// fonts, header, data, UI strings, CSP) are the same for both.
+export function renderHtml(doc, { templatePath, fontsDir = FONTS_DIR } = {}) {
   const result = validate(doc);
   if (!result.ok) throw new ValidationFailed(result);
 
+  const overview = isOverview(doc);
+  templatePath ??= overview ? OVERVIEW_TEMPLATE_PATH : TEMPLATE_PATH;
   const ui = uiStrings(doc.meta.lang || "en");
   const title = doc.meta.subtitle ? `${doc.meta.title} — ${plainText(doc.meta.subtitle)}` : doc.meta.title;
   const slots = {
@@ -228,13 +234,21 @@ export function renderHtml(doc, { templatePath = TEMPLATE_PATH, fontsDir = FONTS
     IAD_TITLE: escapeHtml(title),
     IAD_FONTS: fontFaces(fontsDir),
     IAD_HEADER: renderHeader(doc.meta),
-    IAD_TLDR: renderTldr(doc.tldr, ui),
-    IAD_STEPPER: renderStepper(doc.steps),
-    IAD_LEGEND: renderLegend(doc.legend),
-    IAD_BOARD: renderBlocks(doc.board),
-    IAD_SECTIONS: renderSections(doc),
     IAD_DATA: embedJson(doc),
     IAD_I18N: embedJson(ui),
+    ...(overview
+      ? {
+          IAD_OV_TABS: renderTabs(doc, ui),
+          IAD_OV_DIAGRAM: renderDiagram(doc),
+          IAD_OV_CAPTIONS: renderCaptions(doc),
+        }
+      : {
+          IAD_TLDR: renderTldr(doc.tldr, ui),
+          IAD_STEPPER: renderStepper(doc.steps),
+          IAD_LEGEND: renderLegend(doc.legend),
+          IAD_BOARD: renderBlocks(doc.board),
+          IAD_SECTIONS: renderSections(doc),
+        }),
   };
 
   // Single pass: substituted content is never re-scanned for slots.

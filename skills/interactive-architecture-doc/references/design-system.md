@@ -265,3 +265,30 @@ inside so agents and tools can verify a render without screenshots. Result forma
   `<pre id="iad-selfcheck-result" data-state="pass|fail">` created on demand (visually hidden with
   `clip-path`, still readable as text) and one `IAD_SELFCHECK {json}` console line. Without the hash
   nothing runs; setting the hash later (`hashchange`) runs it too.
+
+## Overview template
+
+`assets/template.overview.html` renders documents with `meta.style: "overview"`
+([format-overview.md](format-overview.md)). It shares the language, CSP, title, fonts, header, data
+and UI-string slots with the walkthrough template, and adds three of its own:
+
+| Slot | Filled with |
+|---|---|
+| `{{IAD_OV_TABS}}` | `.ov-tabs` with an "Overview" tab and one tab per path, or empty without paths |
+| `{{IAD_OV_DIAGRAM}}` | the whole diagram as inline `<svg class="ov-diagram">`, positions computed by `scripts/lib/layout.mjs` |
+| `{{IAD_OV_CAPTIONS}}` | one `.ov-caption` per view (`data-caption=""` for the overview, the path id otherwise) |
+
+The diagram is static SVG, so it needs no layout code in the browser. The runtime only toggles
+`.has-path` on the SVG and `.on` on the nodes and edges of the selected path. It also swaps edge labels
+(`data-for`), switches captions and runs the theme toggle, export and self-check.
+
+- **Tokens**: the same Radix slate and blue steps as the walkthrough, plus `--outer-*` for solid
+  "outside the system" nodes (dark on light, light on dark). There is one accent, blue, and it marks
+  the selected path. There is no kind palette or legend.
+- **Text metrics**: the font sizes in the `.ov-diagram` rules match `TEXT` in
+  `scripts/lib/layout.mjs`, which estimates text width for `W_TEXT_LONG`. Change both together.
+- **Export**: PNG, SVG and clipboard export the diagram only, in the current theme and path. The SVG
+  copy carries every rule whose selector starts with `.ov-diagram`, the `@font-face` rules and the
+  live token values, so it renders the same in docs sites and image viewers. Keep diagram rules
+  scoped to `.ov-diagram` (a test checks this).
+- **Responsive**: the figure scrolls horizontally below 640px instead of shrinking the text.

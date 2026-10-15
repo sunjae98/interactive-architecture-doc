@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "style": "overview",
+    "title": "요청 라우터",
+    "subtitle": "엔드포인트는 하나. 라우터가 세 경로 중 하나를 고르고, 응답 형식은 항상 같습니다.",
+    "lang": "ko"
+  },
+  "layers": [
+    { "nodes": [
+      { "id": "client", "title": "CLIENT", "code": "web · mobile · CLI", "span": 3, "tone": "outer" }
+    ]},
+    { "group": "router", "nodes": [
+      { "id": "classifier", "title": "분류기", "code": "rules-v2 → model fallback", "span": 3 }
+    ]},
+    { "group": "router", "nodes": [
+      { "id": "simple", "title": "FAQ 핸들러", "rows": ["faq_handler.answer()", "cache.set()"] },
+      { "id": "lookup", "title": "검색 + 요약", "rows": ["search.query()", "summarizer.run()"] },
+      { "id": "job", "title": "백그라운드 작업", "rows": ["jobs.enqueue()", "status_store.put()"] }
+    ]},
+    { "boundary": "외부 서비스", "nodes": [
+      { "id": "search", "col": 2, "title": "SEARCH SERVICE", "code": "GET /search", "tone": "outer" },
+      { "id": "jobq", "col": 3, "title": "JOB QUEUE", "code": "POST /jobs", "tone": "outer" }
+    ]}
+  ],
+  "groups": [
+    { "id": "router", "label": "라우터" }
+  ],
+  "edges": [
+    { "from": "client", "to": "classifier", "label": "POST /v1/ask" },
+    { "from": "classifier", "to": "client", "label": "{status, answer, links}",
+      "label_by_path": { "simple": "200 · status: done", "lookup": "200 · done + links", "job": "202 · status_url" } },
+    { "from": "classifier", "to": "simple", "label": "simple" },
+    { "from": "classifier", "to": "lookup", "label": "lookup" },
+    { "from": "classifier", "to": "job", "label": "job" },
+    { "from": "lookup", "to": "search", "label": "query" },
+    { "from": "job", "to": "jobq", "label": "enqueue" }
+  ],
+  "paths": [
+    { "id": "simple", "label": "간단한 답변", "nodes": ["client", "classifier", "simple"],
+      "caption": "**간단한 답변**: 라우터가 이미 가진 데이터로 FAQ 핸들러가 답하고 결과를 캐시합니다. 외부 호출은 없습니다." },
+    { "id": "lookup", "label": "조회가 필요한 요청", "nodes": ["client", "classifier", "lookup", "search"],
+      "caption": "**조회가 필요한 요청**: 라우터가 검색 서비스를 호출하고 상위 결과를 한 줄로 요약합니다." },
+    { "id": "job", "label": "오래 걸리는 작업", "nodes": ["client", "classifier", "job", "jobq"],
+      "caption": "**오래 걸리는 작업**: 작업을 큐에 넣고, 클라이언트는 `202`와 폴링할 `status_url`을 받습니다." }
+  ],
+  "caption": "클라이언트는 경로를 고르지 않습니다. **분류기**가 모든 요청을 나누고, 조회와 작업 경로만 라우터 밖으로 나갑니다."
+}

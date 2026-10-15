@@ -1,11 +1,13 @@
-import { KEBAB, LANGS } from "./validate.mjs";
+import { KEBAB, LANGS, STYLES, MAX_COLUMNS } from "./validate.mjs";
+import { DEFAULT_COLUMNS } from "./layout.mjs";
 
-export { KEBAB, LANGS };
+export { KEBAB, LANGS, STYLES };
 
 // `iad init`: a skeleton document with 0 validation errors. Every author-facing string is a
 // `[...]` placeholder, so `validate` reports W_PLACEHOLDER until the agent has filled them all.
 
 export const MAX_STEPS = 20;
+export const MAX_PATHS = MAX_COLUMNS;
 
 const TEXT = {
   en: {
@@ -135,4 +137,71 @@ export function formatJson(value, indent = "") {
     : Object.entries(value).map(([k, v]) => inner + JSON.stringify(k) + ": " + formatJson(v, inner));
   const [open, close] = Array.isArray(value) ? ["[", "]"] : ["{", "}"];
   return `${open}\n${items.join(",\n")}\n${indent}${close}`;
+}
+
+// ---- overview style ---------------------------------------------------------
+const OVERVIEW_TEXT = {
+  en: {
+    title: "[Document title]",
+    subtitle: "[One-line summary of what the diagram shows]",
+    client: "[CLIENT]",
+    clientCode: "[who calls it]",
+    group: "[SYSTEM]",
+    core: "[Entry component]",
+    coreCode: "[entry point]",
+    part: (n) => `[Component ${n}]`,
+    partCode: "[module.fn()]",
+    request: "[request]",
+    response: "[response]",
+    call: "[call]",
+    pathLabel: (id) => `[Label for ${id}]`,
+    pathCaption: (id) => `[What happens on the ${id} path]`,
+    caption: "[One sentence that explains the diagram]",
+  },
+  ko: {
+    title: "[문서 제목]",
+    subtitle: "[다이어그램이 보여주는 것을 한 줄로]",
+    client: "[CLIENT]",
+    clientCode: "[호출하는 쪽]",
+    group: "[시스템]",
+    core: "[진입 컴포넌트]",
+    coreCode: "[진입점]",
+    part: (n) => `[컴포넌트 ${n}]`,
+    partCode: "[module.fn()]",
+    request: "[요청]",
+    response: "[응답]",
+    call: "[호출]",
+    pathLabel: (id) => `[${id} 경로 이름]`,
+    pathCaption: (id) => `[${id} 경로에서 일어나는 일]`,
+    caption: "[다이어그램을 설명하는 한 문장]",
+  },
+};
+
+// client (outer) -> entry component -> one component per path (or three without paths), all but the
+// client inside one group. Each path highlights client, entry and its own component.
+export function scaffoldOverview({ lang = "en", paths = [] } = {}) {
+  const T = OVERVIEW_TEXT[lang];
+  const count = paths.length || DEFAULT_COLUMNS;
+  const columns = Math.max(DEFAULT_COLUMNS, count);
+  const parts = Array.from({ length: count }, (_, i) => ({ id: paths[i] || `part-${i + 1}`, title: T.part(i + 1), code: T.partCode }));
+  const doc = {
+    meta: { style: "overview", title: T.title, subtitle: T.subtitle, lang },
+    layers: [
+      { nodes: [{ id: "client", title: T.client, code: T.clientCode, span: columns, tone: "outer" }] },
+      { group: "system", nodes: [{ id: "entry", title: T.core, code: T.coreCode, span: columns }] },
+      { group: "system", nodes: parts },
+    ],
+    groups: [{ id: "system", label: T.group }],
+    edges: [
+      { from: "client", to: "entry", label: T.request },
+      { from: "entry", to: "client", label: T.response },
+      ...parts.map((p) => ({ from: "entry", to: p.id, label: T.call })),
+    ],
+  };
+  if (columns !== DEFAULT_COLUMNS) doc.meta.columns = columns;
+  if (paths.length) {
+    doc.paths = paths.map((id) => ({ id, label: T.pathLabel(id), nodes: ["client", "entry", id], caption: T.pathCaption(id) }));
+  }
+  doc.caption = T.caption;
+  return doc;
 }

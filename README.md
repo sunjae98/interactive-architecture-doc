@@ -2,18 +2,39 @@
 
 [한국어](README.ko.md)
 
-An agent skill that turns a system design into a **self-contained, interactive HTML architecture document**:
-a TL;DR, numbered steps, color-coded nodes, branching flows, and a scenario playground where the reader
-steps through a request and sees which boxes activate and what data flows at each step.
+An agent skill that turns a codebase or a system design into a **self-contained, interactive HTML
+architecture document**. It provides two styles, **Walkthrough** and **Overview**.
 
 The agent never writes HTML. It writes a JSON document, a dependency-free Node script validates it
-(cross-references such as step numbers, branches, and fan arrows are checked), and renders one offline
-HTML file. The viewer can export the **current view** (selected scenario and step) as PNG, SVG, or a
-clipboard image. Light and dark themes, Korean and English UI.
+(cross-references such as step numbers, branches, edges and paths are checked), and renders one offline
+HTML file. The viewer can export the **current view** as PNG, SVG, or a clipboard image. Light and dark
+themes, Korean and English UI.
+
+## Two styles: Walkthrough and Overview
+
+| | Walkthrough | Overview |
+|---|---|---|
+| For | Tech specs, design reviews | Product docs, feature pages, READMEs |
+| Shows | A request stepping through numbered steps, scenario by scenario, with a TL;DR and design decisions ("why this way") | One layered diagram (client, components, external services) with tabs that highlight a path through the same layout |
+| Reader does | Picks a scenario, presses "Next step", reads the data at each step | Reads the diagram; switches paths to see which parts a feature uses |
+| Export | The current scenario and step | The diagram in the current path and theme, ready to drop into a docs page |
+| Format | [format.md](skills/interactive-architecture-doc/references/format.md) | [format-overview.md](skills/interactive-architecture-doc/references/format-overview.md) |
+
+When you ask for a document, the agent picks the style from your request ("for our tech spec" →
+Walkthrough, "for the docs" → Overview) and asks you once if it cannot tell. `meta.style` in the JSON records
+the choice; documents without it are Walkthrough.
+
+**Walkthrough**
 
 | Light | Dark |
 |---|---|
-| ![Interactive architecture document, light theme](docs/screenshot-light.png) | ![Interactive architecture document, dark theme](docs/screenshot-dark.png) |
+| ![Walkthrough document, light theme](docs/screenshot-light.png) | ![Walkthrough document, dark theme](docs/screenshot-dark.png) |
+
+**Overview** (the same system, with the "Needs a lookup" path selected)
+
+| Light | Dark |
+|---|---|
+| ![Overview document, light theme](docs/screenshot-overview-light.png) | ![Overview document, dark theme](docs/screenshot-overview-dark.png) |
 
 ## How it works
 
@@ -99,6 +120,12 @@ In Claude Code, invoke the skill explicitly with its slash command:
 sends a file, the gateway decides between image/audio/video handling, and an external moderation service is called.
 ```
 
+For an Overview, say where the diagram goes:
+
+```text
+/interactive-architecture-doc Make an overview diagram of this repository's request flow for our docs site.
+```
+
 You can also just describe what you want ("make an interactive architecture document for …"); the agent picks
 the skill from its description. Other agents that support skills load it the same way, but the explicit
 invocation syntax depends on the agent.
@@ -107,9 +134,10 @@ The agent follows `skills/interactive-architecture-doc/SKILL.md`: it gathers the
 from a skeleton (or the minimal example), fills it in, and runs
 
 ```sh
-node scripts/iad.mjs init doc.json --lang en --steps 4 --scenarios image,audio --fork   # skeleton with [placeholders]
+node scripts/iad.mjs init doc.json --lang en --steps 4 --scenarios image,audio --fork   # Walkthrough skeleton with [placeholders]
+node scripts/iad.mjs init doc.json --style overview --paths read,write                  # Overview skeleton
 node scripts/iad.mjs validate doc.json   # fix reported errors and warnings
-node scripts/iad.mjs render doc.json     # writes doc.html next to doc.json
+node scripts/iad.mjs render doc.json     # writes doc.html next to doc.json (style from meta.style)
 ```
 
 To check the result, it opens `doc.html#iad-selfcheck` in a browser tool and reads one JSON line from
@@ -117,8 +145,9 @@ To check the result, it opens `doc.html#iad-selfcheck` in a browser tool and rea
 scenario; screenshots are only needed when the self-check fails. You can open the same URL yourself.
 
 Keep `doc.json` next to the HTML: it is the source. To update a document, edit the JSON and render again
-(the HTML also embeds a copy of the JSON in `<script id="iad-data">`). The format is described in
-`skills/interactive-architecture-doc/references/format.md`, the commands in `references/cli.md`.
+(the HTML also embeds a copy of the JSON in `<script id="iad-data">`). The formats are described in
+`skills/interactive-architecture-doc/references/format.md` (Walkthrough) and `references/format-overview.md`
+(Overview), the commands in `references/cli.md`. An Overview opens on a path with `doc.html#<path-id>`.
 
 ### Language (Korean / English output)
 
@@ -145,7 +174,9 @@ The document language is set by `meta.lang` in the JSON: `"en"` (default) or `"k
 
 - Tested in current Chrome (viewing and all exports). Other modern browsers use only standard features for
   viewing and are expected to work, but are not verified; Safari was not tested.
-- Export renders the page through an SVG `foreignObject`. Output can differ slightly between browsers;
+- Overview export writes the diagram itself as SVG (styles, fonts and colors inlined), so it renders the
+  same in browsers, docs sites and image viewers.
+- Walkthrough export renders the page through an SVG `foreignObject`. Output can differ slightly between browsers;
   Safari is the least predictable (fonts, emoji, and sizing may differ). If PNG or clipboard export fails,
   the document shows a message and the SVG export is the fallback.
 - Copying an image to the clipboard needs a secure context (`https://` or `localhost`; `file://` support

@@ -3,7 +3,8 @@
 //
 //   node scripts/iad.mjs validate <doc.json>... [--json]
 //   node scripts/iad.mjs render <doc.json> [-o <out.html>] [--json]
-//   node scripts/iad.mjs init <out.json> [--lang ko|en] [--steps N] [--scenarios a,b] [--fork] [--force] [--json]
+//   node scripts/iad.mjs init <out.json> [--style walkthrough|overview] [--lang ko|en] [--steps N] [--scenarios a,b] [--fork]
+//                             [--paths a,b] [--force] [--json]
 //
 // Exit codes: 0 = valid (warnings allowed), 1 = validation errors, 2 = usage / read / parse / write error.
 // --json: one file -> one object, several files -> an array. A file that cannot be read, parsed or
@@ -13,21 +14,26 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { validate, formatIssue } from "./lib/validate.mjs";
 import { renderHtml, writeFileAtomic, defaultOutputPath, ValidationFailed } from "./lib/render.mjs";
-import { scaffold, formatJson, KEBAB, LANGS, MAX_STEPS } from "./lib/scaffold.mjs";
+import { scaffold, scaffoldOverview, formatJson, KEBAB, LANGS, STYLES, MAX_STEPS, MAX_PATHS } from "./lib/scaffold.mjs";
 
 const USAGE = `Usage:
   iad validate <doc.json>... [--json]
   iad render <doc.json> [-o <out.html>] [--json]
-  iad init <out.json> [--lang ko|en] [--steps N] [--scenarios id1,id2,...] [--fork] [--force] [--json]
+  iad init <out.json> [--style walkthrough|overview] [--lang ko|en] [--force] [--json]
+           walkthrough: [--steps N] [--scenarios id1,id2,...] [--fork]
+           overview:    [--paths id1,id2,...]
 
 Options:
   --json             print {ok, errors[], warnings[]} (render adds "output") as JSON;
                      unreadable/unwritable files print {ok:false, error}
   -o, --out <file>   render output path (default: next to the JSON, same name, .html)
+  --style s          init: walkthrough (default; step-by-step scenarios) or overview (one layered
+                     diagram with optional path highlighting)
   --lang ko|en       init: UI and placeholder language (default en)
   --steps N          init: number of steps, 1..20 (default 3)
   --scenarios ids    init: comma-separated kebab-case scenario ids (default "default")
   --fork             init: a decision node fanning out to one column per scenario (needs >= 2 scenarios, >= 2 steps)
+  --paths ids        init (overview): comma-separated kebab-case path ids, at most ${MAX_PATHS}; one component each
   --force            init: overwrite an existing file
   -h, --help         show this help`;
 
@@ -48,7 +54,8 @@ function readDoc(file) {
   }
 }
 
-const INIT_OPTIONS = ["--lang", "--steps", "--scenarios", "--fork", "--force"];
+const INIT_OPTIONS = ["--style", "--lang", "--steps", "--scenarios", "--fork", "--paths", "--force"];
+const VALUE_HINT = { "--style": STYLES.join(" or "), "--lang": "ko or en", "--steps": "a number", "--scenarios": "scenario ids", "--paths": "path ids" };
 
 function parseArgs(argv) {
   const args = { command: argv[0], files: [], json: false, help: false, out: null, init: {} };
@@ -65,7 +72,7 @@ function parseArgs(argv) {
     else if (INIT_OPTIONS.includes(a)) {
       if (args.command !== "init") throw new UsageError(`${a} is only valid for init`);
       if (a === "--fork" || a === "--force") args.init[a.slice(2)] = true;
-      else args.init[a.slice(2)] = value(i++, a === "--lang" ? "ko or en" : a === "--steps" ? "a number" : "scenario ids");
+      else args.init[a.slice(2)] = value(i++, VALUE_HINT[a]);
     } else if (a.startsWith("-")) throw new UsageError(`unknown option ${a}`);
     else args.files.push(a);
   }
@@ -140,8 +147,24 @@ function cmdInit(args) {
   if (args.out) throw new UsageError("init takes the output path as its argument, not -o");
   const file = args.files[0];
   const o = args.init;
+  const style = o.style ?? "walkthrough";
+  if (!STYLES.includes(style)) throw new UsageError(`--style must be one of: ${STYLES.join(", ")}`);
   const lang = o.lang ?? "en";
   if (!LANGS.includes(lang)) throw new UsageError(`--lang must be one of: ${LANGS.join(", ")}`);
+  if (style === "overview") {
+    for (const key of ["steps", "scenarios", "fork"]) {
+      if (key in o) throw new UsageError(`--${key} is only valid with --style walkthrough`);
+    }
+    const paths = o.paths === undefined ? [] : o.paths.split(",").map((id) => id.trim());
+    for (const id of paths) {
+      if (!KEBAB.test(id)) throw new UsageError(`path id ${JSON.stringify(id)} must be kebab-case`);
+      if (id === "client" || id === "entry") throw new UsageError(`path id ${JSON.stringify(id)} is reserved by the skeleton`);
+    }
+    if (new Set(paths).size !== paths.length) throw new UsageError("path ids must be unique");
+    if (paths.length > MAX_PATHS) throw new UsageError(`--paths takes at most ${MAX_PATHS} ids (one column each)`);
+    return writeSkeleton(args, file, o, scaffoldOverview({ lang, paths }));
+  }
+  if ("paths" in o) throw new UsageError("--paths is only valid with --style overview");
   const stepsText = o.steps ?? "3";
   if (!/^[0-9]+$/.test(stepsText) || +stepsText < 1 || +stepsText > MAX_STEPS) throw new UsageError(`--steps must be an integer in 1..${MAX_STEPS}`);
   const steps = +stepsText;
@@ -152,9 +175,11 @@ function cmdInit(args) {
   if (new Set(scenarios).size !== scenarios.length) throw new UsageError("scenario ids must be unique");
   if (o.fork && scenarios.length < 2) throw new UsageError("--fork needs at least 2 scenarios (--scenarios a,b)");
   if (o.fork && steps < 2) throw new UsageError("--fork needs --steps 2 or more");
-  if (!o.force && existsSync(file)) throw new FileError(`${file} already exists (use --force to overwrite)`);
+  return writeSkeleton(args, file, o, scaffold({ lang, steps, scenarios, fork: !!o.fork }));
+}
 
-  const doc = scaffold({ lang, steps, scenarios, fork: !!o.fork });
+function writeSkeleton(args, file, o, doc) {
+  if (!o.force && existsSync(file)) throw new FileError(`${file} already exists (use --force to overwrite)`);
   const { warnings } = validate(doc);
   try {
     writeFileAtomic(file, formatJson(doc) + "\n");

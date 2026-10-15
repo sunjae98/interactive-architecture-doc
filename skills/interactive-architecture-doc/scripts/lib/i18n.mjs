@@ -34,6 +34,8 @@ export const UI = {
     export_clip_denied: "Clipboard access was denied ({reason}). Use PNG or SVG instead.",
     theme_to_dark: "Switch to dark mode",
     theme_to_light: "Switch to light mode",
+    tab_overview: "Overview",
+    paths_label: "Highlight a path",
   },
   ko: {
     scenario: "시나리오",
@@ -66,6 +68,8 @@ export const UI = {
     export_clip_denied: "클립보드 접근이 거부되었습니다({reason}). PNG나 SVG를 사용하세요.",
     theme_to_dark: "다크 모드로 전환",
     theme_to_light: "라이트 모드로 전환",
+    tab_overview: "전체",
+    paths_label: "경로 강조",
   },
 };
 

@@ -9,12 +9,18 @@ node scripts/iad.mjs validate doc.json          # human-readable: <JSON pointer>
 node scripts/iad.mjs validate doc.json --json   # {ok, errors[], warnings[]}
 node scripts/iad.mjs render doc.json [-o out.html]
 node scripts/iad.mjs init doc.json [--lang ko|en] [--steps N] [--scenarios id1,id2] [--fork] [--force]
+node scripts/iad.mjs init doc.json --style overview [--lang ko|en] [--paths id1,id2] [--force]
 ```
 
 `init` writes a skeleton with 0 errors whose strings are all `[...]` placeholders (reported as
 `W_PLACEHOLDER` until filled). Defaults: `en`, 3 steps, one scenario `default`, no fork. `--fork`
 (needs ≥2 scenarios and ≥2 steps) adds a decision `fan_hub` and one branch-scoped `fan_target`
 column per scenario. It refuses to overwrite an existing file (exit 2) unless `--force`.
+
+`--style overview` writes an overview skeleton instead ([format-overview.md](format-overview.md)): a
+client, an entry component and one component per `--paths` id (three without `--paths`, at most four),
+with one path per id. `--steps`, `--scenarios` and `--fork` are walkthrough-only and `--paths` is
+overview-only; mixing them exits 2. `validate` and `render` read `meta.style` and need no option.
 
 Exit codes: `0` valid (warnings allowed) · `1` validation errors · `2` usage, read, JSON parse, or write error.
 `render` re-validates and refuses to write anything if there are errors. The default output is
@@ -43,3 +49,9 @@ fork has visible fan targets but no arrow was drawn), `overflow` (horizontal pag
 `warnings[]` has `step-text` for steps a scenario has no `steps` text for. `errors[]` lists page
 errors (`error`, `unhandledrejection`, `csp`) since load. `ok` is true when `failures` and `errors` are
 both empty. The scenario, step and auto-play state are restored afterwards.
+
+An overview page uses the same hash, function and result element. It shows the overview and then each
+path, and prints `{"ok":true,"checked":4,"paths":3,"failures":[],"errors":[]}`. `failures[]` items are
+`{path, check, detail}` (`path` is `""` for the overview) with `check` one of `path-nodes` (a path node
+is not highlighted), `path-edges` (a path with two or more nodes highlights no edge), `edge-label` (an
+edge with labels does not show exactly one) and `overflow`. The selected path is restored afterwards.

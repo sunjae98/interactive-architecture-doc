@@ -2,11 +2,16 @@
 // references/format.md documents the same rule codes; a test keeps the two in sync.
 
 import { hasPlaceholder } from "./markup.mjs";
+import { layoutOverview } from "./layout.mjs";
 
 export const KINDS = ["client", "decision", "existing", "new"];
 export const LANGS = ["ko", "en"];
 export const WIDTHS = ["narrow", "wide", "full"];
 export const VARIANTS = ["default", "alt"];
+export const STYLES = ["walkthrough", "overview"];
+export const TONES = ["default", "outer"];
+export const MIN_COLUMNS = 2;
+export const MAX_COLUMNS = 4;
 
 export const RULES = [
   { code: "E_TYPE", level: "error", summary: "Value has the wrong JSON type." },
@@ -16,12 +21,13 @@ export const RULES = [
   { code: "E_UNKNOWN_BLOCK", level: "error", summary: "A board block has an unknown `type`." },
   { code: "E_UNKNOWN_KIND", level: "error", summary: "A node has an unknown `kind`." },
   { code: "E_LANG", level: "error", summary: "`meta.lang` is not `ko` or `en`." },
-  { code: "E_ENUM", level: "error", summary: "A value is not one of the allowed options (`width`, `variant`)." },
+  { code: "E_STYLE", level: "error", summary: "`meta.style` is not `walkthrough` or `overview`." },
+  { code: "E_ENUM", level: "error", summary: "A value is not one of the allowed options (`width`, `variant`, `tone`)." },
   { code: "E_STEP_RANGE", level: "error", summary: "`node.step` is outside 1..N (N = number of steps)." },
   { code: "E_STEP_NO_NODE", level: "error", summary: "A step has no node on the board." },
   { code: "E_BRANCH_UNKNOWN", level: "error", summary: "`node.branches` references a scenario id that does not exist." },
-  { code: "E_ID_FORMAT", level: "error", summary: "A scenario id or fan id is not kebab-case." },
-  { code: "E_ID_DUPLICATE", level: "error", summary: "A scenario id or `fan_hub` id is used more than once." },
+  { code: "E_ID_FORMAT", level: "error", summary: "An id (scenario, fan, node, group, path) is not kebab-case." },
+  { code: "E_ID_DUPLICATE", level: "error", summary: "An id (scenario, `fan_hub`, node, group, path) is used more than once." },
   { code: "E_SCENARIO_STEP_KEY", level: "error", summary: "A `scenario.steps` key is not a step number in 1..N." },
   { code: "E_FAN_HUB_NO_TARGET", level: "error", summary: "A `fan_hub` has no `fan_target` in the same fork block." },
   { code: "E_FAN_TARGET_NO_HUB", level: "error", summary: "A `fan_target` has no matching `fan_hub` in the same fork block." },
@@ -29,10 +35,18 @@ export const RULES = [
   { code: "E_LEGEND_MISSING_KIND", level: "error", summary: "A node kind used on the board is not described in `legend`." },
   { code: "E_WHY_EMPTY", level: "error", summary: "`considerations.items[].why` is empty." },
   { code: "E_ENTRY", level: "error", summary: "More than one `entry` node, or an `entry` node without `meta.entry_request`." },
+  { code: "E_NODE_UNKNOWN", level: "error", summary: "Overview: an edge or a path names a node id that does not exist." },
+  { code: "E_PATH_UNKNOWN", level: "error", summary: "Overview: a `label_by_path` key is not a path id." },
+  { code: "E_GROUP_UNKNOWN", level: "error", summary: "Overview: `layers[].group` is not a group id, or a group's layers are not contiguous." },
+  { code: "E_LAYOUT", level: "error", summary: "Overview: the grid cannot hold the layer (`meta.columns` outside 2..4, a node outside the grid or on another node, a boundary on the first layer, `rows` with `code` or with `tone: outer`)." },
+  { code: "E_EDGE_LAYER", level: "error", summary: "Overview: an edge does not connect two nodes in adjacent layers." },
+  { code: "E_EDGE_ALIGN", level: "error", summary: "Overview: the two nodes of an edge do not overlap horizontally, so no vertical line fits." },
   { code: "W_SCENARIO_NO_ACTIVE", level: "warning", summary: "A scenario has no active node at some step." },
   { code: "W_SCENARIO_STEP_MISSING", level: "warning", summary: "A scenario has no `steps` text for some step." },
   { code: "W_PLACEHOLDER", level: "warning", summary: "A string still contains a `[...]` placeholder or `TODO`." },
   { code: "W_ENTRY_NO_INPUT", level: "warning", summary: "`meta.entry_request` does not contain `{{input}}`." },
+  { code: "W_TEXT_LONG", level: "warning", summary: "Overview: text is likely wider than its box, or two edge labels overlap." },
+  { code: "W_PATH_DISCONNECTED", level: "warning", summary: "Overview: a path node has no edge to another node of the same path." },
 ];
 
 const RULE_LEVEL = Object.fromEntries(RULES.map((r) => [r.code, r.level]));
@@ -50,7 +64,7 @@ const map = (of) => ({ t: "map", of });
 
 const DOC = obj(
   {
-    meta: obj({ title: text }, { subtitle: text, lang: oneOf(LANGS, "E_LANG"), entry_request: text }),
+    meta: obj({ title: text }, { subtitle: text, lang: oneOf(LANGS, "E_LANG"), entry_request: text, style: oneOf(STYLES, "E_STYLE") }),
     steps: arr(obj({ label: text })),
     legend: obj({}, { client: text, decision: text, existing: text, new: text }),
     scenarios: arr(obj({ id: text, label: text, steps: map(str) }, { icon: text, input: str })),
@@ -87,6 +101,27 @@ const BLOCKS = {
 };
 
 export const BLOCK_TYPES = Object.keys(BLOCKS);
+
+// Overview style: layers of nodes on a column grid, vertical edges, optional highlighted paths.
+const OVERVIEW_DOC = obj(
+  {
+    meta: obj({ title: text, style: oneOf(STYLES, "E_STYLE") }, { subtitle: text, lang: oneOf(LANGS, "E_LANG"), columns: int }),
+    layers: arr(
+      obj(
+        { nodes: arr(obj({ id: text, title: text }, { code: text, rows: arr(text), span: int, col: int, tone: oneOf(TONES, "E_ENUM") })) },
+        { group: text, boundary: text }
+      )
+    ),
+  },
+  {
+    groups: arr(obj({ id: text, label: text })),
+    edges: arr(obj({ from: text, to: text }, { label: text, label_by_path: map(text) })),
+    paths: arr(obj({ id: text, label: text, nodes: arr(text) }, { caption: text })),
+    caption: text,
+  }
+);
+
+export const isOverview = (doc) => isPlainObject(doc) && isPlainObject(doc.meta) && doc.meta.style === "overview";
 
 // ---- helpers ----------------------------------------------------------------
 const ptr = (path, key) => path + "/" + String(key).replace(/~/g, "~0").replace(/\//g, "~1");
@@ -288,12 +323,121 @@ function checkSemantics(doc, out) {
   });
 }
 
+function checkOverviewSemantics(doc, out) {
+  const columns = doc.meta.columns ?? 3;
+  if (columns < MIN_COLUMNS || columns > MAX_COLUMNS) {
+    report(out, "/meta/columns", "E_LAYOUT", `columns must be ${MIN_COLUMNS}..${MAX_COLUMNS}, got ${columns}`);
+  }
+
+  const ids = (list, path, what) => {
+    const seen = new Set();
+    list.forEach((item, i) => {
+      const p = `${path}/${i}/id`;
+      if (!KEBAB.test(item.id)) report(out, p, "E_ID_FORMAT", `${what} id ${q(item.id)} must be kebab-case`);
+      if (seen.has(item.id)) report(out, p, "E_ID_DUPLICATE", `${what} id ${q(item.id)} is already used`);
+      seen.add(item.id);
+    });
+    return seen;
+  };
+  const groupIds = ids(doc.groups || [], "/groups", "group");
+  const pathIds = ids(doc.paths || [], "/paths", "path");
+
+  // nodes: ids, grid cells, shape
+  const nodeLayer = new Map();
+  const nodeSeen = new Set();
+  doc.layers.forEach((layer, li) => {
+    const lp = `/layers/${li}`;
+    if (li === 0 && layer.boundary !== undefined) report(out, lp + "/boundary", "E_LAYOUT", "the first layer cannot have a boundary (there is nothing above it)");
+    const taken = new Set();
+    let cursor = 1;
+    layer.nodes.forEach((n, ni) => {
+      const p = `${lp}/nodes/${ni}`;
+      if (!KEBAB.test(n.id)) report(out, p + "/id", "E_ID_FORMAT", `node id ${q(n.id)} must be kebab-case`);
+      if (nodeSeen.has(n.id)) report(out, p + "/id", "E_ID_DUPLICATE", `node id ${q(n.id)} is already used`);
+      nodeSeen.add(n.id);
+      nodeLayer.set(n.id, li);
+      if (n.rows && n.code !== undefined) report(out, p, "E_LAYOUT", "a node has either code (a box) or rows (a card), not both");
+      if (n.rows && n.tone === "outer") report(out, p, "E_LAYOUT", "a card (rows) cannot have tone \"outer\"");
+      const span = n.span ?? 1;
+      const col = n.col ?? cursor;
+      if (span < 1 || col < 1 || col + span - 1 > columns) {
+        report(out, p, "E_LAYOUT", `node spans columns ${col}..${col + span - 1}, outside 1..${columns}`);
+      } else {
+        for (let c = col; c < col + span; c++) {
+          if (taken.has(c)) report(out, p, "E_LAYOUT", `column ${c} is already used by another node in this layer`);
+          taken.add(c);
+        }
+      }
+      cursor = col + span;
+    });
+  });
+
+  // groups: known ids, one contiguous run of layers each
+  const finished = new Set();
+  let current = null;
+  doc.layers.forEach((layer, li) => {
+    const g = layer.group ?? null;
+    if (g !== current) {
+      if (current !== null) finished.add(current);
+      if (g !== null && finished.has(g)) report(out, `/layers/${li}/group`, "E_GROUP_UNKNOWN", `group ${q(g)} is split; its layers must be next to each other`);
+      current = g;
+    }
+    if (g !== null && !groupIds.has(g)) report(out, `/layers/${li}/group`, "E_GROUP_UNKNOWN", `${q(g)} is not a group id`);
+  });
+
+  // edges: known nodes in adjacent layers, known path ids
+  const adjacency = new Map();
+  (doc.edges || []).forEach((e, i) => {
+    const p = `/edges/${i}`;
+    let known = true;
+    for (const key of ["from", "to"]) {
+      if (!nodeLayer.has(e[key])) {
+        report(out, `${p}/${key}`, "E_NODE_UNKNOWN", `${q(e[key])} is not a node id`);
+        known = false;
+      }
+    }
+    if (known && Math.abs(nodeLayer.get(e.from) - nodeLayer.get(e.to)) !== 1) {
+      report(out, p, "E_EDGE_LAYER", `${q(e.from)} and ${q(e.to)} are not in adjacent layers`);
+    }
+    for (const key of Object.keys(e.label_by_path || {})) {
+      if (!pathIds.has(key)) report(out, ptr(`${p}/label_by_path`, key), "E_PATH_UNKNOWN", `${q(key)} is not a path id`);
+    }
+    for (const [a, b] of [[e.from, e.to], [e.to, e.from]]) {
+      if (!adjacency.has(a)) adjacency.set(a, new Set());
+      adjacency.get(a).add(b);
+    }
+  });
+
+  // paths: known nodes, each connected to another node of the path
+  (doc.paths || []).forEach((path, i) => {
+    const members = new Set(path.nodes);
+    path.nodes.forEach((id, j) => {
+      if (!nodeLayer.has(id)) return report(out, `/paths/${i}/nodes/${j}`, "E_NODE_UNKNOWN", `${q(id)} is not a node id`);
+      const linked = [...(adjacency.get(id) || [])].some((other) => other !== id && members.has(other));
+      if (members.size > 1 && !linked) {
+        report(out, `/paths/${i}/nodes/${j}`, "W_PATH_DISCONNECTED", `${q(id)} has no edge to another node of path ${q(path.id)}`);
+      }
+    });
+  });
+
+  walkStrings(doc, "", (value, path) => {
+    if (hasPlaceholder(value)) report(out, path, "W_PLACEHOLDER", "looks like an unfilled placeholder ([...] or TODO)");
+  });
+
+  // geometry only on a document whose references and grid are sound
+  if (!out.errors.length) {
+    for (const issue of layoutOverview(doc).issues) report(out, issue.path, issue.code, issue.message);
+  }
+}
+
 // Validate an already-parsed IR document. Structural checks run first; cross-reference
 // checks only run on a structurally valid document so they can trust the shape.
+// `meta.style: "overview"` selects the overview format; anything else is a walkthrough document.
 export function validate(doc) {
   const out = { errors: [], warnings: [] };
-  check(doc, DOC, "", out);
-  if (!out.errors.length) checkSemantics(doc, out);
+  const overview = isOverview(doc);
+  check(doc, overview ? OVERVIEW_DOC : DOC, "", out);
+  if (!out.errors.length) (overview ? checkOverviewSemantics : checkSemantics)(doc, out);
   return { ok: out.errors.length === 0, errors: out.errors, warnings: out.warnings };
 }
 

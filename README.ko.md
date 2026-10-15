@@ -2,17 +2,37 @@
 
 [English](README.md)
 
-시스템 설계를 **단일 파일로 동작하는 인터랙티브 HTML 아키텍처 문서**로 만들어 주는 에이전트 스킬입니다.
-TL;DR, 번호가 매겨진 단계(stepper), 주체별 색상 노드, 분기 흐름, 그리고 시나리오를 고르고 단계를 넘겨가며
-어떤 박스가 활성화되고 어떤 데이터가 오가는지 보여주는 플레이그라운드를 포함합니다.
+코드베이스나 시스템 설계를 **단일 파일로 동작하는 인터랙티브 HTML 아키텍처 문서**로 만들어 주는 에이전트
+스킬입니다. **Walkthrough**와 **Overview** 두 가지 형식을 제공합니다.
 
 에이전트는 HTML을 직접 쓰지 않습니다. JSON 문서를 작성하면 무의존 Node 스크립트가 검증(단계 번호, 분기,
-fan 화살표 같은 교차 참조 포함)하고 오프라인에서 열리는 HTML 한 파일로 렌더합니다. 문서 안에서 **현재 뷰**
-(선택한 시나리오와 단계)를 PNG, SVG, 클립보드 이미지로 내보낼 수 있고, 라이트/다크 테마와 한국어/영어 UI를 지원합니다.
+연결선, 경로 같은 교차 참조 포함)하고 오프라인에서 열리는 HTML 한 파일로 렌더합니다. 문서 안에서 **현재 뷰**를
+PNG, SVG, 클립보드 이미지로 내보낼 수 있고, 라이트/다크 테마와 한국어/영어 UI를 지원합니다.
+
+## 두 가지 형식: Walkthrough와 Overview
+
+| | Walkthrough | Overview |
+|---|---|---|
+| 용도 | 테크스펙, 설계 리뷰 | 제품 문서, 기능(feature) 페이지, README |
+| 보여주는 것 | 요청이 번호 매겨진 단계를 시나리오별로 지나가는 과정, TL;DR, 설계 결정과 그 이유 | 레이어 다이어그램 한 장(클라이언트, 컴포넌트, 외부 서비스)과, 같은 배치에서 경로만 강조하는 탭 |
+| 독자가 하는 일 | 시나리오를 고르고 "다음 단계"를 누르며 단계별 데이터를 읽음 | 다이어그램을 읽고, 경로를 바꿔 기능이 어떤 부분을 거치는지 확인 |
+| 내보내기 | 현재 시나리오와 단계 | 현재 경로와 테마의 다이어그램 (문서 페이지에 바로 넣을 수 있음) |
+| 형식 문서 | [format.md](skills/interactive-architecture-doc/references/format.md) | [format-overview.md](skills/interactive-architecture-doc/references/format-overview.md) |
+
+문서를 요청하면 에이전트가 요청 내용으로 형식을 고릅니다("테크스펙용" → Walkthrough, "공식 문서용" → Overview).
+판단할 수 없으면 한 번 물어봅니다. 선택은 JSON의 `meta.style`에 기록되고, 이 값이 없는 문서는 Walkthrough입니다.
+
+**Walkthrough**
 
 | 라이트 | 다크 |
 |---|---|
-| ![인터랙티브 아키텍처 문서 (라이트 테마)](docs/screenshot-light.png) | ![인터랙티브 아키텍처 문서 (다크 테마)](docs/screenshot-dark.png) |
+| ![Walkthrough 문서 (라이트 테마)](docs/screenshot-light.png) | ![Walkthrough 문서 (다크 테마)](docs/screenshot-dark.png) |
+
+**Overview** (같은 시스템, "Needs a lookup" 경로를 선택한 상태)
+
+| 라이트 | 다크 |
+|---|---|
+| ![Overview 문서 (라이트 테마)](docs/screenshot-overview-light.png) | ![Overview 문서 (다크 테마)](docs/screenshot-overview-dark.png) |
 
 ## 동작 흐름
 
@@ -95,6 +115,12 @@ Claude Code에서는 슬래시 명령으로 스킬을 직접 호출합니다.
 게이트웨이가 이미지/오디오/영상 처리를 판단하고, 외부 검수 서비스를 호출해.
 ```
 
+Overview를 원하면 다이어그램을 어디에 쓸지 함께 말하면 됩니다.
+
+```text
+/interactive-architecture-doc 이 레포의 요청 흐름을 공식 문서에 넣을 overview 다이어그램으로 만들어줘.
+```
+
 슬래시 명령 없이 "인터랙티브 아키텍처 문서 만들어줘"처럼 요청해도 에이전트가 스킬 설명을 보고 이 스킬을
 골라 씁니다. 스킬을 지원하는 다른 에이전트도 같은 방식으로 불러오지만, 직접 호출하는 문법은 에이전트마다 다릅니다.
 
@@ -102,9 +128,10 @@ Claude Code에서는 슬래시 명령으로 스킬을 직접 호출합니다.
 `doc.json`을 시작해 내용을 채운 뒤 다음을 실행합니다.
 
 ```sh
-node scripts/iad.mjs init doc.json --lang ko --steps 4 --scenarios image,audio --fork   # [자리표시자]가 든 뼈대
+node scripts/iad.mjs init doc.json --lang ko --steps 4 --scenarios image,audio --fork   # [자리표시자]가 든 Walkthrough 뼈대
+node scripts/iad.mjs init doc.json --style overview --lang ko --paths read,write       # Overview 뼈대
 node scripts/iad.mjs validate doc.json   # 에러와 경고를 수정
-node scripts/iad.mjs render doc.json     # doc.json 옆에 doc.html 생성
+node scripts/iad.mjs render doc.json     # doc.json 옆에 doc.html 생성 (형식은 meta.style로 결정)
 ```
 
 결과 확인은 모든 시나리오를 클릭해 보는 대신, 브라우저 도구로 `doc.html#iad-selfcheck`를 열어
@@ -113,7 +140,9 @@ node scripts/iad.mjs render doc.json     # doc.json 옆에 doc.html 생성
 
 `doc.json`은 원본이므로 HTML 옆에 보관하세요. 문서를 고칠 때는 JSON을 수정하고 다시 렌더합니다
 (HTML에도 `<script id="iad-data">`로 JSON 사본이 들어 있습니다). 형식은
-`skills/interactive-architecture-doc/references/format.md`, 명령은 `references/cli.md`를 참고하세요.
+`skills/interactive-architecture-doc/references/format.md`(Walkthrough)와 `references/format-overview.md`
+(Overview), 명령은 `references/cli.md`를 참고하세요. Overview는 `doc.html#<경로 id>`로 열면 그 경로가 선택된
+상태로 열립니다.
 
 ### 언어 (한국어 / 영어 산출물)
 
@@ -139,7 +168,9 @@ node scripts/iad.mjs render doc.json     # doc.json 옆에 doc.html 생성
 
 - 최신 Chrome에서 문서 보기와 내보내기 전체를 검증했습니다. 다른 최신 브라우저도 표준 기능만 쓰므로 보기는
   동작할 것으로 보이지만 검증하지 않았고, Safari는 테스트하지 않았습니다.
-- 내보내기는 SVG `foreignObject`로 페이지를 렌더하므로 브라우저마다 결과가 조금 다를 수 있고, Safari가 가장
+- Overview 내보내기는 다이어그램 자체를 SVG로 저장합니다(스타일, 폰트, 색상 포함). 브라우저, 문서 사이트,
+  이미지 뷰어에서 똑같이 보입니다.
+- Walkthrough 내보내기는 SVG `foreignObject`로 페이지를 렌더하므로 브라우저마다 결과가 조금 다를 수 있고, Safari가 가장
   예측하기 어렵습니다(폰트, 이모지, 크기 차이). PNG나 클립보드 내보내기가 실패하면 화면에 메시지가 나오며 SVG
   내보내기를 대안으로 쓰면 됩니다.
 - 클립보드 이미지 복사는 보안 컨텍스트(`https://` 또는 `localhost`; `file://`는 브라우저마다 다름)와 클립보드

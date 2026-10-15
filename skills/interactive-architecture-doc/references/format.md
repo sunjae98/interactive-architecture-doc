@@ -1,5 +1,9 @@
 # Document format (IR)
 
+This page is the **walkthrough** style (the default): steps, scenarios, a TL;DR and design
+decisions. The **overview** style, one layered diagram for docs pages, has its own page:
+[format-overview.md](format-overview.md). `meta.style` selects the format.
+
 An interactive architecture document is a single JSON file. `scripts/iad.mjs` validates it and
 renders it into one self-contained HTML file. **Never edit the rendered HTML** — edit the JSON
 and render again. The rendered HTML embeds a copy of the JSON in
@@ -32,6 +36,7 @@ Unknown keys are errors everywhere (typo guard).
 |---|---|---|
 | `title` | yes | plain text (no markup); also used in `<title>` |
 | `subtitle` | no | one-line summary under the title |
+| `style` | no | `"walkthrough"` (default) or `"overview"`; `"overview"` switches to [format-overview.md](format-overview.md) |
 | `lang` | no | `"en"` (default) or `"ko"` — selects the UI strings (buttons, status). Author text is never translated |
 | `entry_request` | no | request template shown in the `entry` node; `{{input}}` is replaced by the selected scenario's `input`. If written as `"{{input}}"` (inside double quotes) the input is inserted as a JSON string, so quotes are escaped |
 
@@ -110,12 +115,13 @@ block. Structural rules run first; cross-reference rules run only when the struc
 | `E_UNKNOWN_BLOCK` | error | A board block has an unknown `type`. |
 | `E_UNKNOWN_KIND` | error | A node has an unknown `kind`. |
 | `E_LANG` | error | `meta.lang` is not `ko` or `en`. |
-| `E_ENUM` | error | A value is not one of the allowed options (`width`, `variant`). |
+| `E_STYLE` | error | `meta.style` is not `walkthrough` or `overview`. |
+| `E_ENUM` | error | A value is not one of the allowed options (`width`, `variant`, `tone`). |
 | `E_STEP_RANGE` | error | `node.step` is outside 1..N (N = number of steps). |
 | `E_STEP_NO_NODE` | error | A step has no node on the board. |
 | `E_BRANCH_UNKNOWN` | error | `node.branches` references a scenario id that does not exist. |
-| `E_ID_FORMAT` | error | A scenario id or fan id is not kebab-case. |
-| `E_ID_DUPLICATE` | error | A scenario id or `fan_hub` id is used more than once. |
+| `E_ID_FORMAT` | error | An id (scenario, fan, node, group, path) is not kebab-case. |
+| `E_ID_DUPLICATE` | error | An id (scenario, `fan_hub`, node, group, path) is used more than once. |
 | `E_SCENARIO_STEP_KEY` | error | A `scenario.steps` key is not a step number in 1..N. |
 | `E_FAN_HUB_NO_TARGET` | error | A `fan_hub` has no `fan_target` in the same fork block. |
 | `E_FAN_TARGET_NO_HUB` | error | A `fan_target` has no matching `fan_hub` in the same fork block. |

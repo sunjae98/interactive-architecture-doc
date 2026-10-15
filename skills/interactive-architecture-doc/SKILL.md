@@ -1,25 +1,40 @@
 ---
 name: interactive-architecture-doc
-description: Create an interactive HTML architecture document for a system flow where several actors (client, internal services, external systems) take part in numbered steps and paths branch by input. You write a JSON file, validate it, and render one self-contained HTML file with a TL;DR, stepper, color-coded nodes, forks, and a scenario playground. The viewer can export the current view (selected scenario and step) as PNG, SVG, or a clipboard image. Use for requests like "make an architecture doc", "interactive diagram", "document this design flow".
+description: Create an interactive HTML architecture document from a codebase or a design, in one of two styles. Walkthrough (for tech specs and design reviews) steps through a request scenario by scenario with a TL;DR, stepper, color-coded nodes, forks and design decisions. Overview (for product docs, feature pages and READMEs) is one layered diagram with optional path highlighting. You write a JSON file, validate it, and render one self-contained HTML file; the viewer exports the current view as PNG, SVG or a clipboard image. Use for requests like "make an architecture doc", "interactive diagram", "document this design flow", "architecture diagram for our docs".
 compatibility: Requires Node.js 18+ and shell access
 ---
 
 # interactive-architecture-doc
 
-Produces a document where the reader picks a scenario and steps through it ("Next step"),
-watching which boxes activate and what data flows at each step. You never write HTML: you write
-a JSON document, and `scripts/iad.mjs` validates it and renders a single offline HTML file
-(no CDN, no network; double-click to open).
+Produces one offline HTML file (no CDN, no network; double-click to open) in one of two styles:
 
-## When to use
+- **Walkthrough**: the reader picks a scenario and steps through it ("Next step"), watching which
+  boxes activate and what data flows at each step. TL;DR and design decisions live alongside.
+- **Overview**: one layered diagram (client, components, external services) with tabs that
+  highlight a path through the same layout. It is short enough for a docs page or a README.
 
-- A request passes through several actors in order (client / internal server / external systems).
-- Paths branch by input and you want to compare the branches as scenarios.
-- Design decisions ("why this way") should live in the same document.
+You never write HTML: you write a JSON document, and `scripts/iad.mjs` validates it and renders it.
 
-For a plain static component diagram this is overkill; use Mermaid or similar.
+## 0. Pick the style
 
-## Information checklist
+If the request does not make the style clear, ask the user once before gathering anything:
+
+1. **Walkthrough**: step through a request scenario by scenario, with a TL;DR and design
+   decisions. For tech specs and design reviews.
+2. **Overview**: one layered diagram with optional path highlighting. For product docs,
+   feature pages and READMEs.
+
+Signals: "tech spec", "design review", "why we chose", "step by step" mean walkthrough. "docs",
+"feature page", "README", "simple diagram", "overview" mean overview. Do not ask when a signal is
+present; say which style you picked in one line. Walkthrough is the default if the user has no preference.
+
+The rest of this page is the walkthrough. For **overview**, read
+[references/format-overview.md](references/format-overview.md) instead of `format.md`, gather the
+layers (who calls the system, its main components, external services), the edges between them and
+up to four paths, then start with `node scripts/iad.mjs init doc.json --style overview --paths a,b`.
+Validate, render and self-check (steps 4-7 below) are the same.
+
+## Information checklist (walkthrough)
 
 Confirm with the user or extract from code/design docs before writing. If an item is missing,
 ask first instead of inventing content.
