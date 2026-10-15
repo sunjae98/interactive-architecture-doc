@@ -84,7 +84,8 @@ export function renderDiagram(doc) {
     );
   }
   for (const e of geo.edges) out.push(renderEdge(e));
-  for (const g of Object.values(geo.nodes)) out.push(renderNode(g));
+  // document order (an object would list integer-like ids first)
+  for (const layer of doc.layers) for (const n of layer.nodes) out.push(renderNode(geo.nodes[n.id]));
   out.push(`</svg>`);
   return out.join("\n");
 }

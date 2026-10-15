@@ -58,7 +58,7 @@ Unknown keys are errors everywhere (typo guard).
 |---|---|---|
 | `from`, `to` | yes | node ids in **adjacent** layers. The arrow points at `to`, so `to` may be above `from` (a response) |
 | `label` | no | short text on the edge: a route, a verb, a status (`POST /v1/ask`, `query`) |
-| `label_by_path` | no | `{pathId: text}`: replaces `label` while that path is selected (e.g. a different status code per path) |
+| `label_by_path` | no | `{pathId: text}`: replaces `label` while that path is selected (e.g. a different status code per path). Needs `label`, which shows on the overview and on the other paths |
 
 The edge is drawn where the two nodes overlap horizontally, so they must share at least part of a
 column. Two edges between the same pair (request and response) are spread into separate lanes.
@@ -67,9 +67,9 @@ column. Two edges between the same pair (request and response) are spread into s
 
 | Field | Required | Notes |
 |---|---|---|
-| `id` | yes | kebab-case, unique; also the URL hash (`doc.html#lookup` opens that path) |
+| `id` | yes | kebab-case, unique; also the URL hash (`doc.html#lookup` opens that path). `iad-selfcheck` is reserved |
 | `label` | yes | tab text |
-| `nodes` | yes | node ids to highlight; an edge is highlighted when both of its ends are in the path |
+| `nodes` | yes | node ids to highlight; an edge is highlighted when both of its ends are in the path, so every node needs an edge to another node of the path |
 | `caption` | no | sentence shown instead of the top-level `caption` while the path is selected |
 
 ## Writing for docs
@@ -98,9 +98,9 @@ Overview documents are checked with the shared structural codes from [format.md]
 | `E_GROUP_UNKNOWN` | error | `layers[].group` is not a group id, or a group's layers are not contiguous. |
 | `E_LAYOUT` | error | The grid cannot hold the layer: `meta.columns` outside 2..4, a node outside the grid or on another node, a boundary on the first layer, `rows` with `code` or with `tone: outer`. |
 | `E_EDGE_LAYER` | error | An edge does not connect two nodes in adjacent layers. |
+| `E_PATH_DISCONNECTED` | error | A path node has no edge to another node of the same path. |
 | `E_EDGE_ALIGN` | error | The two nodes of an edge do not overlap horizontally, so no vertical line fits. |
-| `W_TEXT_LONG` | warning | Text is likely wider than its box, or two edge labels overlap. |
-| `W_PATH_DISCONNECTED` | warning | A path node has no edge to another node of the same path. |
+| `W_TEXT_LONG` | warning | Text is likely wider than its box, or a label collides with another label, an edge line or the edge of the diagram. |
 
 Geometry checks (`E_EDGE_ALIGN`, `W_TEXT_LONG`) run only when there are no other errors.
 Text widths are estimates; the self-check and a look at the page settle borderline cases.

@@ -11,7 +11,7 @@
 - `iad init --style overview [--paths a,b]` writes an overview skeleton. Walkthrough-only options
   (`--steps`, `--scenarios`, `--fork`) and the overview-only `--paths` are rejected for the other style.
 - New rule codes: `E_STYLE`, and for overview documents `E_NODE_UNKNOWN`, `E_PATH_UNKNOWN`,
-  `E_GROUP_UNKNOWN`, `E_LAYOUT`, `E_EDGE_LAYER`, `E_EDGE_ALIGN`, `W_TEXT_LONG`, `W_PATH_DISCONNECTED`.
+  `E_GROUP_UNKNOWN`, `E_LAYOUT`, `E_EDGE_LAYER`, `E_EDGE_ALIGN`, `E_PATH_DISCONNECTED`, `W_TEXT_LONG`.
 - `SKILL.md` starts by picking the style from the request, and asks once when the request does not say.
 - The overview self-check (`#iad-selfcheck`) checks each path's highlight, edge labels and page overflow.
 - READMEs describe both styles, with Overview screenshots.

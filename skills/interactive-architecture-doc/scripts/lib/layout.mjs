@@ -61,7 +61,8 @@ export function layoutOverview(doc) {
   // ---- nodes, layer by layer
   const nodes = {};
   const layers = [];
-  let y = G.top;
+  // a group around the first layer needs room for its box above it
+  let y = G.top + (doc.layers[0] && doc.layers[0].group ? G.groupTop : 0);
   doc.layers.forEach((layer, li) => {
     let cursor = 1;
     let h = G.nodeH;
@@ -129,6 +130,14 @@ export function layoutOverview(doc) {
   });
   const rails = [...boundaries.map((b) => b.y), ...groupBoxes.flatMap((b) => [b.y, b.y + b.h])];
 
+  // text boxes of group and boundary labels (ov-label: baseline y, about 11px tall)
+  const labelBox = (text, x, baseline) => ({ text, x1: x, x2: x + measure(text, TEXT.label), y1: baseline - 11, y2: baseline + 3 });
+  const labelBoxes = [
+    ...groupBoxes.map((b) => labelBox(b.label, b.x + 16, b.y + 22)),
+    ...boundaries.map((b) => labelBox(b.label, 24, b.labelY)),
+  ];
+  const overlaps = (a1, a2, b1, b2) => a1 < b2 && b1 < a2;
+
   // ---- edges: parallel edges between the same pair spread out inside the overlap
   const pairs = new Map();
   (doc.edges || []).forEach((e, i) => {
@@ -156,33 +165,54 @@ export function layoutOverview(doc) {
     const y1 = top.y + top.h;
     const y2 = bot.y;
 
-    // label in the longest stretch of the edge that no group border or boundary line crosses
-    const cuts = [y1, ...rails.filter((r) => r > y1 && r < y2).sort((p, q) => p - q), y2];
-    let best = [y1, y2];
-    let len = -1;
-    for (let c = 0; c < cuts.length - 1; c++) {
-      if (cuts[c + 1] - cuts[c] > len) {
-        len = cuts[c + 1] - cuts[c];
-        best = [cuts[c], cuts[c + 1]];
-      }
-    }
-    const pillY = round((best[0] + best[1]) / 2);
     const labels = [];
     if (e.label !== undefined) labels.push({ path: null, text: e.label });
     for (const [pathId, text] of Object.entries(e.label_by_path || {})) labels.push({ path: pathId, text });
+    const widest = Math.max(0, ...labels.map((l) => pillWidth(l.text)));
+
+    // label in the longest free stretch of the edge: group borders and boundary lines cut it, and
+    // group/boundary label text that the pill would cover horizontally is taken out of it
+    let free = [[y1, y2]];
+    const cut = (a, b) => {
+      free = free.flatMap(([s1, s2]) => (b <= s1 || a >= s2 ? [[s1, s2]] : [[s1, Math.max(s1, a)], [Math.min(s2, b), s2]]));
+    };
+    for (const r of rails) if (r > y1 && r < y2) cut(r, r);
+    for (const t of labelBoxes) if (overlaps(t.x1 - 4, t.x2 + 4, x - widest / 2, x + widest / 2)) cut(t.y1 - 2, t.y2 + 2);
+    let best = free[0];
+    for (const f of free) if (f[1] - f[0] > best[1] - best[0]) best = f;
+    const pillY = round((best[0] + best[1]) / 2);
     const pills = labels.map((l) => ({ path: l.path, text: l.text, x, y: pillY, w: round(pillWidth(l.text)) }));
-    edges.push({ index: i, from: e.from, to: e.to, up, x, y1, y2, pills });
+    edges.push({ index: i, from: e.from, to: e.to, up, x, y1, y2, pills, widest });
   });
 
-  // edge labels in the same gap must not collide (the widest variant of each label counts)
-  for (let i = 0; i < edges.length; i++) {
-    for (let j = i + 1; j < edges.length; j++) {
-      const p = edges[i];
-      const q = edges[j];
-      if (!p.pills.length || !q.pills.length || p.pills[0].y !== q.pills[0].y) continue;
-      const pw = Math.max(...p.pills.map((s) => s.w));
-      const qw = Math.max(...q.pills.map((s) => s.w));
-      if (Math.abs(p.x - q.x) < (pw + qw) / 2 + 8) warn(`/edges/${q.index}`, `label overlaps the label of /edges/${p.index}; shorten one of them`);
+  // collisions the placement could not avoid (the widest variant of each label counts)
+  const half = G.pillH / 2;
+  for (const p of edges) {
+    const at = `/edges/${p.index}`;
+    if (p.pills.length) {
+      const px1 = p.x - p.widest / 2;
+      const px2 = p.x + p.widest / 2;
+      const py = p.pills[0].y;
+      if (px1 < 0 || px2 > G.width) warn(at, "label runs past the edge of the diagram; shorten it");
+      for (const t of labelBoxes) {
+        if (overlaps(px1, px2, t.x1, t.x2) && overlaps(py - half, py + half, t.y1, t.y2)) warn(at, `label covers the label ${JSON.stringify(t.text)}; shorten one of them`);
+      }
+      for (const q of edges) {
+        if (q === p) continue;
+        // another edge's line under this label
+        if (q.x > px1 && q.x < px2 && overlaps(py - half, py + half, q.y1, q.y2)) warn(at, `label covers the line of /edges/${q.index}; shorten the label`);
+        // another edge's label (each pair once)
+        if (q.index > p.index && q.pills.length) {
+          const qy = q.pills[0].y;
+          if (Math.abs(py - qy) < G.pillH && Math.abs(p.x - q.x) < (p.widest + q.widest) / 2 + 8) {
+            warn(`/edges/${q.index}`, `label overlaps the label of /edges/${p.index}; shorten one of them`);
+          }
+        }
+      }
+    }
+    // this edge's line through a group or boundary label
+    for (const t of labelBoxes) {
+      if (p.x > t.x1 - 2 && p.x < t.x2 + 2 && overlaps(p.y1, p.y2, t.y1, t.y2)) warn(at, `line crosses the label ${JSON.stringify(t.text)}; shorten the label`);
     }
   }
 

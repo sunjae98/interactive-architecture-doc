@@ -165,7 +165,10 @@ const OVERVIEW_FIXTURES = [
   ov("W_TEXT_LONG", (d) => { d.layers[2].nodes[0].title = "A component name that is far too long for one column"; }),
   ov("W_TEXT_LONG", (d) => { d.layers[2].nodes[0].rows = ["a_really_long_function_name_for_this_card()"]; }),
   ov("W_TEXT_LONG", (d) => { d.edges[0].label = "a very long request label that runs into the response"; }),
-  ov("W_PATH_DISCONNECTED", (d) => { d.paths[0].nodes.push("db"); }),
+  ov("E_PATH_DISCONNECTED", (d) => { d.paths[0].nodes.push("db"); }),
+  ov("E_REQUIRED", (d) => { delete d.edges[1].label; }),
+  ov("E_ID_FORMAT", (d) => { d.paths[1].id = "iad-selfcheck"; }),
+  ov("W_TEXT_LONG", (d) => { d.edges[2].label = "a label far too wide for the first column"; d.meta.columns = 4; d.layers[0].nodes[0].span = 4; d.layers[1].nodes[0].span = 4; }),
   ov("W_PLACEHOLDER", (d) => { d.caption = "[What the diagram shows]"; }),
 ];
 
@@ -177,6 +180,16 @@ test("base fixture is valid with no warnings", () => {
 test("overview base fixture is valid with no warnings", () => {
   const r = validate(clone(OVERVIEW_BASE));
   assert.deepEqual(r, { ok: true, errors: [], warnings: [] });
+});
+
+test("overview: a huge meta.columns is one E_LAYOUT error, quickly, without throwing", () => {
+  const d = clone(OVERVIEW_BASE);
+  d.meta.columns = 2147483648;
+  d.layers[1].nodes[0].span = 20000000;
+  const started = Date.now();
+  const r = validate(d);
+  assert.ok(Date.now() - started < 500, "bounded work");
+  assert.deepEqual(r.errors.map((e) => e.code), ["E_LAYOUT"]);
 });
 
 test("meta.style walkthrough is the default; an unknown style is E_STYLE for both formats", () => {

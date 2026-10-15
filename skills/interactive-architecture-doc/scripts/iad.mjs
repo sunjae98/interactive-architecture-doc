@@ -15,6 +15,7 @@ import { resolve } from "node:path";
 import { validate, formatIssue } from "./lib/validate.mjs";
 import { renderHtml, writeFileAtomic, defaultOutputPath, ValidationFailed } from "./lib/render.mjs";
 import { scaffold, scaffoldOverview, formatJson, KEBAB, LANGS, STYLES, MAX_STEPS, MAX_PATHS } from "./lib/scaffold.mjs";
+import { RESERVED_PATH_IDS } from "./lib/validate.mjs";
 
 const USAGE = `Usage:
   iad validate <doc.json>... [--json]
@@ -159,6 +160,7 @@ function cmdInit(args) {
     for (const id of paths) {
       if (!KEBAB.test(id)) throw new UsageError(`path id ${JSON.stringify(id)} must be kebab-case`);
       if (id === "client" || id === "entry") throw new UsageError(`path id ${JSON.stringify(id)} is reserved by the skeleton`);
+      if (RESERVED_PATH_IDS.includes(id)) throw new UsageError(`path id ${JSON.stringify(id)} is reserved (it is the self-check URL hash)`);
     }
     if (new Set(paths).size !== paths.length) throw new UsageError("path ids must be unique");
     if (paths.length > MAX_PATHS) throw new UsageError(`--paths takes at most ${MAX_PATHS} ids (one column each)`);

@@ -203,6 +203,67 @@ test("layout: columns set the grid; text width counts wide glyphs as 1em", () =>
   assert.equal(textWidth("ab", 10, { mono: true }), 12);
 });
 
+// layout regressions from review: a small builder for one-off documents
+const mini = (layers, edges = [], extra = {}) => ({
+  meta: { style: "overview", title: "T", ...(extra.meta || {}) },
+  layers,
+  ...(edges.length ? { edges } : {}),
+  ...(extra.rest || {}),
+});
+const n = (id, more = {}) => ({ id, title: id.toUpperCase(), ...more });
+const textWarnings = (doc) => validate(doc).warnings.filter((w) => w.code === "W_TEXT_LONG");
+
+test("layout: a group around the first layer stays inside the viewBox", () => {
+  const doc = mini([{ group: "s", nodes: [n("a", { span: 3 })] }, { nodes: [n("b", { span: 3 })] }], [{ from: "a", to: "b" }], { rest: { groups: [{ id: "s", label: "SYS" }] } });
+  assert.deepEqual(validate(doc).errors, []);
+  const geo = layoutOverview(doc);
+  assert.ok(geo.groups[0].y >= 0, `group top ${geo.groups[0].y}`);
+  assert.ok(renderHtml(doc).html.includes('class="ov-group"'));
+});
+
+test("layout: an edge label moves off a boundary label in the same gap", () => {
+  const doc = mini(
+    [{ nodes: [n("client", { span: 3, tone: "outer" })] }, { group: "s", boundary: "EXTERNAL SERVICES", nodes: [n("a"), n("b"), n("c")] }],
+    [{ from: "client", to: "a", label: "request" }],
+    { rest: { groups: [{ id: "s", label: "SYS" }] } }
+  );
+  assert.deepEqual(validate(doc), { ok: true, errors: [], warnings: [] });
+  const geo = layoutOverview(doc);
+  const pill = geo.edges[0].pills[0];
+  const b = geo.boundaries[0];
+  const labelTop = b.labelY - 11;
+  const labelBottom = b.labelY + 3;
+  assert.ok(pill.y - 12 >= labelBottom || pill.y + 12 <= labelTop, `pill ${pill.y} vs label ${labelTop}..${labelBottom}`);
+});
+
+test("layout: a long group label crossed by an edge line is reported", () => {
+  const doc = mini(
+    [{ nodes: [n("a", { span: 3 })] }, { group: "t", nodes: [n("b"), n("c"), n("d")] }],
+    [{ from: "a", to: "b" }],
+    { rest: { groups: [{ id: "t", label: "A VERY LONG GROUP LABEL HERE" }] } }
+  );
+  assert.ok(textWarnings(doc).some((w) => /crosses the label/.test(w.message)), JSON.stringify(validate(doc).warnings));
+});
+
+test("layout: labels a few px apart vertically still count as overlapping", () => {
+  const doc = mini(
+    [{ nodes: [n("a", { rows: ["x()"] }), n("c")] }, { nodes: [n("b"), n("d")] }],
+    [{ from: "a", to: "b", label: "abcdefghijklmnopqrstuvwxyz" }, { from: "c", to: "d", label: "abcdefghijklmnopqrstuvwxyz" }],
+    { meta: { columns: 4 } }
+  );
+  const geo = layoutOverview(doc);
+  assert.notEqual(geo.edges[0].pills[0].y, geo.edges[1].pills[0].y, "card shifts the label");
+  assert.ok(textWarnings(doc).some((w) => /overlaps the label/.test(w.message)));
+});
+
+test("layout: a label past the diagram edge is reported; nodes render in document order", () => {
+  const doc = mini([{ nodes: [n("a")] }, { nodes: [n("b")] }], [{ from: "a", to: "b", label: "x".repeat(40) }], { meta: { columns: 4 } });
+  assert.ok(textWarnings(doc).some((w) => /past the edge/.test(w.message)));
+  const ordered = mini([{ nodes: [n("b"), n("10"), n("2")] }]);
+  const ids = [...renderHtml(ordered).html.matchAll(/ data-node="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(ids, ["b", "10", "2"]);
+});
+
 // ---- init --------------------------------------------------------------------------
 
 function withDir(fn) {
@@ -244,6 +305,7 @@ test("init: style-specific options are rejected for the other style (exit 2, not
       ["--style", "overview", "--paths", "a,a"],
       ["--style", "overview", "--paths", "Bad"],
       ["--style", "overview", "--paths", "client"],
+      ["--style", "overview", "--paths", "iad-selfcheck"],
     ]) {
       const r = run("init", out, ...args);
       assert.equal(r.status, 2, args.join(" "));

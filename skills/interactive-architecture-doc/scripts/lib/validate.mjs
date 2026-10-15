@@ -12,6 +12,8 @@ export const STYLES = ["walkthrough", "overview"];
 export const TONES = ["default", "outer"];
 export const MIN_COLUMNS = 2;
 export const MAX_COLUMNS = 4;
+// path ids are URL hashes; this one runs the self-check
+export const RESERVED_PATH_IDS = ["iad-selfcheck"];
 
 export const RULES = [
   { code: "E_TYPE", level: "error", summary: "Value has the wrong JSON type." },
@@ -40,13 +42,13 @@ export const RULES = [
   { code: "E_GROUP_UNKNOWN", level: "error", summary: "Overview: `layers[].group` is not a group id, or a group's layers are not contiguous." },
   { code: "E_LAYOUT", level: "error", summary: "Overview: the grid cannot hold the layer (`meta.columns` outside 2..4, a node outside the grid or on another node, a boundary on the first layer, `rows` with `code` or with `tone: outer`)." },
   { code: "E_EDGE_LAYER", level: "error", summary: "Overview: an edge does not connect two nodes in adjacent layers." },
+  { code: "E_PATH_DISCONNECTED", level: "error", summary: "Overview: a path node has no edge to another node of the same path." },
   { code: "E_EDGE_ALIGN", level: "error", summary: "Overview: the two nodes of an edge do not overlap horizontally, so no vertical line fits." },
   { code: "W_SCENARIO_NO_ACTIVE", level: "warning", summary: "A scenario has no active node at some step." },
   { code: "W_SCENARIO_STEP_MISSING", level: "warning", summary: "A scenario has no `steps` text for some step." },
   { code: "W_PLACEHOLDER", level: "warning", summary: "A string still contains a `[...]` placeholder or `TODO`." },
   { code: "W_ENTRY_NO_INPUT", level: "warning", summary: "`meta.entry_request` does not contain `{{input}}`." },
-  { code: "W_TEXT_LONG", level: "warning", summary: "Overview: text is likely wider than its box, or two edge labels overlap." },
-  { code: "W_PATH_DISCONNECTED", level: "warning", summary: "Overview: a path node has no edge to another node of the same path." },
+  { code: "W_TEXT_LONG", level: "warning", summary: "Overview: text is likely wider than its box, or a label collides with another label, an edge line or the edge of the diagram." },
 ];
 
 const RULE_LEVEL = Object.fromEntries(RULES.map((r) => [r.code, r.level]));
@@ -325,9 +327,9 @@ function checkSemantics(doc, out) {
 
 function checkOverviewSemantics(doc, out) {
   const columns = doc.meta.columns ?? 3;
-  if (columns < MIN_COLUMNS || columns > MAX_COLUMNS) {
-    report(out, "/meta/columns", "E_LAYOUT", `columns must be ${MIN_COLUMNS}..${MAX_COLUMNS}, got ${columns}`);
-  }
+  // a bad column count is reported once; node placement is only checked against a valid grid
+  const gridOk = columns >= MIN_COLUMNS && columns <= MAX_COLUMNS;
+  if (!gridOk) report(out, "/meta/columns", "E_LAYOUT", `columns must be ${MIN_COLUMNS}..${MAX_COLUMNS}, got ${columns}`);
 
   const ids = (list, path, what) => {
     const seen = new Set();
@@ -341,6 +343,9 @@ function checkOverviewSemantics(doc, out) {
   };
   const groupIds = ids(doc.groups || [], "/groups", "group");
   const pathIds = ids(doc.paths || [], "/paths", "path");
+  (doc.paths || []).forEach((p, i) => {
+    if (RESERVED_PATH_IDS.includes(p.id)) report(out, `/paths/${i}/id`, "E_ID_FORMAT", `path id ${q(p.id)} is reserved (it is the self-check URL hash)`);
+  });
 
   // nodes: ids, grid cells, shape
   const nodeLayer = new Map();
@@ -360,7 +365,9 @@ function checkOverviewSemantics(doc, out) {
       if (n.rows && n.tone === "outer") report(out, p, "E_LAYOUT", "a card (rows) cannot have tone \"outer\"");
       const span = n.span ?? 1;
       const col = n.col ?? cursor;
-      if (span < 1 || col < 1 || col + span - 1 > columns) {
+      if (!gridOk) {
+        // skipped: see /meta/columns
+      } else if (span < 1 || col < 1 || col + span - 1 > columns) {
         report(out, p, "E_LAYOUT", `node spans columns ${col}..${col + span - 1}, outside 1..${columns}`);
       } else {
         for (let c = col; c < col + span; c++) {
@@ -399,6 +406,9 @@ function checkOverviewSemantics(doc, out) {
     if (known && Math.abs(nodeLayer.get(e.from) - nodeLayer.get(e.to)) !== 1) {
       report(out, p, "E_EDGE_LAYER", `${q(e.from)} and ${q(e.to)} are not in adjacent layers`);
     }
+    if (e.label_by_path !== undefined && e.label === undefined) {
+      report(out, `${p}/label`, "E_REQUIRED", "label_by_path needs a default label (shown on the overview and on other paths)");
+    }
     for (const key of Object.keys(e.label_by_path || {})) {
       if (!pathIds.has(key)) report(out, ptr(`${p}/label_by_path`, key), "E_PATH_UNKNOWN", `${q(key)} is not a path id`);
     }
@@ -415,7 +425,7 @@ function checkOverviewSemantics(doc, out) {
       if (!nodeLayer.has(id)) return report(out, `/paths/${i}/nodes/${j}`, "E_NODE_UNKNOWN", `${q(id)} is not a node id`);
       const linked = [...(adjacency.get(id) || [])].some((other) => other !== id && members.has(other));
       if (members.size > 1 && !linked) {
-        report(out, `/paths/${i}/nodes/${j}`, "W_PATH_DISCONNECTED", `${q(id)} has no edge to another node of path ${q(path.id)}`);
+        report(out, `/paths/${i}/nodes/${j}`, "E_PATH_DISCONNECTED", `${q(id)} has no edge to another node of path ${q(path.id)}`);
       }
     });
   });
