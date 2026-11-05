@@ -664,6 +664,7 @@
     if (selNode) renderNode(selNode); else renderStep();
     runToken();
     if (step >= 0) followStep(f.curE, f.curN);
+    else scrollMapTo(0); // the full path (and a new scenario) starts at the start of the map
   }
 
   // ---- narrow screens: keep the current step in view and show which side has more map
@@ -685,9 +686,12 @@
     if (x1 > x2) return;
     var origin = r.left - dr.left + diagramEl.scrollLeft;
     var to = scrollTarget(diagramEl.scrollLeft, diagramEl.clientWidth, origin + (x1 - vb.x) * k, origin + (x2 - vb.x) * k, max, 24);
-    if (to === null) return;
-    if (diagramEl.scrollTo) diagramEl.scrollTo({ left: to, behavior: reduce ? "auto" : "smooth" });
-    else diagramEl.scrollLeft = to;
+    if (to !== null) scrollMapTo(to);
+  }
+  function scrollMapTo(left, instant) {
+    // always issue the scroll: it also replaces a smooth scroll still in flight
+    if (diagramEl.scrollTo) diagramEl.scrollTo({ left: left, behavior: reduce || instant ? "auto" : "smooth" });
+    else diagramEl.scrollLeft = left;
   }
   diagramEl.addEventListener("scroll", updateFade, { passive: true });
   window.addEventListener("resize", updateFade);
@@ -883,6 +887,7 @@
       });
       pickScenario(savedCur);
       go(savedStep);
+      scrollMapTo(0, true); // leave the map at its start
       var errors = (window.__iadErrors || []).slice();
       var result = { ok: !failures.length && !errors.length, checked: checked, scenarios: SC.length, failures: failures, errors: errors };
       var json = JSON.stringify(result);

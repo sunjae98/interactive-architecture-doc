@@ -221,8 +221,16 @@ test("scrollTarget: scrolls only when the step is out of view, centered and clam
 
 test("narrow screens: the map follows the step (smooth unless reduced motion) and fades its clipped edges", () => {
   assert.ok(HTML.includes('<div class="map-wrap" id="mapWrap">\n<div class="diagram" id="diagram">'));
-  assert.ok(HTML.includes('behavior: reduce ? "auto" : "smooth"'));
+  assert.ok(HTML.includes('behavior: reduce || instant ? "auto" : "smooth"'));
   assert.ok(HTML.includes("if (step >= 0) followStep(f.curE, f.curN);"));
   assert.match(HTML, /\.map-wrap\.fade-l::before,\.map-wrap\.fade-r::after\{opacity:1;\}/);
   assert.ok(HTML.includes('diagramEl.addEventListener("scroll", updateFade, { passive: true });'));
+});
+
+test("scroll reset: the full path, a new scenario and the end of the self-check show the start of the map", () => {
+  assert.ok(HTML.includes("else scrollMapTo(0); // the full path (and a new scenario) starts at the start of the map"));
+  assert.ok(HTML.includes("scrollMapTo(0, true); // leave the map at its start"));
+  // pickScenario renders step -1, which takes the reset branch
+  const pick = HTML.slice(HTML.indexOf("function pickScenario(i)"), HTML.indexOf("function render()"));
+  assert.ok(pick.includes("cur = i; step = -1;") && pick.includes("render();"));
 });
