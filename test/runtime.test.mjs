@@ -209,3 +209,20 @@ test("freeSpan: the token's route is trimmed so the chip never covers the source
   // no boxes in the way: the whole route
   assert.deepEqual(plain(h.freeSpan(at, 300, 80, null, null)), [0, 300]);
 });
+
+test("scrollTarget: scrolls only when the step is out of view, centered and clamped", () => {
+  const h = loadHelpers();
+  assert.equal(h.scrollTarget(0, 400, 50, 200, 1000, 24), null, "already visible");
+  assert.equal(h.scrollTarget(0, 400, 700, 800, 1000, 24), 550, "centered");
+  assert.equal(h.scrollTarget(500, 400, 10, 60, 1000, 24), 0, "clamped at the start");
+  assert.equal(h.scrollTarget(0, 400, 1300, 1390, 1000, 24), 1000, "clamped at the end");
+  assert.equal(h.scrollTarget(0, 400, 600, 1200, 1000, 24), 576, "wider than the view: its start");
+});
+
+test("narrow screens: the map follows the step (smooth unless reduced motion) and fades its clipped edges", () => {
+  assert.ok(HTML.includes('<div class="map-wrap" id="mapWrap">\n<div class="diagram" id="diagram">'));
+  assert.ok(HTML.includes('behavior: reduce ? "auto" : "smooth"'));
+  assert.ok(HTML.includes("if (step >= 0) followStep(f.curE, f.curN);"));
+  assert.match(HTML, /\.map-wrap\.fade-l::before,\.map-wrap\.fade-r::after\{opacity:1;\}/);
+  assert.ok(HTML.includes('diagramEl.addEventListener("scroll", updateFade, { passive: true });'));
+});
