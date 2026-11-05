@@ -261,7 +261,7 @@ function applyLaneHints(doc, cols, hintIds, byId) {
     const c = cols.findIndex((col) => col.ids.includes(id));
     if (c >= 0) cols[c].ids.splice(cols[c].ids.indexOf(id), 1);
   }
-  // drop columns left empty, unless they are part of a group run (they keep the run contiguous)
+  // drop the columns the hinted nodes left empty; placing a hint recreates the columns it needs
   for (let i = cols.length - 1; i >= 0; i--) if (!cols[i].ids.length) cols.splice(i, 1);
   const hints = hintIds.map((id) => ({ id, lane: byId[id].lane, group: byId[id].group || "" })).sort((p, q) => p.lane - q.lane);
   let floor = 0; // boundaries below this would shift an earlier hint
@@ -664,6 +664,25 @@ export function layoutWalkthrough(doc) {
   // lane widths (single-lane nodes only) and x positions
   const laneW = Array.from({ length: laneCount }, () => G.laneMin);
   for (const n of gridNodes) if ((n.span || 1) === 1 && n.w === undefined) laneW[lane.get(n.id)] = Math.max(laneW[lane.get(n.id)], clampLane(naturalWidth(n)));
+  // lanes no node covers (only lane hints can cause that) are drawn without width and reported
+  const covered = new Set();
+  for (const n of gridNodes) for (let k = 0; k < (n.span || 1); k++) covered.add(lane.get(n.id) + k);
+  const emptyLanes = Array.from({ length: laneCount }, (_, l) => l).filter((l) => !covered.has(l));
+  for (const l of emptyLanes) laneW[l] = 0;
+  const hintedNodes = doc.nodes.map((n, i) => ({ n, i })).filter(({ n }) => !manual(n) && Number.isInteger(n.lane));
+  for (let a = 0; a < emptyLanes.length; ) {
+    let b = a;
+    while (b + 1 < emptyLanes.length && emptyLanes[b + 1] === emptyLanes[b] + 1) b++;
+    const [lo, hi] = [emptyLanes[a], emptyLanes[b]];
+    const by = hintedNodes.filter(({ n }) => n.lane > hi).sort((p, q) => p.n.lane - q.n.lane)[0] || hintedNodes[0];
+    const lanes = lo === hi ? `lane ${lo} is` : `lanes ${lo}-${hi} are`;
+    issues.push({
+      path: by ? `/nodes/${by.i}/lane` : "/nodes",
+      code: "W_LANE_EMPTY",
+      message: `${lanes} empty${by ? `: the hint lane ${by.n.lane} on node ${JSON.stringify(by.n.id)} skips past ${lo === hi ? "it" : "them"}` : ""}; use a lower lane or drop the hint`,
+    });
+    a = b + 1;
+  }
   const groupsIn = (pick) => [...new Set(gridNodes.filter(pick).map((n) => n.group || ""))].sort().join("|");
   const laneGroups = Array.from({ length: laneCount }, (_, l) => groupsIn((n) => lane.get(n.id) <= l && l < lane.get(n.id) + (n.span || 1)));
   const laneX = [];

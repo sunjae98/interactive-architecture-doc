@@ -492,3 +492,30 @@ test("layout: many steps starting on one short edge keep their badges off node b
   assert.ok(crowded.length > 0);
   assert.match(crowded[0].path, /^\/scenarios\/0\/steps\/\d+$/);
 });
+
+test("lane hints: two groups hinted into one lane is E_LANE_GROUPS, not an overlap on another node", () => {
+  const doc = clone(FIXTURE);
+  doc.nodes.find((n) => n.id === "receiver").lane = 0; // group service
+  doc.nodes.find((n) => n.id === "browser").lane = 0; // ungrouped
+  const errors = validate(doc).errors;
+  assert.deepEqual(errors.map((e) => e.code), ["E_LANE_GROUPS"]);
+  assert.match(errors[0].message, /lane 0 is hinted by ungrouped nodes \(node "browser"\) and group "service" \(node "receiver"\)/);
+  // the same lane for one group is fine, and so is a fully manual grid
+  const ok = clone(FIXTURE);
+  ok.nodes.find((n) => n.id === "receiver").lane = 2;
+  ok.nodes.find((n) => n.id === "parser").lane = 2;
+  assert.ok(!validate(ok).errors.some((e) => e.code === "E_LANE_GROUPS"));
+});
+
+test("lane hints: lanes a hint skips over are reported once per range and drawn without width", () => {
+  const doc = clone(FIXTURE);
+  doc.nodes.find((n) => n.id === "model").lane = 64;
+  const w = validate(doc).warnings.filter((x) => x.code === "W_LANE_EMPTY");
+  assert.equal(w.length, 1);
+  assert.match(w[0].message, /^lanes \d+-63 are empty: the hint lane 64 on node "model" skips past them/);
+  const L = layoutWalkthrough(doc);
+  const empty = L.lanes.filter((l) => l.w === 0);
+  assert.ok(empty.length > 50, "empty lanes have no width");
+  assert.ok(L.viewBox[2] < 64 * (GEOMETRY_WT.laneMin + GEOMETRY_WT.laneGap), "narrower than 64 full lanes");
+  assert.deepEqual(validate(clone(FIXTURE)).warnings, [], "no hints, no empty lanes");
+});

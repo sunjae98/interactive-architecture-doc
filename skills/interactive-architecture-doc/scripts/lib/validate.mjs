@@ -42,6 +42,7 @@ export const RULES = [
   { code: "E_GAUGE_UNKNOWN", level: "error", summary: "A step (`gauges`) or a scenario (`gauge_empty`) names a gauge id that does not exist." },
   { code: "E_GAUGE_RANGE", level: "error", summary: "A gauge value is outside 0..1." },
   { code: "E_GAUGE_DUP_NODE", level: "error", summary: "Two gauges are drawn on the same node (one gauge per node)." },
+  { code: "E_LANE_GROUPS", level: "error", summary: "Lane hints put nodes of different groups (or grouped and ungrouped nodes) in the same lane of a partly automatic map; each lane belongs to one group there." },
   { code: "E_POS_PARTIAL", level: "error", summary: "A node has only one of `x` / `y`; absolute positions need both." },
   { code: "E_LAYOUT_OVERLAP", level: "error", summary: "Two nodes, two groups, or a node and a group it does not belong to overlap on the map." },
   { code: "E_ROUTE_PATH", level: "error", summary: "`route.d` is not an absolute SVG path: it must start with M and use M L H V C Q Z with whole argument groups (M/L 2, H/V 1, C 6, Q 4, Z 0) of finite numbers within ±1e5." },
@@ -53,6 +54,7 @@ export const RULES = [
   { code: "W_FACTS_MISSING", level: "warning", summary: "A node has no `facts`, so clicking it shows an empty panel." },
   { code: "W_POS_IGNORED", level: "warning", summary: "A node has both `x`/`y` and `lane`/`row`; `x`/`y` wins and `lane`/`row` are ignored." },
   { code: "W_GAUGE_UNUSED", level: "warning", summary: "No step sets this gauge, so it always shows its empty state." },
+  { code: "W_LANE_EMPTY", level: "warning", summary: "Lane hints leave lanes without any node; they are drawn without width, but a lower hint is usually meant." },
   { code: "W_BADGE_CROWDED", level: "warning", summary: "A step badge found no spot clear of the scenario's other badges and of node boxes (many steps start on one short edge); it overlaps." },
   { code: "E_NODE_UNKNOWN", level: "error", summary: "An edge, step, gauge, marker, skip entry or overview path names a node id that does not exist." },
   { code: "E_PATH_UNKNOWN", level: "error", summary: "Overview: a `label_by_path` key is not a path id." },
@@ -330,6 +332,22 @@ function checkSemantics(doc, out) {
     if (hasX && hasY && (n.lane !== undefined || n.row !== undefined)) report(out, p, "W_POS_IGNORED", "x/y is set, so lane/row are ignored");
     if (!n.facts) report(out, p, "W_FACTS_MISSING", `node ${q(n.id)} has no facts (shown when the box is clicked)`);
   });
+
+  // lane hints on a partly automatic map: a lane belongs to one group (or to ungrouped nodes)
+  const onGrid = doc.nodes.filter((n) => !(n.x !== undefined && n.y !== undefined));
+  if (onGrid.some((n) => !Number.isInteger(n.lane))) {
+    const laneOwner = new Map();
+    doc.nodes.forEach((n, i) => {
+      if (!onGrid.includes(n) || !Number.isInteger(n.lane)) return;
+      const g = n.group || "";
+      const prev = laneOwner.get(n.lane);
+      if (!prev) laneOwner.set(n.lane, { g, id: n.id });
+      else if (prev.g !== g) {
+        const name = (x) => (x ? `group ${q(x)}` : "ungrouped nodes");
+        report(out, `/nodes/${i}/lane`, "E_LANE_GROUPS", `lane ${n.lane} is hinted by ${name(prev.g)} (node ${q(prev.id)}) and ${name(g)} (node ${q(n.id)}); in a partly automatic map each lane belongs to one group, so give these nodes different lanes (or give every node a lane)`);
+      }
+    });
+  }
 
   // legend
   for (const key of Object.keys(doc.legend.nodes)) {
