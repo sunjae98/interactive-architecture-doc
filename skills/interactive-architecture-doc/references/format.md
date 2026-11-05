@@ -212,6 +212,7 @@ listed in [format-overview.md](format-overview.md) and apply here too.
 | `W_FACTS_MISSING` | warning | A node has no `facts`, so clicking it shows an empty panel. |
 | `W_POS_IGNORED` | warning | A node has both `x`/`y` and `lane`/`row`; `x`/`y` wins and `lane`/`row` are ignored. |
 | `W_GAUGE_UNUSED` | warning | No step sets this gauge, so it always shows its empty state. |
+| `W_BADGE_CROWDED` | warning | A step badge found no spot clear of the scenario's other badges and of node boxes (many steps start on one short edge); it overlaps. |
 | `W_PLACEHOLDER` | warning | A string still contains a `[...]` placeholder or `TODO`. |
 
 ## Differences from the v3 design plan

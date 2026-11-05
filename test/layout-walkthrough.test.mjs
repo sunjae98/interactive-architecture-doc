@@ -473,3 +473,22 @@ test("layout: detours sharing a lane or row gap are spread apart instead of stac
   const sorted = [...lines].sort((p, q) => p - q);
   for (let i = 1; i < sorted.length; i++) assert.ok(sorted[i] - sorted[i - 1] >= 5, `lines ${JSON.stringify(sorted)} stack`);
 });
+
+test("layout: many steps starting on one short edge keep their badges off node boxes, then warn", () => {
+  const onBox = (L, p) => Object.values(L.nodes).some((b) => p.x > b.x - GEOMETRY_WT.badgeR && p.x < b.x + b.w + GEOMETRY_WT.badgeR && p.y > b.y - GEOMETRY_WT.badgeR && p.y < b.y + b.h + GEOMETRY_WT.badgeR);
+  const reuse = (n) => {
+    const doc = clone(FIXTURE);
+    const base = doc.scenarios[0].steps[1]; // the short `fwd` edge
+    doc.scenarios[0].steps = Array.from({ length: n }, (_, i) => ({ ...base, title: `s${i}` }));
+    return layoutWalkthrough(doc);
+  };
+  const four = reuse(4);
+  assert.deepEqual(four.badges.upload.filter((p) => onBox(four, p)), []);
+  assert.deepEqual(four.issues, []);
+  assert.deepEqual(reuse(12).issues, [], "a dozen still find clear spots");
+  const many = reuse(20);
+  assert.deepEqual(many.badges.upload.filter((p) => onBox(many, p)), []);
+  const crowded = many.issues.filter((i) => i.code === "W_BADGE_CROWDED");
+  assert.ok(crowded.length > 0);
+  assert.match(crowded[0].path, /^\/scenarios\/0\/steps\/\d+$/);
+});
