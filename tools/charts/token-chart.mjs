@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates docs/token-comparison-{light,dark}.svg: estimated tokens an agent reads and writes
-// to produce one forked document, single SKILL.md + hand-edited template vs this skill.
+// to produce one 3-scenario document, single SKILL.md + hand-edited template vs this skill.
 // Usage: node tools/charts/token-chart.mjs
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -85,10 +85,10 @@ function svg(rows, t) {
   const xs = (v) => left + (v / niceMax) * plotW;
   const out = [];
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">`);
-  out.push(`<title id="t">Estimated tokens per forked document</title>`);
+  out.push(`<title id="t">Estimated tokens per 3-scenario document</title>`);
   out.push(`<desc id="d">${esc(rows.map((r) => `${r.label}: ${SERIES[0].name} ${r.a}, ${SERIES[1].name} ${r.b}`).join("; "))}. Tokens estimated as bytes / ${BYTES_PER_TOKEN}.</desc>`);
   out.push(`<rect width="${W}" height="${H}" rx="8" fill="${t.surface}"/>`);
-  out.push(`<text x="24" y="30" font-size="15" font-weight="600" fill="${t.ink}">Estimated tokens to create one forked document</text>`);
+  out.push(`<text x="24" y="30" font-size="15" font-weight="600" fill="${t.ink}">Estimated tokens to create one 3-scenario document</text>`);
   // legend
   let lx = 24;
   for (const s of SERIES) {
