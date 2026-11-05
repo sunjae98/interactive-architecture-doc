@@ -109,4 +109,4 @@ Text widths are estimates; the self-check and a look at the page settle borderli
 
 `node scripts/iad.mjs init doc.json --style overview [--paths a,b]` writes a valid skeleton
 ([cli.md](cli.md)). Complete example: `examples/request-router.overview.en.json` (Korean:
-`.ko.json`). It draws the same system as `examples/three-branch.en.json` in the overview style.
+`.ko.json`).

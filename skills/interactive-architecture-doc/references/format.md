@@ -1,79 +1,184 @@
-# Document format (IR) — v3 walkthrough (DRAFT)
+# Document format (IR)
 
-> **Draft (v3 prototype gate).** Only the tables are settled enough to test; prose, examples and the
-> migration note come after the gate. v2 walkthrough documents (top-level `steps` / `board`) are
-> rejected with `E_V2_WALKTHROUGH`. The **overview** style has its own page:
-> [format-overview.md](format-overview.md). `meta.style` selects the format.
+This page is the **walkthrough** style (the default): a component map that the reader steps through
+scenario by scenario. The **overview** style, one layered diagram for docs pages, has its own page:
+[format-overview.md](format-overview.md). `meta.style` selects the format.
 
 An interactive architecture document is a single JSON file. `scripts/iad.mjs` validates it and
-renders it into one self-contained HTML file. **Never edit the rendered HTML** — edit the JSON
+renders it into one self-contained HTML file. **Never edit the rendered HTML**: edit the JSON
 and render again. The rendered HTML embeds a copy of the JSON in
-`<script type="application/json" id="iad-data">`.
+`<script type="application/json" id="iad-data">`, so the JSON can be recovered from it.
 
-The validator (`scripts/lib/validate.mjs`) is the single source of truth; a test fails if the rule
-table below (plus the one in format-overview.md) and the validator drift apart. Commands: [cli.md](cli.md).
+The validator (`scripts/lib/validate.mjs`) is the single source of truth. This page describes the
+same rules; a test fails if the rule tables (this page plus format-overview.md) and the validator
+drift apart. Commands and options: [cli.md](cli.md). Documents from v2 (top-level `steps` / `board`)
+are rejected with `E_V2_WALKTHROUGH`; see [migration-v2.md](migration-v2.md).
+
+## What the reader sees
+
+A header (title, intro, fact chips), one card per scenario, and the **stage**: the component map
+with its controls (previous, next, auto play, restart, step counter, progress bar, step list) and a
+narration panel. Before the first step the panel shows the scenario's `lead`; at each step it shows
+what moves, where it lives and what happens if it fails, while the step's edges light up and a token
+travels along them. Clicking a box shows its `facts`. Under the stage: the summary (`tldr`), tables
+and the legend.
 
 ## Top level
 
 | Field | Required | Type | Notes |
 |---|---|---|---|
-| `meta` | yes | object | `{title, intro?, facts?[{label, value, mono?}], source?, style?, lang?}` |
-| `legend` | yes | object | `{nodes: {kind: label}, edges?: {file?, text?, ctrl?}, tokens?: [{kind, text}]}`; every used node kind needs a label |
-| `groups` | no | array | `{id, title, meta?, tone?: default \| muted}`; the box is the members' bounding box plus an inset |
-| `nodes` | yes | array (≥1) | see below |
-| `edges` | yes | array (≥1) | `{id, from, to, kind: file \| text \| ctrl, route?}` |
-| `gauges` | no | array | `{id, node, caption?, empty?}`; one per node; steps set values, which carry forward |
-| `scenarios` | yes | array (1..6) | `{id, title, summary, lead, tag?, note?: {title?, items}, skip?: [{node, label}], gauge_empty?: {gaugeId: label}, steps}`; `gauge_empty` replaces a gauge's `empty` label in this scenario |
-| `tldr` | no | object | `{title?, points: string[]}` |
-| `tables` | no | array | `{title, columns: string[], rows: string[][]}`; each row has one cell per column |
-| `callouts` / `considerations` / `tool_examples` | no | | as in v2; shown as cards under the map |
+| `meta` | yes | object | see below |
+| `legend` | yes | object | see below |
+| `nodes` | yes | array (≥1) | the boxes of the map |
+| `edges` | yes | array (≥1) | the arrows between them |
+| `scenarios` | yes | array (1..6) | one card each; each has its own steps |
+| `groups` | no | array | dashed boxes around nodes |
+| `gauges` | no | array | a fill gauge drawn inside a node, set by steps |
+| `tldr` | no | object | `{title?, points: string[]}`: a numbered summary under the map |
+| `tables` | no | array | `{title, columns: string[], rows: string[][]}`; one cell per column |
+| `callouts` | no | array of `{title, body}` | cards under the map |
+| `considerations` | no | object | `{title, items[{decision, why}]}`; every decision needs a `why` |
+| `tool_examples` | no | object | `{title, lead?, tools[{name, code, note?}]}` |
+
+### `meta`
+
+| Field | Required | Notes |
+|---|---|---|
+| `title` | yes | plain text; also the page `<title>` |
+| `intro` | no | markup; the line under the title |
+| `facts` | no | `[{label, value, mono?}]`: chips under the intro; `mono` (default true) sets the value in the mono font |
+| `source` | no | markup; the footer |
+| `style` | no | `"walkthrough"` (default) or `"overview"` |
+| `lang` | no | `"en"` (default) or `"ko"`: UI strings only. Author text is never translated |
+
+### `legend`
+
+| Field | Required | Notes |
+|---|---|---|
+| `nodes` | yes | `{kind: label}`: what each node kind means **in this document**. Every kind used by a node needs a label |
+| `edges` | no | `{file?, text?, ctrl?}`: labels of the three line styles (defaults come from the UI strings) |
+| `tokens` | no | `[{kind, text}]`: token samples shown in the legend |
+
+Node kinds are fixed; their meaning is whatever the legend says.
+
+| Kind | Typical meaning | Color |
+|---|---|---|
+| `client` | who starts the flow (app, browser, user) | crimson |
+| `infra` | load balancer, gateway, queue | violet |
+| `app` | a step of the system being described | amber |
+| `store` | disk, database, cache | green |
+| `tool` | an internal tool or a person's console | gray |
+| `dep` | an external service or dependency | blue |
 
 ### `nodes[]`
 
 | Field | Required | Notes |
 |---|---|---|
-| `id` | yes | lowercase words joined by `-` or `_` |
-| `kind` | yes | `client` (crimson) \| `infra` (violet) \| `app` (amber) \| `store` (green) \| `tool` (gray) \| `dep` (blue) |
+| `id` | yes | lowercase words joined by `-` or `_`, unique |
+| `kind` | yes | one of the six kinds |
 | `title` | yes | plain text |
-| `mono` / `sub` (≤3) / `lines` | no | mono subtitle, extra lines, fixed-width lines (leading spaces kept). A `lines` item is a string or `{text, muted?}`; `muted: true` draws it in the muted color |
-| `facts` | no | markup lines shown when the box is clicked |
-| `group` | no | group id |
-| `lane` / `row` | no | grid column / row (≥0); automatic when omitted. Lanes follow the file/text flow, each group gets its own block of lanes, and a map wider than 6 lanes folds neighbouring lanes so long chains run downward. A `lane` on some nodes is a constraint on top of that: the node gets exactly that lane and the groups around it move or grow so they stay contiguous. Only when every node has a `lane` are lanes used exactly as given |
-| `span` / `rows` | no | lanes / rows the box covers (≥1) |
-| `x`, `y` | no | absolute position (both or neither); wins over lane/row |
-| `w`, `h` | no | forced size |
+| `mono` | no | plain; a mono subtitle in the kind's color |
+| `sub` | no | up to 3 plain lines |
+| `lines` | no | fixed-width lines (leading spaces are kept). An item is a string or `{text, muted?}`; `muted: true` draws it in the muted color |
+| `facts` | no | markup lines shown when the box is clicked (`W_FACTS_MISSING` without them) |
+| `group` | no | a group id |
+| `lane`, `row` | no | layout hints (0..64); see [Layout](#layout) |
+| `span`, `rows` | no | lanes / rows the box covers (1..64) |
+| `x`, `y` | no | absolute position in map units (both or neither, within ±1e5); wins over `lane` / `row` |
+| `w`, `h` | no | forced size (> 0). A forced `h` smaller than the content is reported (`W_TEXT_LONG`) |
 
-### `edges[].route`
+### `groups[]`
 
-`{from_side?, to_side?, via?: [[x, y], ...], d?}`. Sides: `top` \| `right` \| `bottom` \| `left`.
-`d` is a raw absolute SVG path (M L H V C Q Z only) and wins over the rest. Without `via`/`d`, an
-edge whose curve would cross a node is routed around the nodes through the lane and row gaps.
-`iad layout <doc>` prints the computed lanes, gaps, node boxes and edge paths for writing `via`.
+`{id, title, meta?, tone?}`: `id` is kebab-case; `meta` is a mono line under the title; `tone: "muted"`
+dims the group with the rest of the map while a scenario is shown. The box is drawn around its members
+(`node.group`), so a group's members should sit next to each other.
+
+### `edges[]`
+
+| Field | Required | Notes |
+|---|---|---|
+| `id` | yes | lowercase words joined by `-` or `_`, unique |
+| `from`, `to` | yes | node ids, different from each other |
+| `kind` | yes | `file` (bulk data, thick), `text` (requests and text), `ctrl` (control and responses, dotted) |
+| `route` | no | `{from_side?, to_side?, via?, d?}`; see [Layout](#layout) |
+
+### `gauges[]`
+
+`{id, node, caption?, empty?}`: one gauge per node. A step sets it with `gauges: {id: {value, label}}`
+(`value` 0..1); the value carries forward to later steps. At the start of a scenario it shows 0 and the
+`empty` label, or the scenario's `gauge_empty` label for that gauge.
+
+### `scenarios[]`
+
+| Field | Required | Notes |
+|---|---|---|
+| `id` | yes | kebab-case, unique |
+| `title`, `summary` | yes | the card; `summary` is the second line |
+| `lead` | yes | markup; the narration before the first step |
+| `tag` | no | a small label on the card ("proposal", "outage") |
+| `note` | no | `{title?, items: string[]}`: a box under the lead |
+| `skip` | no | `[{node, label}]`: nodes this scenario does not touch; drawn dashed with the label |
+| `gauge_empty` | no | `{gaugeId: label}`: the empty label of a gauge in this scenario ("nothing written") |
+| `steps` | yes | array (≥1), below |
 
 ### `scenarios[].steps[]`
 
 | Field | Required | Notes |
 |---|---|---|
-| `title` | yes | step list and narration heading |
+| `title` | yes | markup; step list and narration heading |
 | `edges` | yes | edge ids (may be empty); the token travels them in order |
-| `nodes` | no | nodes to highlight without an edge; required when `edges` is empty |
-| `token` | yes | `{text, kind: file \| text \| ctrl \| err}` |
-| `what` / `where` / `fail` | yes | the three narration boxes (markup) |
+| `nodes` | no | nodes highlighted without an edge; required when `edges` is empty |
+| `token` | yes | `{text, kind}`: the moving chip; `kind` is `file`, `text`, `ctrl` or `err` |
+| `what`, `where`, `fail` | yes | markup; the three narration boxes |
 | `gauges` | no | `{gaugeId: {value: 0..1, label}}` |
-| `markers` | no | `[{node, label}]` error markers shown at this step only |
+| `markers` | no | `[{node, label}]`: error markers at the node's top-right corner, this step only |
 
 ## Text and markup
 
-All text is HTML-escaped. In markup fields only `**bold**` and `` `code` `` are converted.
-`W_PLACEHOLDER` ignores text inside `` `code` `` and bracketed constants such as `[DONE]` or `[PHONE_1]`.
-`meta.title`, node `title` / `mono` / `sub` / `lines`, group text and token text are plain text.
+All text is HTML-escaped. In markup fields only `**bold**` and `` `code` `` are converted. Plain-text
+fields show their characters as typed: `meta.title`, node `title` / `mono` / `sub` / `lines`, group
+text, gauge text, skip and marker labels, token text and tool names / code. `W_PLACEHOLDER` flags
+leftover `[...]`, `[words]` and `TODO`; it ignores bracketed constants such as `[DONE]` or `[PHONE_1]`,
+and text inside `` `code` `` in markup fields.
+
+## Layout
+
+The map is computed when the document is rendered; the page ships a static SVG.
+
+- **Automatic.** Lanes (columns) follow the `file` / `text` flow left to right; a node reached only by
+  `ctrl` edges stacks under its source; a node without edges sits with its group. Each group gets its
+  own block of lanes. When a map would be wider than 6 lanes, neighbouring lanes of the same group fold
+  together so long chains run downward. Rows fill top to bottom.
+- **Hints.** `lane` and `row` on some nodes are constraints on top of the automatic layout: the node
+  gets exactly that lane or row, and the groups around it move or grow so they stay together. Only when
+  every node has a `lane` are lanes used exactly as given. `x` / `y` place a node outside the grid.
+- **Edges.** Each edge leaves and enters its boxes on the facing sides; edges between the same pair
+  are spread apart. When a curve would run through another box, the edge is routed around the boxes
+  through the gaps between lanes and rows (detours sharing a gap are spread 6px apart). `route`
+  overrides this: `from_side` / `to_side` (`top`, `right`, `bottom`, `left`) force the sides, `via`
+  lists waypoints (`[[x, y], ...]`, drawn with rounded corners), and `d` is a raw absolute SVG path
+  (`M L H V C Q Z` only, whole argument groups).
+- **Seeing the geometry.** `node scripts/iad.mjs layout doc.json` prints every lane and row, the free
+  gaps between them, each node's box and each edge's path, so `via` points can be read off it.
+- **Warnings.** `W_EDGE_CROSSES_NODE` (an edge still runs through a box), `W_TEXT_LONG` (text wider
+  than its box) and `E_LAYOUT_OVERLAP` (boxes or groups overlap, with the lanes / rows of both) come
+  from the layout and run only on documents without other errors.
+
+## Page layout
+
+The map is drawn between 0.80x and 1.15x of its own size; small maps are not blown up. On screens
+wider than 1180px the narration sits beside the map when the map fits there at 0.80x or more; otherwise
+the map takes the full width and the narration moves between the map and the controls as one
+what / where / fail row (at least 0.85x). A map that still does not fit scrolls sideways: the clipped
+edge fades out and the current step is scrolled into view. Up to 1180px the narration sits under the
+controls. The mode is decided when the page loads and when the window is resized.
 
 ## Rules
 
 Errors (`E_*`) make `validate` exit 1 and `render` refuse. Warnings (`W_*`) are reported but do not
 block. Structural rules run first; cross-reference rules run only when the structure is valid; layout
-rules (`E_LAYOUT_OVERLAP`, `W_EDGE_CROSSES_NODE`, `W_TEXT_LONG`) run only on an error-free document.
-`E_NODE_UNKNOWN`, `E_GROUP_UNKNOWN` and `W_TEXT_LONG` are listed in format-overview.md and apply here too.
+rules run only on an error-free document. `E_NODE_UNKNOWN`, `E_GROUP_UNKNOWN` and `W_TEXT_LONG` are
+listed in [format-overview.md](format-overview.md) and apply here too.
 
 | Code | Level | Meaning |
 |---|---|---|
@@ -109,21 +214,21 @@ rules (`E_LAYOUT_OVERLAP`, `W_EDGE_CROSSES_NODE`, `W_TEXT_LONG`) run only on an 
 | `W_GAUGE_UNUSED` | warning | No step sets this gauge, so it always shows its empty state. |
 | `W_PLACEHOLDER` | warning | A string still contains a `[...]` placeholder or `TODO`. |
 
-## Changes from the v3 plan (draft)
-
-Decided at the prototype gate; recorded here until the plan is updated.
+## Differences from the v3 design plan
 
 | Change | Why |
 |---|---|
-| `scenarios[].gauge_empty: {gaugeId: label}` (new, optional) | a scenario can say why a gauge stays empty ("0B · nothing written") |
-| `nodes[].lines` items may be `{text, muted?}` (new form) | metadata lines in the muted color, as in the reference map |
-| lane gap +20 (not +40) where the set of groups changes | matches the reference map's spacing |
-| a node with no edge takes its group's lowest lane | an unlinked member must not pull its group to lane 0 |
-| fully automatic maps fold to at most 6 lanes (`maxAutoLanes`) | a long chain turns downward instead of becoming an unreadable strip |
-| `lane` on some nodes is a constraint on the automatic layout, not a switch to manual layout | one hint used to invalidate the whole map |
+| `scenarios[].gauge_empty` and `{text, muted}` items in `lines` | the reference maps needed a per-scenario empty label and muted metadata lines |
+| `lane` on some nodes is a constraint, not a switch to manual layout | a single hint used to invalidate the whole map |
+| fully automatic maps fold to at most 6 lanes | a long chain stays readable instead of becoming a strip |
+| edges are routed around boxes automatically | most crossings never need a `route` |
+| lane gap +20 (not +40) where the set of groups changes | matches the reference spacing |
 | lane/row/span/rows ≤ 64, coordinates and sizes within ±1e5 | bounded layout work |
-| self-loop edges rejected (`E_EDGE_SELF`) | no geometry for them; a single-node step uses `step.nodes` |
+| self-loop edges are rejected (`E_EDGE_SELF`) | a single-node step uses `step.nodes` |
 
 ## Starting point
 
-`node scripts/iad.mjs init doc.json` writes a valid v3 skeleton to fill in ([cli.md](cli.md)).
+`node scripts/iad.mjs init doc.json` writes a valid skeleton to fill in ([cli.md](cli.md)). Complete
+examples: `examples/minimal.en.json` (a small login flow, two scenarios) and
+`examples/payment-auth.en.json` (groups, a gauge, error markers, a table, four scenarios). Korean
+versions: `*.ko.json`.
