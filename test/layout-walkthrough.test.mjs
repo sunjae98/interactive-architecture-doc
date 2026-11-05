@@ -181,14 +181,14 @@ test("layout: fully automatic documents keep each group in its own block of lane
   assert.ok(g1.x + g1.w <= g2.x || g2.x + g2.w <= g1.x, "group boxes do not overlap");
 });
 
-test("layout: badges sit at the first edge's middle; collisions are nudged by 20", () => {
+test("layout: badges sit at the first edge's middle; a second badge on the same edge moves to a clear spot", () => {
   const doc = mini(["a", "b"], [["a", "b"]]);
   doc.scenarios[0].steps.push({ ...doc.scenarios[0].steps[0], title: "again" });
   doc.scenarios[0].steps.push({ ...doc.scenarios[0].steps[0], title: "node", edges: [], nodes: ["b"] });
   const L = layoutWalkthrough(doc);
   const [p1, p2, p3] = L.badges.s;
   assert.deepEqual(p1, L.edges.e0.badgeAt);
-  assert.deepEqual(p2, { x: p1.x + GEOMETRY_WT.badgeNudge, y: p1.y });
+  assert.ok(Math.hypot(p1.x - p2.x, p1.y - p2.y) >= 2 * GEOMETRY_WT.badgeR + GEOMETRY_WT.badgeGap);
   // a node-only step's badge goes top left, away from the error marker (top right)
   assert.deepEqual(p3, { x: L.nodes.b.x + 4, y: L.nodes.b.y + 4 });
 });
@@ -440,4 +440,19 @@ test("CLI layout: prints lanes, gaps, node boxes and edge paths; --json has the 
   }
   assert.equal(run("layout", join(ROOT, "skills/interactive-architecture-doc/examples/request-router.overview.en.json")).status, 2);
   assert.equal(run("layout").status, 2);
+});
+
+test("layout: badges of a bidirectional pair stay apart and clear of node boxes", () => {
+  const doc = mini(["a", "b", "c"], [["a", "b"], ["b", "c"], ["b", "a", "ctrl"]]);
+  doc.scenarios[0].steps = ["e0", "e1", "e2"].map((id, i) => ({ ...doc.scenarios[0].steps[0], title: `s${i}`, edges: [id] }));
+  const L = layoutWalkthrough(doc);
+  const [p0, , p2] = L.badges.s;
+  const min = 2 * GEOMETRY_WT.badgeR + GEOMETRY_WT.badgeGap;
+  assert.ok(Math.hypot(p0.x - p2.x, p0.y - p2.y) >= min, JSON.stringify([p0, p2]));
+  for (const p of L.badges.s) {
+    for (const b of Object.values(L.nodes)) {
+      const inside = p.x > b.x - GEOMETRY_WT.badgeR && p.x < b.x + b.w + GEOMETRY_WT.badgeR && p.y > b.y - GEOMETRY_WT.badgeR && p.y < b.y + b.h + GEOMETRY_WT.badgeR;
+      assert.ok(!inside, `badge ${JSON.stringify(p)} on a node`);
+    }
+  }
 });
