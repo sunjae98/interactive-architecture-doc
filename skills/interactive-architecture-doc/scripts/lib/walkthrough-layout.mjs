@@ -34,6 +34,7 @@ export const GEOMETRY_WT = {
   portGap: 20, // minimum distance between port slots on one side
   radius: 8, // corner radius of `via` polylines
   badgeNudge: 20,
+  channel: 6, // spacing between detours that share a lane or row gap
   badgeR: 9.5,
   badgeGap: 3, // minimum clear space between two badges, and between a badge and a node box
   badgeOff: 14, // sideways offset from the path when the path itself has no room
@@ -599,14 +600,15 @@ export function routeAround(p1, s1, p2, s2, boxes, xs, ys) {
   const cells = [];
   for (let st = best[1]; st !== undefined; st = prev.get(st)) cells.push(st >> 2);
   cells.reverse();
-  const pts = [p1, ...cells.map((c) => [X[c % W], Y[(c - (c % W)) / W]]), p2];
-  // drop repeated and collinear points
+  const pts = [p1.map(round), ...cells.map((c) => [X[c % W], Y[(c - (c % W)) / W]]), p2.map(round)];
+  // drop repeated and collinear points (coordinates are on a 0.1 grid; compare with a tolerance)
+  const same = (u, v) => Math.abs(u - v) < 0.5;
   const out = [];
   for (const p of pts) {
-    if (out.length && out[out.length - 1][0] === p[0] && out[out.length - 1][1] === p[1]) continue;
+    if (out.length && same(out[out.length - 1][0], p[0]) && same(out[out.length - 1][1], p[1])) continue;
     if (out.length >= 2) {
       const [q, r] = [out[out.length - 2], out[out.length - 1]];
-      if ((q[0] === r[0] && r[0] === p[0]) || (q[1] === r[1] && r[1] === p[1])) out.pop();
+      if ((same(q[0], r[0]) && same(r[0], p[0])) || (same(q[1], r[1]) && same(r[1], p[1]))) out.pop();
     }
     out.push(p);
   }
@@ -927,7 +929,13 @@ export function layoutWalkthrough(doc) {
   });
   if (rowY.length) corridorY.push(rowY[0] - G.rowGap / 2, rowY[rowY.length - 1] + rowH[rowY.length - 1] + G.rowGap / 2);
   const edges = {};
-  doc.edges.forEach((e, i) => {
+  const routed = {}; // edge id -> point list of an automatic detour (offset below where channels are shared)
+  const dOf = {};
+  const crossesFor = (e) => (path) => {
+    const sp = samplePath(path);
+    return ids.some((id) => id !== e.from && id !== e.to && sp.some(([px, py]) => inside(nodes[id], px, py, 2)));
+  };
+  doc.edges.forEach((e) => {
     const r = e.route || {};
     let d;
     if (r.d !== undefined) d = r.d.trim().replace(/\s+/g, " ");
@@ -940,18 +948,62 @@ export function layoutWalkthrough(doc) {
       const { s1, s2 } = plan[e.id];
       d = curve(portPos[`${e.id}:from`], s1, portPos[`${e.id}:to`], s2);
       // the curve runs through an unrelated node: route around the nodes instead
-      const crosses = (path) => {
-        const sp = samplePath(path);
-        return ids.some((id) => id !== e.from && id !== e.to && sp.some(([px, py]) => inside(nodes[id], px, py, 2)));
-      };
+      const crosses = crossesFor(e);
       if (crosses(d)) {
         const route = routeAround(portPos[`${e.id}:from`], s1, portPos[`${e.id}:to`], s2, Object.values(nodes), corridorX, corridorY);
         if (route) {
           const alt = polyline(route);
-          if (!crosses(alt)) d = alt;
+          if (!crosses(alt)) {
+            d = alt;
+            routed[e.id] = route;
+          }
         }
       }
     }
+    dOf[e.id] = d;
+  });
+
+  // detours that share a channel (same line, overlapping stretch) are spread G.channel apart; the
+  // first and last segment stay on their ports. An offset that would hit a node is dropped.
+  const segs = [];
+  for (const [id, pts] of Object.entries(routed)) {
+    for (let k = 1; k + 2 < pts.length; k++) {
+      const [a, b] = [pts[k], pts[k + 1]];
+      const vertical = Math.abs(a[0] - b[0]) < 0.5;
+      if (!vertical && Math.abs(a[1] - b[1]) >= 0.5) continue;
+      segs.push({ id, k, vertical, c: vertical ? a[0] : a[1], lo: Math.min(vertical ? a[1] : a[0], vertical ? b[1] : b[0]), hi: Math.max(vertical ? a[1] : a[0], vertical ? b[1] : b[0]) });
+    }
+  }
+  const shifts = new Map(); // `${id}:${k}` -> offset
+  const done = new Set();
+  for (const sg of segs) {
+    if (done.has(sg)) continue;
+    const share = segs.filter((o) => o.vertical === sg.vertical && Math.abs(o.c - sg.c) < 0.5 && o.lo < sg.hi && sg.lo < o.hi);
+    const byEdge = [...new Set(share.map((o) => o.id))].sort((p, q) => edgeIndex[p] - edgeIndex[q]);
+    share.forEach((o) => done.add(o));
+    if (byEdge.length < 2) continue;
+    for (const o of share) shifts.set(`${o.id}:${o.k}`, (byEdge.indexOf(o.id) - (byEdge.length - 1) / 2) * G.channel);
+  }
+  for (const [id, pts] of Object.entries(routed)) {
+    const moved = pts.map((p) => [...p]);
+    let any = false;
+    for (let k = 1; k + 2 < pts.length; k++) {
+      const off = shifts.get(`${id}:${k}`);
+      if (!off) continue;
+      any = true;
+      const vertical = Math.abs(pts[k][0] - pts[k + 1][0]) < 0.5;
+      const axis = vertical ? 0 : 1;
+      moved[k][axis] = pts[k][axis] + off;
+      moved[k + 1][axis] = pts[k + 1][axis] + off;
+    }
+    if (!any) continue;
+    const e = doc.edges[edgeIndex[id]];
+    const alt = polyline(moved);
+    if (!crossesFor(e)(alt)) dOf[id] = alt;
+  }
+
+  doc.edges.forEach((e, i) => {
+    const d = dOf[e.id];
     const pts = samplePath(d);
     const mid = pointAtHalf(pts);
     edges[e.id] = { d, badgeAt: { x: round(mid.x), y: round(mid.y) }, length: round(mid.length), path: `/edges/${i}`, pts };

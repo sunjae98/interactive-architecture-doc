@@ -456,3 +456,20 @@ test("layout: badges of a bidirectional pair stay apart and clear of node boxes"
     }
   }
 });
+
+test("layout: detours sharing a lane or row gap are spread apart instead of stacking", () => {
+  const doc = mini(["a", "b", "c"], [["a", "b"], ["b", "c"], ["a", "c", "ctrl"], ["c", "a", "ctrl"], ["a", "c", "text"]]);
+  const L = layoutWalkthrough(doc);
+  assert.ok(!L.issues.some((i) => i.code === "W_EDGE_CROSSES_NODE"));
+  // the long horizontal run of each detour (outside the row of b)
+  const run = (d) => {
+    const pts = samplePath(d, 1000);
+    const ys = new Map();
+    for (let i = 1; i < pts.length; i++) if (Math.abs(pts[i][1] - pts[i - 1][1]) < 0.01 && Math.abs(pts[i][0] - pts[i - 1][0]) > 100) ys.set(Math.round(pts[i][1] * 10) / 10, true);
+    return [...ys.keys()];
+  };
+  const lines = ["e2", "e3", "e4"].flatMap((id) => run(L.edges[id].d));
+  assert.equal(lines.length, 3, JSON.stringify(lines));
+  const sorted = [...lines].sort((p, q) => p - q);
+  for (let i = 1; i < sorted.length; i++) assert.ok(sorted[i] - sorted[i - 1] >= 5, `lines ${JSON.stringify(sorted)} stack`);
+});
