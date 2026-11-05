@@ -45,8 +45,21 @@ const BRACKET_RE = /(?:^|[^\w\]\[])\[([^\[\]"'`{}(),:;=<>\n]{1,200})\]/gu;
 const LETTER_RE = /\p{L}/u;
 const TODO_RE = /\bTODO\b/;
 
-export function hasPlaceholder(value) {
-  if (ELLIPSIS_RE.test(value) || TODO_RE.test(value)) return true;
-  for (const m of value.matchAll(BRACKET_RE)) if (LETTER_RE.test(m[1])) return true;
+// Walkthrough options (the overview calls it without options, so its behaviour is unchanged):
+// - constants: a bracketed constant such as [DONE] or [PHONE_1] (capitals, digits, underscore; no
+//   spaces) is content, not a placeholder;
+// - codeSpans: text inside `code` spans is literal. Only for markup fields, where backticks really
+//   make code; in plain-text fields the backticks are shown as typed.
+const CODE_SPAN_RE = /`[^`\n]+`/g;
+const CONSTANT_RE = /^[A-Z0-9_]+$/;
+
+export function hasPlaceholder(value, { constants = false, codeSpans = false } = {}) {
+  const text = codeSpans ? value.replace(CODE_SPAN_RE, " ") : value;
+  if (ELLIPSIS_RE.test(text) || TODO_RE.test(text)) return true;
+  for (const m of text.matchAll(BRACKET_RE)) {
+    if (!LETTER_RE.test(m[1])) continue;
+    if (constants && CONSTANT_RE.test(m[1])) continue;
+    return true;
+  }
   return false;
 }
