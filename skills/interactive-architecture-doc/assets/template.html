@@ -516,6 +516,17 @@
   // Desktop stage mode: "side" when the map fits beside the narration at >= 0.80x, else "stacked"
   // (map full width, narration under it). stageW: the stage's width; asideW: narration column +
   // gap; chrome: panel border + map padding.
+  // After the self-check restores the reader's step: follow it, or show the start of the map for
+  // the full path.
+  function restoreView(step) {
+    return step >= 0 ? "follow" : "start";
+  }
+
+  // The stage's width changed enough to decide the layout again (heights do not matter).
+  function widthChanged(prev, now) {
+    return prev === null || Math.abs(now - prev) >= 1;
+  }
+
   function chooseFit(stageW, vbW, asideW, chrome) {
     return (stageW - asideW - chrome) / vbW >= 0.8 ? "side" : "stacked";
   }
@@ -693,7 +704,7 @@
     mapWrap.classList.toggle("fade-l", max > 1 && diagramEl.scrollLeft > 2);
     mapWrap.classList.toggle("fade-r", max > 1 && diagramEl.scrollLeft < max - 2);
   }
-  function followStep(curE, curN) {
+  function followStep(curE, curN, instant) {
     var max = diagramEl.scrollWidth - diagramEl.clientWidth;
     if (max <= 1) return;
     var vb = svg.viewBox.baseVal, r = svg.getBoundingClientRect(), dr = diagramEl.getBoundingClientRect();
@@ -706,9 +717,11 @@
     if (x1 > x2) return;
     var origin = r.left - dr.left + diagramEl.scrollLeft;
     var to = scrollTarget(diagramEl.scrollLeft, diagramEl.clientWidth, origin + (x1 - vb.x) * k, origin + (x2 - vb.x) * k, max, 24);
-    if (to !== null) scrollMapTo(to);
+    if (to !== null) scrollMapTo(to, instant);
   }
+  var scrollQuiet = false; // the self-check walks every step without scrolling the reader's view
   function scrollMapTo(left, instant) {
+    if (scrollQuiet) return;
     // always issue the scroll: it also replaces a smooth scroll still in flight
     if (diagramEl.scrollTo) diagramEl.scrollTo({ left: left, behavior: reduce || instant ? "auto" : "smooth" });
     else diagramEl.scrollLeft = left;
@@ -723,11 +736,18 @@
     if (stageEl.getAttribute("data-fit") !== mode) stageEl.setAttribute("data-fit", mode);
     updateFade();
   }
-  var fitTimer = null;
-  window.addEventListener("resize", function () {
+  // re-decide (debounced) when the window or the stage itself changes width, e.g. a docs page
+  // that resizes its content column without a window resize
+  var fitTimer = null, stageW = null;
+  function scheduleFit() {
+    var w = stageEl.clientWidth;
+    if (!widthChanged(stageW, w)) return;
+    stageW = w;
     clearTimeout(fitTimer);
     fitTimer = setTimeout(decideFit, 120);
-  });
+  }
+  window.addEventListener("resize", scheduleFit);
+  if (window.ResizeObserver) new ResizeObserver(scheduleFit).observe(stageEl);
 
   function renderStep() {
     var sc = SC[cur];
@@ -905,6 +925,7 @@
       if (document.readyState === "complete") resolve(); else window.addEventListener("load", function () { resolve(); });
     }).then(function () { return document.fonts && document.fonts.ready; }).then(function () {
       var savedCur = cur, savedStep = step;
+      scrollQuiet = true;
       var failures = [], checked = 0;
       SC.forEach(function (sc, i) {
         pickScenario(i);
@@ -920,7 +941,10 @@
       });
       pickScenario(savedCur);
       go(savedStep);
-      scrollMapTo(0, true); // leave the map at its start
+      scrollQuiet = false;
+      var back = focusSets(SC[cur].steps, step, EDGES);
+      if (restoreView(savedStep) === "follow") followStep(back.curE, back.curN, true);
+      else scrollMapTo(0, true); // the full path: leave the map at its start
       var errors = (window.__iadErrors || []).slice();
       var result = { ok: !failures.length && !errors.length, checked: checked, scenarios: SC.length, failures: failures, errors: errors };
       var json = JSON.stringify(result);

@@ -68,8 +68,8 @@ items are `{scenario, step, check, detail}` (`step` is -1 for the full path) wit
 | `overflow` | the page scrolls horizontally (the map may scroll inside its own panel) |
 
 `errors[]` lists page errors (`error`, `unhandledrejection`, `csp`) since load. `ok` is true when
-`failures` and `errors` are both empty. The scenario and step are restored afterwards and the map is
-scrolled back to its start.
+`failures` and `errors` are both empty. The scenario and step are restored afterwards; the map shows
+the restored step again (or its start for the full path) and is not scrolled during the check.
 
 An overview page uses the same hash, function and result element. It shows the overview and then each
 path, and prints `{"ok":true,"checked":4,"paths":3,"failures":[],"errors":[]}`. `failures[]` items are

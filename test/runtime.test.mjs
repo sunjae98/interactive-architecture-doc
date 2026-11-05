@@ -229,7 +229,7 @@ test("narrow screens: the map follows the step (smooth unless reduced motion) an
 
 test("scroll reset: the full path, a new scenario and the end of the self-check show the start of the map", () => {
   assert.ok(HTML.includes("else scrollMapTo(0); // the full path (and a new scenario) starts at the start of the map"));
-  assert.ok(HTML.includes("scrollMapTo(0, true); // leave the map at its start"));
+  assert.ok(HTML.includes("else scrollMapTo(0, true); // the full path: leave the map at its start"));
   // pickScenario renders step -1, which takes the reset branch
   const pick = HTML.slice(HTML.indexOf("function pickScenario(i)"), HTML.indexOf("function render()"));
   assert.ok(pick.includes("cur = i; step = -1;") && pick.includes("render();"));
@@ -246,4 +246,25 @@ test("chooseFit: beside the narration only when the map fits there at >= 0.80x",
   assert.ok(HTML.includes("fitTimer = setTimeout(decideFit, 120);"));
   assert.ok(HTML.includes('window.matchMedia("(max-width:1180px)").matches'));
   assert.ok(HTML.includes('var mode = narrow ? "narrow" : chooseFit('));
+});
+
+test("self-check restore: the reader's step is followed again, the full path goes back to the start", () => {
+  const h = loadHelpers();
+  assert.equal(h.restoreView(-1), "start");
+  assert.equal(h.restoreView(0), "follow");
+  assert.equal(h.restoreView(7), "follow");
+  assert.ok(HTML.includes('if (restoreView(savedStep) === "follow") followStep(back.curE, back.curN, true);'));
+  // its own walk through every step does not scroll (no smooth scroll left to land after the restore)
+  const sc = HTML.slice(HTML.indexOf("function selfCheck()"));
+  assert.ok(sc.indexOf("scrollQuiet = true;") < sc.indexOf("judgeStep(") && sc.indexOf("judgeStep(") < sc.indexOf("scrollQuiet = false;"));
+  assert.ok(HTML.includes("if (scrollQuiet) return;"));
+});
+
+test("fit mode: re-decided when the stage itself changes width (ResizeObserver), debounced, ignoring heights", () => {
+  const h = loadHelpers();
+  assert.equal(h.widthChanged(null, 900), true, "first measurement");
+  assert.equal(h.widthChanged(900, 900.4), false, "sub-pixel jitter and height-only changes are ignored");
+  assert.equal(h.widthChanged(900, 760), true);
+  assert.ok(HTML.includes("if (window.ResizeObserver) new ResizeObserver(scheduleFit).observe(stageEl);"));
+  assert.ok(HTML.includes('window.addEventListener("resize", scheduleFit);'));
 });
