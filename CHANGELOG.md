@@ -2,6 +2,56 @@
 
 ## Unreleased
 
+## 3.0.0 — 2026-11-05
+
+The walkthrough style is rebuilt around a **component map**. Overview documents are unchanged.
+
+**Breaking**
+
+- New walkthrough format. A document now has `nodes`, `edges`, optional `groups` and `gauges`, and
+  `scenarios` that each carry their own `steps`. The v2 format (top-level `steps` and `board`) is
+  rejected with a single `E_V2_WALKTHROUGH`; there is no automatic conversion. Rewrite v2 documents
+  with [migration-v2.md](skills/interactive-architecture-doc/references/migration-v2.md).
+- Node kinds are now `client`, `infra`, `app`, `store`, `tool` and `dep` (`decision`, `existing` and
+  `new` are gone); `legend` became `legend.nodes`. `meta.subtitle` and `meta.entry_request` are
+  removed from walkthroughs (`meta.intro` replaces the subtitle).
+- `iad init --fork` is removed (exit 2); `references/migration-v1.md` is removed.
+- The rendered walkthrough page is new: scenario cards instead of a drop-down, a map instead of the
+  block board and stepper, and export of the map instead of the whole page.
+
+**Added**
+
+- The page: scenario cards, the map with focus and dimming, file / text / ctrl edge styles, a token
+  that moves along each step's edges, numbered step badges, previous / next / auto play / restart with
+  a progress bar and step list, "what moves / where it lives / if it fails" narration, node facts,
+  gauges whose values carry forward (`gauges`, `scenarios[].gauge_empty`), skipped nodes and error
+  markers. Keyboard: ←/→ for steps, Enter/Space on boxes and badges. `prefers-reduced-motion` stops
+  the token and the moving dash.
+- Automatic layout at render time: lanes follow the data flow, ctrl-only nodes stack under their
+  source, each group keeps its own block of lanes, maps wider than 6 lanes fold downward, and edges
+  that would cross a box are routed around it through the gaps (shared gaps are spread apart).
+- Layout hints: `lane` / `row` on a few nodes are constraints on top of the automatic layout;
+  `span` / `rows`, absolute `x` / `y`, and `route` (`from_side` / `to_side`, `via`, `d`) for edges.
+- `iad layout <doc> [--json]` prints the computed lanes, rows, gaps, node boxes and edge paths.
+- `iad init --lanes N` and a fully automatic skeleton (no pre-filled lanes).
+- Fit modes for wide maps: the narration sits beside the map when it fits at 0.80x or more, otherwise
+  under it (0.85x floor); a map that still does not fit scrolls sideways, fades its clipped edge and
+  follows the current step. Small maps are drawn at most 1.15x.
+- Self-check (`#iad-selfcheck`) for every scenario and step: highlighted edges and nodes, narration,
+  badges, gauge labels, markers, page overflow and page errors. A headless Chromium smoke test runs it
+  in CI when a browser is available.
+- Validator codes for the new format, including `E_EDGE_UNKNOWN`, `E_STEP_EMPTY`, `E_SCENARIO_LIMIT`,
+  `E_GAUGE_*`, `E_POS_PARTIAL`, `E_LAYOUT_OVERLAP` (with the lanes and rows involved), `E_ROUTE_PATH`,
+  `E_EDGE_SELF`, `E_TABLE_SHAPE` and the warnings `W_EDGE_UNUSED`, `W_NODE_ISOLATED`,
+  `W_EDGE_CROSSES_NODE`, `W_FACTS_MISSING`, `W_POS_IGNORED`, `W_GAUGE_UNUSED`.
+- New examples: `minimal.{en,ko}` (a small login flow) and `payment-auth.{en,ko}` (groups, a gauge,
+  error markers, a table, four scenarios).
+
+**Changed**
+
+- Export (PNG, SVG, clipboard) captures the map SVG with its styles, fonts and current colors inlined.
+- `W_PLACEHOLDER` ignores bracketed constants such as `[DONE]` in walkthrough documents.
+
 ## 2.0.0 — 2026-10-15
 
 First public release. Replaces the v1 workflow, where the agent copied and hand-edited a large
