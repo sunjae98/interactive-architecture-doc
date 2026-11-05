@@ -57,6 +57,7 @@ const FIXTURES = [
   ["E_EDGE_UNKNOWN", (d) => { step(d, 0, 0).edges = ["nope"]; }],
   ["E_STEP_EMPTY", (d) => { delete step(d, 1, 1).nodes; }],
   ["E_SCENARIO_LIMIT", (d) => { for (let i = 0; i < 5; i++) d.scenarios.push({ ...clone(d.scenarios[1]), id: `extra-${i}` }); }],
+  ["E_NODE_LIMIT", (d) => { for (let i = 0; i < 60; i++) d.nodes.push({ id: `extra-${i}`, kind: "app", title: "X", facts: ["f"] }); }],
   ["E_GAUGE_UNKNOWN", (d) => { step(d, 0, 2).gauges = { nope: { value: 0.5, label: "x" } }; }],
   ["E_GAUGE_UNKNOWN", (d) => { d.scenarios[1].gauge_empty = { nope: "x" }; }],
   ["E_TYPE", (d) => { d.nodes[3].lines = [1]; }],

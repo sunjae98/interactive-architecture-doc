@@ -528,7 +528,7 @@ test("clampShift: a shared-gap offset never folds the first or last segment back
   assert.equal(clampShift(pts, 1, 0, -30), -10, "toward the box: the stub keeps 4px");
   assert.equal(clampShift(pts, 3, 0, 30), 10, "the last stub keeps 4px too");
   assert.equal(clampShift(pts, 2, 1, -18), -18, "a middle segment is free");
-  // many detours through one gap: no route enters the box it leaves or enters
+  // sanity check on a whole map with many detours through one gap
   const ids = ["a", "b", "c"];
   const edges = [["a", "b"], ["b", "c"], ...Array.from({ length: 8 }, (_, i) => ["a", "c", i % 2 ? "ctrl" : "text"])];
   const doc = mini(ids, edges);
@@ -541,4 +541,16 @@ test("clampShift: a shared-gap offset never folds the first or last segment back
       assert.deepEqual(inner, [], `${id} re-enters ${end}`);
     }
   }
+});
+
+test("node cap: 64 nodes validate (and lay out quickly), 65 are E_NODE_LIMIT before any layout work", () => {
+  const chain = (n) => {
+    const ids = Array.from({ length: n }, (_, i) => `n${i}`);
+    return mini(ids, ids.slice(1).map((id, i) => [ids[i], id]));
+  };
+  const t0 = Date.now();
+  assert.deepEqual(validate(chain(64)).errors, []);
+  assert.ok(Date.now() - t0 < 5000, "64 nodes lay out in seconds, not minutes");
+  const over = validate(chain(65));
+  assert.deepEqual(over.errors.map((e) => [e.code, e.path]), [["E_NODE_LIMIT", "/nodes"]]);
 });

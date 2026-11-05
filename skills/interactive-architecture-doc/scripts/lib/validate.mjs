@@ -12,6 +12,7 @@ export const EDGE_KINDS = ["file", "text", "ctrl"];
 export const TOKEN_KINDS = ["file", "text", "ctrl", "err"];
 export const GROUP_TONES = ["default", "muted"];
 export const MAX_SCENARIOS = 6;
+export const MAX_NODES = 64; // keeps the build-time layout (routing around boxes) well under a second
 export const MAX_SUB = 3;
 export const MAX_GRID = 64; // lane / row / span / rows; coordinates and sizes stay within MAX_COORD
 export const LANGS = ["ko", "en"];
@@ -39,6 +40,7 @@ export const RULES = [
   { code: "E_EDGE_UNKNOWN", level: "error", summary: "A step names an edge id that does not exist." },
   { code: "E_STEP_EMPTY", level: "error", summary: "A step has neither `edges` nor `nodes`, so nothing would be highlighted." },
   { code: "E_SCENARIO_LIMIT", level: "error", summary: "More than 6 scenarios (there are 6 scenario colors)." },
+  { code: "E_NODE_LIMIT", level: "error", summary: "More than 64 nodes; split the map into several documents." },
   { code: "E_GAUGE_UNKNOWN", level: "error", summary: "A step (`gauges`) or a scenario (`gauge_empty`) names a gauge id that does not exist." },
   { code: "E_GAUGE_RANGE", level: "error", summary: "A gauge value is outside 0..1." },
   { code: "E_GAUGE_DUP_NODE", level: "error", summary: "Two gauges are drawn on the same node (one gauge per node)." },
@@ -380,6 +382,8 @@ function checkSemantics(doc, out) {
     if (gaugeNodes.has(g.node)) report(out, `/gauges/${i}/node`, "E_GAUGE_DUP_NODE", `node ${q(g.node)} already has gauge ${q(gaugeNodes.get(g.node))}`);
     else gaugeNodes.set(g.node, g.id);
   });
+
+  if (doc.nodes.length > MAX_NODES) report(out, "/nodes", "E_NODE_LIMIT", `at most ${MAX_NODES} nodes, got ${doc.nodes.length}; split the map into several documents`);
 
   // scenarios and steps
   if (doc.scenarios.length > MAX_SCENARIOS) report(out, "/scenarios", "E_SCENARIO_LIMIT", `at most ${MAX_SCENARIOS} scenarios, got ${doc.scenarios.length}`);
