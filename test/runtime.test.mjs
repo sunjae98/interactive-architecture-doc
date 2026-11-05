@@ -150,7 +150,7 @@ test("self-check: runs only with #iad-selfcheck or window.iadSelfCheck(), and re
 
 test("reduced motion: the token rests at the middle of the step instead of animating", () => {
   assert.ok(HTML.includes('matchMedia("(prefers-reduced-motion: reduce)")'));
-  assert.ok(HTML.includes("if (reduce) { place(at(tot * 0.5)); return; }"));
+  assert.ok(HTML.includes("if (reduce) { place(at(from + len * 0.5)); return; }"));
   assert.match(HTML, /@media \(prefers-reduced-motion:reduce\)\{\s*\.wt-map\.focus \.edge\.cur path\.ln\{animation:none;\}/);
 });
 
@@ -194,4 +194,18 @@ test("keyboard: arrows work with focus on a map box; boxes and badges take Enter
 
 test("export: .wt-map rules inside matching @media blocks are copied too", () => {
   assert.ok(HTML.includes("else if (rule.type === 4) { if (window.matchMedia(rule.media.mediaText).matches) collect(rule.cssRules); }"));
+});
+
+test("freeSpan: the token's route is trimmed so the chip never covers the source or target box", () => {
+  const h = loadHelpers();
+  const at = (d) => ({ x: d, y: 50 }); // a horizontal route from x 0 to x 300
+  const A = { x: -100, y: 30, w: 100, h: 40 }; // source box ends at x 0
+  const B = { x: 300, y: 30, w: 100, h: 40 }; // target box starts at x 300
+  const [d0, d1] = plain(h.freeSpan(at, 300, 80, A, B));
+  assert.ok(d0 >= 44 && d0 <= 48, `start ${d0}`);
+  assert.ok(d1 <= 256 && d1 >= 252, `end ${d1}`);
+  // too short for the chip: its middle
+  assert.deepEqual(plain(h.freeSpan(at, 60, 80, A, { x: 60, y: 30, w: 100, h: 40 })), [30, 30]);
+  // no boxes in the way: the whole route
+  assert.deepEqual(plain(h.freeSpan(at, 300, 80, null, null)), [0, 300]);
 });

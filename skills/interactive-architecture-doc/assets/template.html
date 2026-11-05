@@ -468,6 +468,19 @@
     return { i: 0, at: 0 };
   }
 
+  // The stretch of the token's route where the chip (w x 20, plus a margin) does not cover the
+  // source or target box, so it never sits on a node title. at(d) -> {x, y}; boxes {x, y, w, h}.
+  // Returns [from, to] distances; a route too short for the chip gives its middle twice.
+  function freeSpan(at, total, w, boxA, boxB) {
+    var hw = w / 2 + 4, hh = 14;
+    function hits(p, b) { return !!b && p.x + hw > b.x && p.x - hw < b.x + b.w && p.y + hh > b.y && p.y - hh < b.y + b.h; }
+    var d0 = 0, d1 = total;
+    while (d0 < total && hits(at(d0), boxA)) d0 += 4;
+    while (d1 > d0 && hits(at(d1), boxB)) d1 -= 4;
+    if (d1 - d0 < 8) return [total / 2, total / 2];
+    return [d0, d1];
+  }
+
   function easeInOut(f) { return f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2; }
 
   function sanitizeFilePart(s) {
@@ -688,16 +701,19 @@
     var ls = ps.map(function (p) { return p.getTotalLength(); });
     var tot = ls.reduce(function (s, x) { return s + x; }, 0);
     function at(d) { var k = tokenAt(ls, d); return ps[k.i].getPointAtLength(k.at); }
-    if (reduce) { place(at(tot * 0.5)); return; }
+    var first = EDGES[st.edges[0]], last = EDGES[st.edges[st.edges.length - 1]];
+    var span = freeSpan(at, tot, w, box(first.from), box(last.to));
+    var from = span[0], len = span[1] - span[0];
+    if (reduce) { place(at(from + len * 0.5)); return; }
     var dur = Math.max(1100, Math.min(2600, tot * 7)), hold = 500, t0 = null;
     function frame(ts) {
       if (t0 === null) t0 = ts;
       var e = (ts - t0) % (dur + hold), f = easeInOut(Math.min(1, e / dur));
-      place(at(tot * f));
+      place(at(from + len * f));
       tok.style.opacity = e > dur + hold - 160 ? String(Math.max(0, (dur + hold - e) / 160)) : "1";
       raf = requestAnimationFrame(frame);
     }
-    place(at(0));
+    place(at(from));
     raf = requestAnimationFrame(frame);
   }
 

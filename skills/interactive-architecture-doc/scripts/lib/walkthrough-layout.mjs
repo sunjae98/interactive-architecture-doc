@@ -33,8 +33,10 @@ export const GEOMETRY_WT = {
   bidi: 8, // offset of each edge of a bidirectional pair
   portGap: 20, // minimum distance between port slots on one side
   radius: 8, // corner radius of `via` polylines
-  badgeNear: 8,
   badgeNudge: 20,
+  badgeR: 9.5,
+  badgeGap: 3, // minimum clear space between two badges, and between a badge and a node box
+  badgeOff: 14, // sideways offset from the path when the path itself has no room
   maxAutoLanes: 6, // fully automatic maps fold into at most this many lanes (about the stage's aspect)
 };
 
@@ -386,6 +388,22 @@ export function samplePath(d, step = 4) {
     if (tokens[i] === undefined) break;
   }
   return pts;
+}
+
+// Point and unit tangent at fraction f (0..1) of a sampled path's length.
+export function pointAt(pts, f) {
+  let total = 0;
+  for (let k = 1; k < pts.length; k++) total += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+  let left = total * f;
+  for (let k = 1; k < pts.length; k++) {
+    const dx = pts[k][0] - pts[k - 1][0];
+    const dy = pts[k][1] - pts[k - 1][1];
+    const seg = Math.hypot(dx, dy);
+    if (left <= seg && seg > 0) return { x: pts[k - 1][0] + (dx * left) / seg, y: pts[k - 1][1] + (dy * left) / seg, tx: dx / seg, ty: dy / seg };
+    left -= seg;
+  }
+  const last = pts[pts.length - 1] || [0, 0];
+  return { x: last[0], y: last[1], tx: 1, ty: 0 };
 }
 
 export function pointAtHalf(pts) {
@@ -948,19 +966,36 @@ export function layoutWalkthrough(doc) {
     }
   });
 
-  // ---- step badges per scenario (the reference map's runtime nudge, done at build time)
+  // ---- step badges per scenario: on the step's first edge, at the first spot (middle first, then
+  // beside the path, then further along it) that is clear of node boxes and of the scenario's other
+  // badges. Node-only steps keep the node's top left corner (error markers use the top right).
   const badges = {};
+  const minDist = 2 * G.badgeR + G.badgeGap;
+  const nodeBoxes = Object.values(nodes);
+  const clearOfNodes = (p) => !nodeBoxes.some((b) => p.x > b.x - G.badgeR - G.badgeGap && p.x < b.x + b.w + G.badgeR + G.badgeGap && p.y > b.y - G.badgeR - G.badgeGap && p.y < b.y + b.h + G.badgeR + G.badgeGap);
+  const SPOTS = [[0.5, 0], [0.5, -1], [0.5, 1], [0.35, 0], [0.65, 0], [0.35, -1], [0.65, 1], [0.25, 0], [0.75, 0], [0.2, -1], [0.8, 1]];
   for (const sc of doc.scenarios) {
     const placed = [];
     badges[sc.id] = sc.steps.map((st) => {
       let p;
-      if (st.edges.length) p = edges[st.edges[0]].badgeAt;
-      else {
+      if (st.edges.length) {
+        const pts = edges[st.edges[0]].pts;
+        p = edges[st.edges[0]].badgeAt;
+        for (const [f, side] of SPOTS) {
+          const q = pointAt(pts, f);
+          const c = { x: q.x - q.ty * side * G.badgeOff, y: q.y + q.tx * side * G.badgeOff };
+          if (clearOfNodes(c) && !placed.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < minDist)) {
+            p = c;
+            break;
+          }
+        }
+      } else {
         const b = nodes[st.nodes[0]];
         p = { x: b.x + 4, y: b.y + 4 }; // top left: error markers use the top right
       }
       let k = 0;
-      while (placed.some((q) => Math.hypot(q.x - (p.x + k * G.badgeNudge), q.y - p.y) < G.badgeNear)) k++;
+      // last resort (no clear spot): step right until clear of the other badges
+      while (placed.some((q) => Math.hypot(q.x - (p.x + k * G.badgeNudge), q.y - p.y) < minDist)) k++;
       const at = { x: round(p.x + k * G.badgeNudge), y: round(p.y) };
       placed.push(at);
       return at;
