@@ -103,6 +103,8 @@ test("template: reference breakpoints (1180 / 820 / 640) and the 340px narration
   assert.match(src, /@media \(max-width:820px\)\{\s*\.cases\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}?;?\}?/);
   assert.match(src, /@media \(max-width:640px\)\{\s*\.cases\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/);
   assert.match(src, /\.diagram\{[^}]*overflow-x:auto;/, "the map scrolls on narrow screens, not the page");
+  // scale clamp: at most 1.15x the viewBox width, at least 0.85x (then the panel scrolls)
+  assert.match(src, /\.diagram svg\{[^}]*width:min\(100%, calc\(var\(--map-w\) \* 1\.15\)\);min-width:calc\(var\(--map-w\) \* \.85\);/);
 });
 
 test("i18n: ko and en tables have identical keys and every {{t:key}} exists", () => {

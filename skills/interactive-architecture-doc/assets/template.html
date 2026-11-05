@@ -132,7 +132,9 @@
   .stage{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;align-items:start;}
   .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;min-width:0;}
   .diagram{padding:8px 6px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;}
-  .diagram svg{display:block;width:100%;min-width:940px;height:auto;}
+  /* Map scale stays between 0.85x (node titles >= 11px) and 1.15x (small maps are not blown up):
+     --map-w is the viewBox width. Below 0.85x the panel scrolls sideways instead of shrinking. */
+  .diagram svg{display:block;margin:0 auto;width:min(100%, calc(var(--map-w) * 1.15));min-width:calc(var(--map-w) * .85);height:auto;}
 
   /* ==== Map ================================================================
      Every rule starts with .wt-map: the export copies exactly these rules into the SVG file.
