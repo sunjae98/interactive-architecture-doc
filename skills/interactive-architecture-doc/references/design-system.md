@@ -136,7 +136,8 @@ the middle of the route and the dash does not move.
   - `stacked` (wide screens, it does not): map full width, narration between map and controls with
     what / where / fail as three columns.
   - `narrow` (≤ 1180px): map, controls, then the narration (the reference layout).
-  The runtime decides at load and on resize (debounced); everything else is CSS.
+  The runtime decides at load and whenever the window or the stage changes width (`ResizeObserver`,
+  debounced); everything else is CSS.
 - The map is drawn at most 1.15x and at least 0.85x of its viewBox width (0.80x in `side`); below that
   `.diagram` scrolls sideways, `.map-wrap` fades the clipped edge (`.fade-l` / `.fade-r`), a step
   change scrolls its nodes and edges into view (smooth unless reduced motion) and the full path or a
@@ -174,7 +175,8 @@ inside so agents and tools can verify a render without screenshots. Result forma
   page overflow) with what the IR says, and turns differences into failures with `judgeStep()` in the
   pure-helpers block (unit-tested in `test/runtime.test.mjs`; `test/smoke.test.mjs` runs it in headless
   Chromium when one is installed).
-- Afterwards the scenario and step are restored and the map is scrolled to its start. The JSON goes
+- The map does not scroll during the check. Afterwards the scenario and step are restored and the map
+  shows the restored step again (its start for the full path). The JSON goes
   into `<pre id="iad-selfcheck-result" data-state="pass|fail">` (visually hidden, still readable as
   text) and one `IAD_SELFCHECK {json}` console line.
 

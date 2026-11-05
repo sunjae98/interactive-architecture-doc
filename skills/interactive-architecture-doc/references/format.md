@@ -174,7 +174,7 @@ wider than 1180px the narration sits beside the map when the map fits there at 0
 the map takes the full width and the narration moves between the map and the controls as one
 what / where / fail row (at least 0.85x). A map that still does not fit scrolls sideways: the clipped
 edge fades out and the current step is scrolled into view. Up to 1180px the narration sits under the
-controls. The mode is decided when the page loads and when the window is resized.
+controls. The mode is decided when the page loads and again whenever the page's width changes.
 
 ## Rules
 
