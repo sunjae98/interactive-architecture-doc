@@ -1,15 +1,16 @@
 // IR -> single self-contained HTML file.
-// Static markup is generated here; the runtime in assets/template.html only reads #iad-data
-// (steps, scenarios, meta.entry_request) and #iad-i18n (UI strings).
+// Static markup (header, scenario cards, the component map SVG, cards below) is generated here; the
+// runtime in assets/template.html only reads #iad-data (the IR) and #iad-i18n (UI strings).
 
 import { readFileSync, writeFileSync, renameSync, unlinkSync, readdirSync, existsSync, openSync, closeSync } from "node:fs";
 import { randomBytes, createHash } from "node:crypto";
 import { dirname, join, basename, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { validate, isOverview, KINDS } from "./validate.mjs";
+import { validate, isOverview, KINDS, EDGE_KINDS } from "./validate.mjs";
 import { escapeHtml, inline, plainText, embedJson } from "./markup.mjs";
 import { uiStrings } from "./i18n.mjs";
 import { renderDiagram, renderTabs, renderCaptions } from "./overview.mjs";
+import { renderMap } from "./walkthrough-svg.mjs";
 
 const SKILL_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const TEMPLATE_PATH = join(SKILL_DIR, "assets", "template.html");
@@ -49,150 +50,125 @@ export function fontFaces(dir = FONTS_DIR) {
   return `<style id="iad-fonts">\n${faces.join("\n")}\n</style>`;
 }
 
-// ---- board ------------------------------------------------------------------
-const cols = (n) => `--cols:${n};--cols-md:${Math.min(n, 2)}`;
-
-function renderNode(n) {
-  const classes = ["node", n.kind];
-  if (n.width) classes.push("w-" + n.width);
-  let attrs = ` class="${classes.join(" ")}" data-step="${n.step}"`;
-  if (n.branches) attrs += ` data-branch="${escapeHtml(n.branches.join(","))}"`;
-  if (n.fan_hub) attrs += ` data-fan-hub="${escapeHtml(n.fan_hub)}"`;
-  if (n.fan_target) attrs += ` data-fan-target="${escapeHtml(n.fan_target)}"`;
-
-  const out = [`<div${attrs}>`, `<span class="num">${n.step}</span>`];
-  if (n.tag) out.push(`<span class="tag">${inline(n.tag)}</span>`);
-  out.push(`<span class="body">${inline(n.body)}</span>`);
-  if (n.code !== undefined || n.entry) {
-    out.push(`<code class="blk"${n.entry ? " data-entry" : ""}>${escapeHtml(n.code || "")}</code>`);
-  }
-  if (n.details) {
-    const d = n.details;
-    out.push(`<div class="detail-grid${d.code ? "" : " no-left"}">`);
-    if (d.code) out.push(`<div class="detail-left"><code class="blk">${escapeHtml(d.code)}</code></div>`);
-    out.push(`<div class="detail-right">`);
-    for (const item of d.items) {
-      out.push(
-        `<div class="detail-item${item.variant === "alt" ? " alt-item" : ""}">` +
-          `<div class="detail-title">${inline(item.title)}</div>` +
-          `<div class="detail-body">${inline(item.body)}</div></div>`
-      );
-    }
-    out.push(`</div>`, `</div>`);
-  }
-  if (n.note) out.push(`<div class="note">${inline(n.note)}</div>`);
-  out.push(`</div>`);
-  return out.join("\n");
-}
-
-function renderBlocks(blocks, inColumn = false) {
-  return blocks.map((b) => renderBlock(b, inColumn)).join("\n");
-}
-
-function renderBlock(b, inColumn) {
-  switch (b.type) {
-    case "node":
-      return inColumn ? renderNode(b) : `<div class="center-row">\n${renderNode(b)}\n</div>`;
-    case "arrow":
-      return `<div class="plain-arrow">↓${b.label ? `<span class="arrow-label">${inline(b.label)}</span>` : ""}</div>`;
-    case "internal":
-      return `<div class="internal">\n<span class="badge">${inline(b.badge)}</span>\n${renderBlocks(b.children)}\n</div>`;
-    case "fork":
-      return `<div class="fork-zone">\n<svg class="zone-overlay" data-fan-svg aria-hidden="true"></svg>\n${renderBlocks(b.children)}\n</div>`;
-    case "columns":
-      return [
-        `<div class="fork-row" style="${cols(b.columns.length)}">`,
-        ...b.columns.map(
-          (c) =>
-            `<div class="fork-col">\n${c.title ? `<div class="fork-title">${inline(c.title)}</div>\n` : ""}${renderBlocks(c.children, true)}\n</div>`
-        ),
-        `</div>`,
-      ].join("\n");
-    case "external":
-      return [
-        `<div class="external-zone">`,
-        `<span class="badge2">${inline(b.badge)}</span>`,
-        `<div class="external-row" style="${cols(b.systems.length)}">`,
-        ...b.systems.map(
-          (s) =>
-            `<div class="external-card">\n<div class="name">${inline(s.name)}</div>\n<ul class="external-list">\n` +
-            s.items.map((it) => `<li>${inline(it.text)}${it.tag ? `<span class="ext-tag">${inline(it.tag)}</span>` : ""}</li>`).join("\n") +
-            `\n</ul>\n</div>`
-        ),
-        `</div>`,
-        `</div>`,
-      ].join("\n");
-    default:
-      throw new Error(`internal: unknown block type ${b.type}`);
-  }
-}
-
-// ---- page sections ----------------------------------------------------------
+// ---- walkthrough sections ------------------------------------------------------
+// Overview header (h1 + optional subtitle); the walkthrough has its own below.
 function renderHeader(meta) {
   return `<h1 data-export>${escapeHtml(meta.title)}</h1>` + (meta.subtitle ? `\n<div class="subtitle" data-export>${inline(meta.subtitle)}</div>` : "");
 }
 
-function renderTldr(tldr, ui) {
-  if (!tldr) return "";
-  return [
-    `<div class="tldr">`,
-    `<h2>${escapeHtml(ui.tldr_heading)}</h2>`,
-    `<div class="headline">"<b>${inline(tldr.headline)}</b>" ${escapeHtml(ui.tldr_suffix)}</div>`,
-    `<ol>`,
-    ...tldr.points.map((p) => `<li><b>${inline(p.title)}</b>\n<span class="sub">${inline(p.detail)}</span></li>`),
-    `</ol>`,
-    `</div>`,
-  ].join("\n");
-}
-
-function renderStepper(steps) {
-  const items = steps.map((s, i) => `<div class="step"><span class="num">${i + 1}</span>${inline(s.label)}</div>`);
-  return `<div class="stepper" data-export>\n${items.join('\n<span class="step-arrow">→</span>\n')}\n</div>`;
-}
-
-function renderLegend(legend) {
-  const items = KINDS.filter((k) => k in legend).map((k) => `<span><i class="dot ${k}"></i> ${inline(legend[k])}</span>`);
-  return `<div class="legend" data-export>\n${items.join("\n")}\n</div>`;
-}
-
-function renderSections(doc) {
-  const out = [];
-  if (doc.callouts) {
+function renderWtHeader(meta) {
+  const out = [`<h1>${escapeHtml(meta.title)}</h1>`];
+  if (meta.intro) out.push(`<p class="sub">${inline(meta.intro)}</p>`);
+  if (meta.facts) {
     out.push(
-      `<div class="callout" style="--cols:${Math.min(doc.callouts.length, 2)}">`,
-      ...doc.callouts.map((c) => `<div class="card">\n<h3>${inline(c.title)}</h3>\n${inline(c.body)}\n</div>`),
+      `<div class="facts">`,
+      ...meta.facts.map((f) => `<div class="fact"><b>${inline(f.label)}</b><span${f.mono === false ? "" : ' class="mono"'}>${inline(f.value)}</span></div>`),
       `</div>`
     );
   }
+  return out.join("\n");
+}
+
+function renderCases(doc) {
+  return doc.scenarios
+    .map(
+      (sc, i) =>
+        `<button type="button" class="case" data-s="s${i + 1}" data-scenario="${escapeHtml(sc.id)}" aria-pressed="false">` +
+        `<span class="t">${i + 1}. ${inline(sc.title)}${sc.tag ? ` <span class="case-tag">${inline(sc.tag)}</span>` : ""}</span>` +
+        `<span class="s">${inline(sc.summary)}</span></button>`
+    )
+    .join("\n");
+}
+
+function renderLegendCard(doc, ui) {
+  const L = doc.legend;
+  const kinds = KINDS.filter((k) => Object.hasOwn(L.nodes, k)).map((k) => `<span class="sw ${k}"><i></i>${inline(L.nodes[k])}</span>`);
+  const edges = EDGE_KINDS.map(
+    (k) =>
+      `<span class="sw"><svg viewBox="0 0 34 10" aria-hidden="true"><line class="lg-${k}" x1="1" y1="5" x2="33" y2="5"/></svg>${inline((L.edges && L.edges[k]) || ui["edge_" + k])}</span>`
+  );
+  const out = [
+    `<section class="card legend">`,
+    `<h3>${escapeHtml(ui.legend)}</h3>`,
+    `<div class="lg-row">\n${kinds.join("\n")}\n</div>`,
+    `<div class="lg-row">\n${edges.join("\n")}\n</div>`,
+  ];
+  if (L.tokens) {
+    out.push(
+      `<div class="lg-row">`,
+      ...L.tokens.map((t) => `<span class="tk-s ${t.kind}">${escapeHtml(t.text)}</span>`),
+      `<span class="lg-muted">${escapeHtml(ui.token_hint)}</span>`,
+      `</div>`
+    );
+  }
+  out.push(`<p class="hint">${escapeHtml(ui.kbd_hint)}</p>`, `</section>`);
+  return out.join("\n");
+}
+
+function renderBelow(doc, ui) {
+  const out = [`<div class="below">`];
+  if (doc.tldr) {
+    out.push(
+      `<section class="card">`,
+      `<h3>${inline(doc.tldr.title || ui.tldr_title)}</h3>`,
+      `<ol class="three">`,
+      ...doc.tldr.points.map((p) => `<li>${inline(p)}</li>`),
+      `</ol>`,
+      `</section>`
+    );
+  }
+  for (const t of doc.tables || []) {
+    out.push(
+      `<section class="card table-card">`,
+      `<h3>${inline(t.title)}</h3>`,
+      `<div class="tbl-wrap"><table>`,
+      `<thead><tr>${t.columns.map((c) => `<th>${inline(c)}</th>`).join("")}</tr></thead>`,
+      `<tbody>`,
+      ...t.rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`),
+      `</tbody>`,
+      `</table></div>`,
+      `</section>`
+    );
+  }
+  out.push(renderLegendCard(doc, ui), `</div>`);
+
+  // v2 sections kept as plain cards under the grid
+  const extra = [];
+  if (doc.callouts) {
+    extra.push(...doc.callouts.map((c) => `<section class="card"><h3>${inline(c.title)}</h3>\n<p class="card-body">${inline(c.body)}</p></section>`));
+  }
   if (doc.considerations) {
     const c = doc.considerations;
-    out.push(
-      `<div class="considerations">`,
+    extra.push(
+      `<section class="card considerations">`,
       `<h3>${inline(c.title)}</h3>`,
       `<ol>`,
       ...c.items.map((it) => `<li><b>${inline(it.decision)}</b>\n<span class="why">${inline(it.why)}</span></li>`),
       `</ol>`,
-      `</div>`
+      `</section>`
     );
   }
   if (doc.tool_examples) {
     const te = doc.tool_examples;
-    out.push(
-      `<div class="tool-examples">`,
+    extra.push(
+      `<section class="card tool-examples">`,
       `<h3>${inline(te.title)}</h3>`,
-      ...(te.lead ? [`<div class="lead">${inline(te.lead)}</div>`] : []),
-      `<div class="tool-cards">`,
+      ...(te.lead ? [`<p class="card-body">${inline(te.lead)}</p>`] : []),
       ...te.tools.map(
         (t) =>
           `<div class="tool-card">\n<span class="tool-name">${escapeHtml(t.name)}</span>\n<pre>${escapeHtml(t.code)}</pre>` +
           (t.note ? `\n<div class="tool-note">${inline(t.note)}</div>` : "") +
           `\n</div>`
       ),
-      `</div>`,
-      `</div>`
+      `</section>`
     );
   }
+  if (extra.length) out.push(`<div class="extra">`, ...extra, `</div>`);
   return out.join("\n");
+}
+
+function renderFooter(meta) {
+  return meta.source ? `<footer>${inline(meta.source)}</footer>` : "";
 }
 
 // ---- Content-Security-Policy -------------------------------------------------
@@ -243,11 +219,11 @@ export function renderHtml(doc, { templatePath, fontsDir = FONTS_DIR } = {}) {
           IAD_OV_CAPTIONS: renderCaptions(doc),
         }
       : {
-          IAD_TLDR: renderTldr(doc.tldr, ui),
-          IAD_STEPPER: renderStepper(doc.steps),
-          IAD_LEGEND: renderLegend(doc.legend),
-          IAD_BOARD: renderBlocks(doc.board),
-          IAD_SECTIONS: renderSections(doc),
+          IAD_WT_HEADER: renderWtHeader(doc.meta),
+          IAD_WT_CASES: renderCases(doc),
+          IAD_WT_MAP: renderMap(doc, ui),
+          IAD_WT_BELOW: renderBelow(doc, ui),
+          IAD_WT_FOOTER: renderFooter(doc.meta),
         }),
   };
 

@@ -1,0 +1,338 @@
+{
+  "meta": {
+    "title": "Payment authorization: retries and timeouts",
+    "lang": "en",
+    "intro": "How a payment request goes through an idempotency check, fraud scoring and a PSP call, and is either approved or retried. Pick a scenario and press **Next step →**.",
+    "facts": [
+      {"label":"PSP timeout","value":"3s"},
+      {"label":"retries","value":"up to 3 · exponential backoff"},
+      {"label":"idempotency keys","value":"kept 24 hours","mono":false}
+    ],
+    "source": "Generic payment design example; not the numbers of any specific PSP or company."
+  },
+  "legend": {
+    "nodes": {
+      "client": "Customer app",
+      "infra": "Infrastructure",
+      "app": "Payment service step",
+      "store": "Storage",
+      "tool": "Internal tool",
+      "dep": "External PSP"
+    },
+    "edges": {"file":"Bulk data","text":"Request and response bodies","ctrl":"Control and callbacks"},
+    "tokens": [{"kind":"text","text":"POST /pay"},{"kind":"err","text":"504"}]
+  },
+  "groups": [
+    {"id":"edge","title":"Edge"},
+    {"id":"pay","title":"Payment service","meta":"deploy payment"},
+    {"id":"data","title":"Storage"},
+    {"id":"psp","title":"External PSPs","tone":"muted"}
+  ],
+  "nodes": [
+    {
+      "id": "app",
+      "kind": "client",
+      "title": "Mobile app",
+      "mono": "pay button",
+      "sub": ["creates Idempotency-Key"],
+      "facts": ["Creates a **new key** on every tap of the pay button and reuses it when resending."]
+    },
+    {
+      "id": "gw",
+      "kind": "infra",
+      "title": "API gateway",
+      "mono": "rate limit",
+      "group": "edge",
+      "sub": ["auth · 429"],
+      "facts": ["Checks the token and applies a per-user rate limit."]
+    },
+    {
+      "id": "pay",
+      "kind": "app",
+      "title": "Payments API",
+      "mono": "POST /payments",
+      "group": "pay",
+      "facts": ["Takes the request and runs the steps below in order."]
+    },
+    {
+      "id": "idem",
+      "kind": "store",
+      "title": "Idempotency store",
+      "mono": "redis SETNX",
+      "group": "data",
+      "facts": ["If the key already exists, the earlier response is returned as is."]
+    },
+    {
+      "id": "risk",
+      "kind": "app",
+      "title": "Fraud scoring",
+      "mono": "score 0-100",
+      "group": "pay",
+      "facts": ["70 or more is declined; 40 to 70 requires 3DS."]
+    },
+    {
+      "id": "router",
+      "kind": "app",
+      "title": "PSP router",
+      "mono": "timeout 3s",
+      "group": "pay",
+      "sub": ["A first, B on failure"],
+      "facts": [
+        "Picks a PSP from the card BIN and outage state.",
+        "On a timeout the result is **unknown**: it queries first, then retries."
+      ]
+    },
+    {
+      "id": "psp-a",
+      "kind": "dep",
+      "title": "PSP A",
+      "mono": "primary",
+      "group": "psp",
+      "facts": ["Handles 90% of normal traffic."]
+    },
+    {
+      "id": "psp-b",
+      "kind": "dep",
+      "title": "PSP B",
+      "mono": "fallback",
+      "group": "psp",
+      "facts": ["Used only when A returns 5xx or its circuit breaker is open."]
+    },
+    {
+      "id": "retry-q",
+      "kind": "infra",
+      "title": "Retry queue",
+      "mono": "SQS delay",
+      "group": "pay",
+      "sub": ["1s · 4s · 16s"],
+      "facts": [
+        "Re-enqueues with exponential backoff; after 3 tries the message goes to the dead-letter queue."
+      ]
+    },
+    {
+      "id": "ledger",
+      "kind": "store",
+      "title": "Ledger DB",
+      "mono": "postgres",
+      "group": "data",
+      "sub": ["PENDING → CAPTURED"],
+      "facts": ["Writes **PENDING** first and changes it after the PSP answers."]
+    },
+    {
+      "id": "hook",
+      "kind": "app",
+      "title": "Webhook receiver",
+      "mono": "POST /psp/hook",
+      "group": "pay",
+      "facts": ["Receives approvals that arrive late, after a timeout, and reconciles the ledger."]
+    },
+    {
+      "id": "ops",
+      "kind": "tool",
+      "title": "Ops dashboard",
+      "mono": "manual action",
+      "facts": ["A person reviews dead-lettered payments and refunds or reprocesses them."]
+    }
+  ],
+  "edges": [
+    {"id":"req","from":"app","to":"gw","kind":"text"},
+    {"id":"gw-pay","from":"gw","to":"pay","kind":"text"},
+    {"id":"pay-idem","from":"pay","to":"idem","kind":"ctrl"},
+    {"id":"pay-risk","from":"pay","to":"risk","kind":"text"},
+    {"id":"pay-ledger","from":"pay","to":"ledger","kind":"text"},
+    {"id":"pay-router","from":"pay","to":"router","kind":"text"},
+    {"id":"router-a","from":"router","to":"psp-a","kind":"text"},
+    {"id":"router-b","from":"router","to":"psp-b","kind":"text"},
+    {"id":"router-q","from":"router","to":"retry-q","kind":"ctrl"},
+    {"id":"q-router","from":"retry-q","to":"router","kind":"ctrl"},
+    {"id":"a-hook","from":"psp-a","to":"hook","kind":"ctrl"},
+    {"id":"hook-ledger","from":"hook","to":"ledger","kind":"text"},
+    {"id":"q-ops","from":"retry-q","to":"ops","kind":"ctrl"},
+    {"id":"resp","from":"pay","to":"app","kind":"ctrl"}
+  ],
+  "gauges": [{"id":"retries","node":"retry-q","caption":"retry count","empty":"nothing queued"}],
+  "scenarios": [
+    {
+      "id": "ok",
+      "title": "Approved first time",
+      "summary": "App → Payments API → PSP A → ledger",
+      "tag": "normal",
+      "lead": "The most common path: the card payment is approved on the first attempt.",
+      "steps": [
+        {
+          "title": "App requests the payment",
+          "edges": ["req","gw-pay"],
+          "token": {"text":"POST /pay","kind":"text"},
+          "what": "Amount, currency, card token and `Idempotency-Key` travel in one request.",
+          "where": "The gateway checks the JWT and forwards it to the Payments API.",
+          "fail": "Expired token: **401**; over the per-minute limit: **429**."
+        },
+        {
+          "title": "Claim the idempotency key",
+          "edges": ["pay-idem"],
+          "token": {"text":"SETNX key","kind":"ctrl"},
+          "what": "A key seen for the first time is stored and processing continues.",
+          "where": "Redis `idem:<key>`, TTL 24 hours.",
+          "fail": "Redis down: refused with **503** to stay safe."
+        },
+        {
+          "title": "Compute the fraud score",
+          "edges": ["pay-risk"],
+          "token": {"text":"score 12","kind":"text"},
+          "what": "A score from the amount, the device and recent attempts.",
+          "where": "The rule engine inside the payment service.",
+          "fail": "No answer within 300ms: require 3DS to be safe."
+        },
+        {
+          "title": "Record PENDING, call the PSP",
+          "edges": ["pay-ledger","pay-router","router-a"],
+          "token": {"text":"authorize","kind":"text"},
+          "what": "PENDING goes into the ledger and the router sends an authorization to PSP A.",
+          "where": "Ledger table `payments` and PSP A's HTTPS API.",
+          "fail": "No answer within 3 seconds: continue in the timeout scenario."
+        },
+        {
+          "title": "Approval returned",
+          "edges": ["resp"],
+          "token": {"text":"APPROVED","kind":"ctrl"},
+          "what": "The ledger becomes CAPTURED and the app gets a 200.",
+          "where": "`payment_id` in the response body.",
+          "fail": "Ledger update fails: the response still succeeds and the webhook repairs it."
+        }
+      ]
+    },
+    {
+      "id": "timeout",
+      "title": "PSP timeout and retry",
+      "summary": "PSP A silent → queue → retry → PSP B",
+      "tag": "outage",
+      "lead": "PSP A does not answer within 3 seconds, so the payment goes through the retry queue to PSP B.",
+      "steps": [
+        {
+          "title": "PSP A does not answer",
+          "edges": ["pay-router","router-a"],
+          "token": {"text":"timeout 3s","kind":"err"},
+          "what": "The router waits 3 seconds and gives up. At this point **nobody knows whether it was approved**.",
+          "where": "The router's HTTP client timeout.",
+          "fail": "Retrying blindly could charge twice, so the router queries PSP A first.",
+          "markers": [{"node":"psp-a","label":"504"}]
+        },
+        {
+          "title": "Put it on the retry queue",
+          "edges": ["router-q"],
+          "token": {"text":"retry #1","kind":"ctrl"},
+          "what": "A message with a 1 second delay; the app gets `202 PENDING`.",
+          "where": "SQS delay queue.",
+          "fail": "Queue full: fail immediately.",
+          "gauges": {"retries":{"value":0.33,"label":"1 / 3"}}
+        },
+        {
+          "title": "Run the retry",
+          "edges": ["q-router","router-b"],
+          "token": {"text":"authorize (B)","kind":"text"},
+          "what": "The same `Idempotency-Key` goes to PSP B.",
+          "where": "PSP B's authorization API.",
+          "fail": "PSP B fails too: a second retry after 4 seconds.",
+          "gauges": {"retries":{"value":0.66,"label":"2 / 3"}}
+        },
+        {
+          "title": "PSP B approves",
+          "edges": ["resp"],
+          "token": {"text":"APPROVED","kind":"ctrl"},
+          "what": "The ledger becomes CAPTURED and the app gets a push notification.",
+          "where": "The app learns the result by polling or push.",
+          "fail": "A lost push is caught by polling.",
+          "gauges": {"retries":{"value":0,"label":"done"}}
+        }
+      ]
+    },
+    {
+      "id": "late-hook",
+      "title": "Late approval webhook",
+      "summary": "PSP A approves after the timeout",
+      "tag": "race",
+      "lead": "PSP B has already approved after the timeout when PSP A sends a late approval webhook.",
+      "steps": [
+        {
+          "title": "PSP A's late webhook",
+          "edges": ["a-hook"],
+          "token": {"text":"APPROVED (late)","kind":"ctrl"},
+          "what": "PSP A's approval arrives right after the timeout.",
+          "where": "The webhook receiver, after checking the signature.",
+          "fail": "Bad signature: dropped with 400.",
+          "markers": [{"node":"hook","label":"duplicate"}]
+        },
+        {
+          "title": "Check against the ledger",
+          "edges": ["hook-ledger"],
+          "token": {"text":"dup detected","kind":"text"},
+          "what": "Already CAPTURED: PSP A's approval is marked **to be voided**.",
+          "where": "Ledger `payments` and `psp_events`.",
+          "fail": "Reconciliation fails: sent to the dead-letter queue."
+        },
+        {
+          "title": "Alert an operator",
+          "edges": ["router-q","q-ops"],
+          "token": {"text":"void A","kind":"ctrl"},
+          "what": "The double approval appears on the ops dashboard.",
+          "where": "Ops dashboard, `double approvals` tab.",
+          "fail": "A missed alert is caught by the daily reconciliation.",
+          "gauges": {"retries":{"value":1,"label":"3 / 3 · manual"}}
+        }
+      ]
+    },
+    {
+      "id": "limit",
+      "title": "Declined by fraud scoring",
+      "summary": "Declined at fraud scoring",
+      "tag": "declined",
+      "lead": "The fraud score is high, so the payment is declined without calling a PSP.",
+      "steps": [
+        {
+          "title": "Accept the request, claim the key",
+          "edges": ["req","gw-pay","pay-idem"],
+          "token": {"text":"POST /pay","kind":"text"},
+          "what": "The key is claimed first, as on the normal path.",
+          "where": "Gateway and Redis.",
+          "fail": "Nothing to add here."
+        },
+        {
+          "title": "Fraud score 85",
+          "edges": ["pay-risk"],
+          "token": {"text":"score 85","kind":"err"},
+          "what": "70 or more: the payment is declined.",
+          "where": "Rule engine.",
+          "fail": "A false positive needs a manual release by support.",
+          "markers": [{"node":"risk","label":"declined"}]
+        },
+        {
+          "title": "Decline response",
+          "edges": ["resp"],
+          "token": {"text":"402 DECLINED","kind":"err"},
+          "what": "No PSP call: DECLINED goes into the ledger and the app gets the answer.",
+          "where": "Ledger and app response.",
+          "fail": "Retrying with the same key returns **the same decline**."
+        }
+      ]
+    }
+  ],
+  "tldr": {
+    "title": "Summary",
+    "points": [
+      "The **idempotency key** prevents double charges.",
+      "A timeout is not a failure, it is **unknown**: query first, then retry.",
+      "At most **3 retries**; after that a person takes over."
+    ]
+  },
+  "tables": [
+    {
+      "title": "Response codes",
+      "columns": ["Situation","Code","Next action"],
+      "rows": [
+        ["Approved","200","Ledger CAPTURED"],
+        ["Retrying","202","Poll or wait for push"],
+        ["Declined","402","Suggest another card"]
+      ]
+    }
+  ]
+}

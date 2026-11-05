@@ -12,7 +12,10 @@ import { UI } from "../skills/interactive-architecture-doc/scripts/lib/i18n.mjs"
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const EXAMPLES = join(ROOT, "skills/interactive-architecture-doc/examples");
-const HTML = renderHtml(JSON.parse(readFileSync(join(EXAMPLES, "minimal.en.json"), "utf8"))).html;
+import { inline as inlineBuild } from "../skills/interactive-architecture-doc/scripts/lib/markup.mjs";
+
+const DOC = JSON.parse(readFileSync(join(ROOT, "test/fixtures/walkthrough.en.json"), "utf8"));
+const HTML = renderHtml(DOC).html;
 
 // Values created inside the vm context have that context's prototypes; compare as plain JSON.
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -21,163 +24,120 @@ const plain = (v) => JSON.parse(JSON.stringify(v));
 
 const PURE_RE = /\/\/ ---- BEGIN pure helpers[^\n]*\n([\s\S]*?)\/\/ ---- END pure helpers/g;
 
-class FakeMediaRule {
-  constructor(mediaText, cssRules) { this.media = { mediaText }; this.cssRules = cssRules; }
-}
-class FakeSupportsRule {
-  constructor(conditionText, cssRules) { this.conditionText = conditionText; this.cssRules = cssRules; }
-}
-
-function loadHelpers({ ui = UI.en, matches = () => false, supports = () => false } = {}) {
+function loadHelpers(ui = UI.en) {
   const blocks = [...HTML.matchAll(PURE_RE)].map((m) => m[1]);
-  assert.equal(blocks.length, 2, "fan-arrow and playground scripts each have one pure block");
-  const window = { CSSMediaRule: FakeMediaRule, CSSSupportsRule: FakeSupportsRule, matchMedia: (q) => ({ matches: matches(q) }) };
-  const ctx = vm.createContext({
-    UI: ui,
-    window,
-    CSSMediaRule: FakeMediaRule,
-    CSSSupportsRule: FakeSupportsRule,
-    CSS: { supports },
-  });
-  window.CSS = ctx.CSS;
-  vm.runInContext(blocks.join("\n"), ctx);
+  assert.equal(blocks.length, 1, "the runtime has one pure block");
+  const ctx = vm.createContext({ UI: ui });
+  vm.runInContext(blocks[0], ctx);
   return ctx;
 }
+const EDGES = Object.fromEntries(DOC.edges.map((e) => [e.id, e]));
+const keys = (m) => Object.keys(m).sort();
 
-test("t(): fills known placeholders, keeps unknown ones, works for every UI string", () => {
-  const h = loadHelpers({ ui: { a: "Step {step}/{total} {other}", b: "plain" } });
+test("t(): fills known placeholders, keeps unknown ones", () => {
+  const h = loadHelpers({ a: "Step {step}/{total} {other}", b: "plain" });
   assert.equal(h.t("a", { step: 2, total: 5 }), "Step 2/5 {other}");
   assert.equal(h.t("a"), "Step {step}/{total} {other}");
   assert.equal(h.t("b", { step: 1 }), "plain");
-  // inherited names are not parameters
-  assert.equal(h.t("a", Object.create({ step: 9 })), "Step {step}/{total} {other}");
-  for (const lang of ["en", "ko"]) {
-    const hl = loadHelpers({ ui: UI[lang] });
-    assert.ok(hl.t("export_caption", { scenario: "S", step: 1, total: 3 }).includes("1/3"), lang);
+  assert.equal(h.t("a", Object.create({ step: 9 })), "Step {step}/{total} {other}", "inherited names are not parameters");
+  for (const lang of ["en", "ko"]) assert.ok(loadHelpers(UI[lang]).t("counter_step", { step: 1, total: 3 }).includes("1 / 3"), lang);
+});
+
+test("inline(): same output as the build-time markup.inline (apostrophe entity aside)", () => {
+  const h = loadHelpers();
+  for (const s of ["a <b> & \"q\"", "**bold** and `x < y`", "`**not bold**`", "<script>alert(1)</script>", "*one* _two_ [link](x)", "x's"]) {
+    assert.equal(h.inline(s), inlineBuild(s).replace(/&#39;/g, "&apos;"), s);
   }
 });
 
-test("entry request: one pass, quoted {{input}} is JSON-escaped, bare is raw", () => {
+test("focusSets: step -1 lights the whole scenario; a step lights its edges, their ends and its nodes", () => {
   const h = loadHelpers();
-  assert.equal(h.fillEntryRequest('POST /x\n{ "q": "{{input}}" }', 'say "hi"\n'), 'POST /x\n{ "q": "say \\"hi\\"\\n" }');
-  assert.equal(h.fillEntryRequest("GET /s?q={{input}}", "a b"), "GET /s?q=a b");
-  // input that itself contains the marker is never substituted again
-  assert.equal(h.fillEntryRequest('"{{input}}" {{input}}', "{{input}}"), '"{{input}}" {{input}}');
-  assert.equal(h.fillEntryRequest("{{input}}", "$& $1 $$"), "$& $1 $$", "no replacement patterns");
+  const steps = DOC.scenarios[1].steps;
+  const all = plain(h.focusSets(steps, -1, EDGES));
+  assert.deepEqual(keys(all.curE), ["back", "fwd", "up"]);
+  assert.deepEqual(keys(all.curN), ["browser", "gateway", "receiver"]);
+  assert.deepEqual(all.curE, all.allE);
+  const one = plain(h.focusSets(steps, 1, EDGES));
+  assert.deepEqual(keys(one.curE), []);
+  assert.deepEqual(keys(one.curN), ["receiver"]);
+  const two = plain(h.focusSets(DOC.scenarios[0].steps, 4, EDGES));
+  assert.deepEqual(keys(two.curE), ["answer", "ask"]);
+  assert.deepEqual(keys(two.curN), ["model", "parser"]);
 });
 
-test("entry text: scenario input fills the request; no input keeps the code or falls back to empty input", () => {
+test("gaugeState: empty until set, then carries forward until changed", () => {
   const h = loadHelpers();
-  const tpl = 'POST /x { "q": "{{input}}" }';
-  assert.equal(h.entryText(tpl, "hi", "authored"), 'POST /x { "q": "hi" }');
-  assert.equal(h.entryText(tpl, undefined, "authored"), "authored");
-  assert.equal(h.entryText(tpl, undefined, ""), 'POST /x { "q": "" }');
-  assert.equal(h.entryText(undefined, "hi", "authored"), "authored");
+  const steps = DOC.scenarios[0].steps;
+  const label = (j) => plain(h.gaugeState(DOC.gauges, steps, j))["disk-use"];
+  assert.deepEqual(label(-1), { value: 0, label: "empty" });
+  assert.deepEqual(label(1), { value: 0, label: "empty" });
+  assert.deepEqual(label(2), { value: 0.5, label: "2MB" });
+  assert.deepEqual(label(4), { value: 0.5, label: "2MB" }, "carried forward");
+  assert.deepEqual(label(5), { value: 0, label: "0B · deleted" });
+  assert.deepEqual(label(6), { value: 0, label: "0B · deleted" });
+  // unknown gauge ids in a step are ignored at runtime
+  assert.deepEqual(plain(h.gaugeState([], steps, 6)), {});
+  // a scenario's gauge_empty overrides the empty label only
+  const over = (j) => plain(h.gaugeState(DOC.gauges, steps, j, { "disk-use": "0B · nothing written" }))["disk-use"];
+  assert.deepEqual(over(-1), { value: 0, label: "0B · nothing written" });
+  assert.deepEqual(over(2), { value: 0.5, label: "2MB" });
+});
+
+test("tokenAt: the distance is split across the step's paths in order", () => {
+  const h = loadHelpers();
+  assert.deepEqual(plain(h.tokenAt([100, 50], 0)), { i: 0, at: 0 });
+  assert.deepEqual(plain(h.tokenAt([100, 50], 100)), { i: 0, at: 100 });
+  assert.deepEqual(plain(h.tokenAt([100, 50], 120)), { i: 1, at: 20 });
+  assert.deepEqual(plain(h.tokenAt([100, 50], 999)), { i: 1, at: 50 }, "clamped to the end");
+  assert.equal(h.easeInOut(0), 0);
+  assert.equal(h.easeInOut(1), 1);
+  assert.equal(h.easeInOut(0.5), 0.5);
 });
 
 test("file names: unsafe characters removed, whitespace dashed, trimmed, capped at 80", () => {
   const h = loadHelpers();
   assert.equal(h.sanitizeFilePart('a<b>c:"d"/e\\f|g?h*i'), "abcdefghi");
-  assert.equal(h.sanitizeFilePart("  Request   Router  "), "Request-Router");
-  assert.equal(h.sanitizeFilePart("a\u0000\u001b[31mb\u007f"), "a[31mb");
+  assert.equal(h.sanitizeFilePart("  Upload   pipeline  "), "Upload-pipeline");
   assert.equal(h.sanitizeFilePart("..-x-.."), "x");
-  assert.equal(h.sanitizeFilePart("요청 라우터"), "요청-라우터");
   assert.equal(h.sanitizeFilePart("x".repeat(200)).length, 80);
 });
 
-test("export scale: dpr clamped to 1..2, then capped by canvas area and side", () => {
+test("export scale: 2x, capped by canvas area and side", () => {
   const h = loadHelpers();
-  assert.equal(h.exportScale(1000, 1000, 1), 1);
-  assert.equal(h.exportScale(1000, 1000, 0.5), 1, "low dpr is raised to 1");
-  assert.equal(h.exportScale(1000, 1000, undefined), 1);
-  assert.equal(h.exportScale(1000, 1000, 2), 2);
-  assert.equal(h.exportScale(1000, 1000, 3), 2, "high dpr is capped at 2");
-  const area = h.exportScale(4000, 4000, 2);
+  assert.equal(h.exportScale(1000, 1000), 2);
+  const area = h.exportScale(4000, 4000);
   assert.ok(Math.abs(4000 * 4000 * area * area - 16000000) < 1, "area cap ~16MP");
-  assert.equal(h.exportScale(100, 20000, 2), 16384 / 20000, "side cap");
-});
-
-test("collectRules: keeps matching @media/@supports, drops the rest, collects token names", () => {
-  const h = loadHelpers({ matches: (q) => q === "(max-width:1180px)", supports: (c) => c === "(display:grid)" });
-  const rule = (selectorText, props = []) => ({ selectorText, cssText: `${selectorText}{}`, style: Object.assign([...props], { length: props.length }) });
-  const rules = [
-    rule(":root", ["--color-bg", "color-scheme"]),
-    rule('[data-theme="dark"]', ["--line"]),
-    rule(".node", ["--not-a-token-source"]),
-    new FakeMediaRule("(max-width:1180px)", [rule(".fork-row"), new FakeMediaRule("(max-width:900px)", [rule(".nested")])]),
-    new FakeMediaRule("(max-width:900px)", [rule(".stacked")]),
-    new FakeSupportsRule("(display:grid)", [rule(".grid")]),
-    new FakeSupportsRule("(display:nope)", [rule(".nope")]),
-  ];
-  const css = [];
-  const tokens = {};
-  h.collectRules(rules, css, tokens);
-  assert.deepEqual(plain(css), [":root{}", '[data-theme="dark"]{}', ".node{}", ".fork-row{}", ".grid{}"]);
-  assert.deepEqual(Object.keys(tokens).sort(), ["--color-bg", "--line"]);
-});
-
-test("fan targets: only first-node-in-column targets in the first grid row get arrows", () => {
-  const h = loadHelpers();
-  const pick = (targets) =>
-    plain(h.firstRowTargets(targets, (el) => el.colTop, (el) => el.first)).map((el) => el.id);
-  // three columns side by side, all first in their column
-  assert.deepEqual(pick([{ id: "a", colTop: 100, first: true }, { id: "b", colTop: 100.4, first: true }, { id: "c", colTop: 100, first: true }]), ["a", "b", "c"]);
-  // wrapped into two rows: the third column moved down
-  assert.deepEqual(pick([{ id: "a", colTop: 100, first: true }, { id: "b", colTop: 100, first: true }, { id: "c", colTop: 400, first: true }]), ["a", "b"]);
-  // a target below another node in the same (first-row) column gets no arrow
-  assert.deepEqual(pick([{ id: "a", colTop: 100, first: true }, { id: "b", colTop: 100, first: false }]), ["a"]);
-  // the first row is decided by first-in-column targets only
-  assert.deepEqual(pick([{ id: "low", colTop: 50, first: false }, { id: "a", colTop: 100, first: true }]), ["a"]);
-  assert.deepEqual(pick([{ id: "x", colTop: 100, first: false }]), []);
-  assert.deepEqual(pick([]), []);
+  assert.equal(h.exportScale(100, 20000), 16384 / 20000, "side cap");
 });
 
 // ---- self-check judging -------------------------------------------------------
 
-const goodObs = (o = {}) => ({
-  active: 1, data: "POST /x", stepText: "POST /x", entry: "POST /x", fans: [{ zone: 1, targets: 2, drawn: 7 }],
-  scrollWidth: 1400, clientWidth: 1400, ...o,
-});
+const expected = () => ({ curE: { up: true }, curN: { browser: true, gateway: true }, badges: 7, gauges: { "disk-use": "empty" }, markers: 0 });
+const goodObs = (o = {}) => ({ curE: { up: true }, curN: { gateway: true, browser: true }, narration: "Send the file", badges: 7, gauges: { "disk-use": "empty" }, markers: 0, overflow: false, ...o });
 const judge = (h, obs) => {
-  const out = { failures: [], warnings: [] };
-  h.judgeStep("a", 2, obs, out);
+  const out = [];
+  h.judgeStep("upload", 0, expected(), obs, out);
   return plain(out);
 };
 
-test("self-check: a healthy step has no failures or warnings", () => {
-  const h = loadHelpers();
-  assert.deepEqual(judge(h, goodObs()), { failures: [], warnings: [] });
-  // no entry node (null) and a fork with no visible targets are fine; 1px rounding is tolerated
-  assert.deepEqual(judge(h, goodObs({ entry: null, fans: [{ zone: 1, targets: 0, drawn: 0 }], scrollWidth: 1401 })), { failures: [], warnings: [] });
+test("self-check: a healthy step has no failures", () => {
+  assert.deepEqual(judge(loadHelpers(), goodObs()), []);
 });
 
 test("self-check: each broken observation becomes a failure tagged with scenario, step and check", () => {
   const h = loadHelpers();
-  const checks = (obs) => judge(h, goodObs(obs)).failures.map((f) => f.check);
-  assert.deepEqual(checks({ active: 0 }), ["active-node"]);
-  assert.deepEqual(checks({ data: "  " }), ["data-panel"]);
-  assert.deepEqual(checks({ entry: "" }), ["entry-request"]);
-  assert.deepEqual(checks({ fans: [{ zone: 1, targets: 2, drawn: 7 }, { zone: 2, targets: 1, drawn: 0 }] }), ["fan-arrows"]);
-  assert.deepEqual(checks({ scrollWidth: 1500 }), ["overflow"]);
-  const f = judge(h, goodObs({ active: 0 })).failures[0];
-  assert.equal(f.scenario, "a");
-  assert.equal(f.step, 2);
+  const checks = (o) => judge(h, goodObs(o)).map((f) => f.check);
+  assert.deepEqual(checks({ curE: {} }), ["cur-edges"]);
+  assert.deepEqual(checks({ curN: { browser: true } }), ["cur-nodes"]);
+  assert.deepEqual(checks({ narration: "  " }), ["narration"]);
+  assert.deepEqual(checks({ badges: 6 }), ["badges"]);
+  assert.deepEqual(checks({ gauges: { "disk-use": "2MB" } }), ["gauge"]);
+  assert.deepEqual(checks({ markers: 1 }), ["markers"]);
+  assert.deepEqual(checks({ overflow: true }), ["overflow"]);
+  const f = judge(h, goodObs({ curE: {} }))[0];
+  assert.equal(f.scenario, "upload");
+  assert.equal(f.step, 0);
   assert.ok(f.detail.length > 0);
-});
-
-test("self-check: missing scenario text is a warning, not a failure (W_SCENARIO_STEP_MISSING)", () => {
-  const h = loadHelpers();
-  const out = judge(h, goodObs({ stepText: undefined, data: UI.en.data_empty }));
-  assert.deepEqual(out.failures, []);
-  assert.deepEqual(out.warnings.map((w) => w.check), ["step-text"]);
-});
-
-test("self-check result: ok only without failures and page errors; checked = scenarios x steps", () => {
-  const h = loadHelpers();
-  const pass = plain(h.selfCheckResult(3, 6, { failures: [], warnings: [{ check: "step-text" }] }, []));
-  assert.deepEqual(pass, { ok: true, checked: 18, scenarios: 3, steps: 6, failures: [], warnings: [{ check: "step-text" }], errors: [] });
-  assert.equal(h.selfCheckResult(1, 3, { failures: [{ check: "overflow" }], warnings: [] }, []).ok, false);
-  assert.equal(h.selfCheckResult(1, 3, { failures: [], warnings: [] }, [{ type: "error", message: "x" }]).ok, false);
 });
 
 test("self-check: runs only with #iad-selfcheck or window.iadSelfCheck(), and reports into a hidden <pre>", () => {
@@ -185,6 +145,13 @@ test("self-check: runs only with #iad-selfcheck or window.iadSelfCheck(), and re
   assert.ok(HTML.includes("window.iadSelfCheck = selfCheck"));
   assert.ok(/#iad-selfcheck-result\{[^}]*clip-path:inset\(50%\)/.test(HTML), "visually hidden, still in the DOM");
   assert.ok(HTML.includes('console.log("IAD_SELFCHECK " + json)'));
+  assert.ok(HTML.includes("for (var j = -1; j < sc.steps.length; j++)"), "walks every step including the overview (-1)");
+});
+
+test("reduced motion: the token rests at the middle of the step instead of animating", () => {
+  assert.ok(HTML.includes('matchMedia("(prefers-reduced-motion: reduce)")'));
+  assert.ok(HTML.includes("if (reduce) { place(at(tot * 0.5)); return; }"));
+  assert.match(HTML, /@media \(prefers-reduced-motion:reduce\)\{\s*\.wt-map\.focus \.edge\.cur path\.ln\{animation:none;\}/);
 });
 
 // ---- early theme script -----------------------------------------------------
@@ -215,4 +182,16 @@ test("theme script: saved choice wins, else OS preference; storage errors are su
   assert.equal(runThemeScript({ stored: "purple", prefersDark: true }), "dark", "invalid saved value is ignored");
   assert.equal(runThemeScript({ throws: true, prefersDark: true }), "dark");
   assert.equal(runThemeScript({ stored: null, hasMatchMedia: false }), "light");
+});
+
+test("keyboard: arrows work with focus on a map box; boxes and badges take Enter/Space; showing a box stops autoplay", () => {
+  const handler = HTML.slice(HTML.indexOf('document.addEventListener("keydown"'));
+  const guard = handler.slice(0, handler.indexOf("ArrowRight"));
+  assert.ok(!guard.includes("closest"), "no early return for targets inside the SVG");
+  assert.match(HTML, /b\.addEventListener\("keydown", function \(ev\) \{\s*if \(ev\.key === "Enter" \|\| ev\.key === " "\)/);
+  assert.ok(HTML.includes("function showNode(id) { stopPlay();"));
+});
+
+test("export: .wt-map rules inside matching @media blocks are copied too", () => {
+  assert.ok(HTML.includes("else if (rule.type === 4) { if (window.matchMedia(rule.media.mediaText).matches) collect(rule.cssRules); }"));
 });

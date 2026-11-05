@@ -1,0 +1,322 @@
+{
+  "meta": {
+    "title": "결제 승인 흐름: 재시도와 타임아웃",
+    "lang": "ko",
+    "intro": "결제 요청이 멱등 키 확인, 사기 탐지, PSP 호출을 거쳐 승인되거나 재시도되는 과정을 보여 드립니다. 시나리오를 고르고 **다음 단계 →**를 누르세요.",
+    "facts": [
+      {"label":"PSP 타임아웃","value":"3s"},
+      {"label":"재시도","value":"최대 3회 · 지수 백오프"},
+      {"label":"멱등 키 보관","value":"24시간","mono":false}
+    ],
+    "source": "결제 설계를 일반화한 예시입니다. 특정 PSP나 회사의 수치가 아닙니다."
+  },
+  "legend": {
+    "nodes": {"client":"고객 앱","infra":"인프라","app":"결제 서비스 단계","store":"저장소","tool":"내부 도구","dep":"외부 PSP"},
+    "edges": {"file":"대용량 데이터","text":"요청·응답 본문","ctrl":"제어·콜백"},
+    "tokens": [{"kind":"text","text":"POST /pay"},{"kind":"err","text":"504"}]
+  },
+  "groups": [
+    {"id":"edge","title":"진입 계층"},
+    {"id":"pay","title":"결제 서비스","meta":"deploy payment"},
+    {"id":"data","title":"저장소"},
+    {"id":"psp","title":"외부 PSP","tone":"muted"}
+  ],
+  "nodes": [
+    {
+      "id": "app",
+      "kind": "client",
+      "title": "모바일 앱",
+      "mono": "결제 버튼",
+      "sub": ["Idempotency-Key 생성"],
+      "facts": ["결제 버튼을 누를 때마다 **새 키**를 만들고, 재전송 시 같은 키를 씁니다."]
+    },
+    {
+      "id": "gw",
+      "kind": "infra",
+      "title": "API 게이트웨이",
+      "mono": "rate limit",
+      "group": "edge",
+      "sub": ["인증 · 429"],
+      "facts": ["토큰 검증과 사용자별 속도 제한을 합니다."]
+    },
+    {
+      "id": "pay",
+      "kind": "app",
+      "title": "결제 API",
+      "mono": "POST /payments",
+      "group": "pay",
+      "facts": ["요청을 받아 아래 단계를 순서대로 조율합니다."]
+    },
+    {
+      "id": "idem",
+      "kind": "store",
+      "title": "멱등 키 저장소",
+      "mono": "redis SETNX",
+      "group": "data",
+      "facts": ["키가 이미 있으면 이전 응답을 그대로 돌려줍니다."]
+    },
+    {
+      "id": "risk",
+      "kind": "app",
+      "title": "사기 탐지",
+      "mono": "score 0~100",
+      "group": "pay",
+      "facts": ["70점 이상이면 거절, 40~70점은 3DS를 요구합니다."]
+    },
+    {
+      "id": "router",
+      "kind": "app",
+      "title": "PSP 라우터",
+      "mono": "timeout 3s",
+      "group": "pay",
+      "sub": ["A 우선, 실패 시 B"],
+      "facts": ["카드 BIN과 장애 상태로 PSP를 고릅니다.","타임아웃이면 **승인 여부를 모릅니다**. 조회 후 재시도합니다."]
+    },
+    {
+      "id": "psp-a",
+      "kind": "dep",
+      "title": "PSP A",
+      "mono": "primary",
+      "group": "psp",
+      "facts": ["평소 트래픽의 90%를 처리합니다."]
+    },
+    {
+      "id": "psp-b",
+      "kind": "dep",
+      "title": "PSP B",
+      "mono": "fallback",
+      "group": "psp",
+      "facts": ["A가 5xx이거나 차단기가 열렸을 때만 씁니다."]
+    },
+    {
+      "id": "retry-q",
+      "kind": "infra",
+      "title": "재시도 큐",
+      "mono": "SQS delay",
+      "group": "pay",
+      "sub": ["1s · 4s · 16s"],
+      "facts": ["지수 백오프로 메시지를 다시 넣습니다. 3회 후 데드레터로 보냅니다."]
+    },
+    {
+      "id": "ledger",
+      "kind": "store",
+      "title": "원장 DB",
+      "mono": "postgres",
+      "group": "data",
+      "sub": ["PENDING → CAPTURED"],
+      "facts": ["상태는 **PENDING**을 먼저 쓰고 PSP 응답 뒤에 바꿉니다."]
+    },
+    {
+      "id": "hook",
+      "kind": "app",
+      "title": "웹훅 수신",
+      "mono": "POST /psp/hook",
+      "group": "pay",
+      "facts": ["타임아웃 뒤 늦게 온 승인 결과를 받아 원장을 맞춥니다."]
+    },
+    {
+      "id": "ops",
+      "kind": "tool",
+      "title": "운영 대시보드",
+      "mono": "수동 조치",
+      "facts": ["데드레터 건을 사람이 확인하고 환불 또는 재처리합니다."]
+    }
+  ],
+  "edges": [
+    {"id":"req","from":"app","to":"gw","kind":"text"},
+    {"id":"gw-pay","from":"gw","to":"pay","kind":"text"},
+    {"id":"pay-idem","from":"pay","to":"idem","kind":"ctrl"},
+    {"id":"pay-risk","from":"pay","to":"risk","kind":"text"},
+    {"id":"pay-ledger","from":"pay","to":"ledger","kind":"text"},
+    {"id":"pay-router","from":"pay","to":"router","kind":"text"},
+    {"id":"router-a","from":"router","to":"psp-a","kind":"text"},
+    {"id":"router-b","from":"router","to":"psp-b","kind":"text"},
+    {"id":"router-q","from":"router","to":"retry-q","kind":"ctrl"},
+    {"id":"q-router","from":"retry-q","to":"router","kind":"ctrl"},
+    {"id":"a-hook","from":"psp-a","to":"hook","kind":"ctrl"},
+    {"id":"hook-ledger","from":"hook","to":"ledger","kind":"text"},
+    {"id":"q-ops","from":"retry-q","to":"ops","kind":"ctrl"},
+    {"id":"resp","from":"pay","to":"app","kind":"ctrl"}
+  ],
+  "gauges": [{"id":"retries","node":"retry-q","caption":"재시도 횟수","empty":"대기 없음"}],
+  "scenarios": [
+    {
+      "id": "ok",
+      "title": "한 번에 승인",
+      "summary": "앱 → 결제 API → PSP A → 원장",
+      "tag": "정상",
+      "lead": "카드 결제가 첫 시도에 승인되는 가장 흔한 경로입니다.",
+      "steps": [
+        {
+          "title": "앱이 결제를 요청",
+          "edges": ["req","gw-pay"],
+          "token": {"text":"POST /pay","kind":"text"},
+          "what": "금액, 통화, 카드 토큰과 `Idempotency-Key`가 한 요청에 실립니다.",
+          "where": "게이트웨이에서 JWT를 검증한 뒤 결제 API로 전달합니다.",
+          "fail": "토큰 만료 시 **401**, 분당 한도 초과 시 **429**."
+        },
+        {
+          "title": "멱등 키를 먼저 잡음",
+          "edges": ["pay-idem"],
+          "token": {"text":"SETNX key","kind":"ctrl"},
+          "what": "처음 보는 키면 저장하고 계속 진행합니다.",
+          "where": "Redis `idem:<key>`, TTL 24시간.",
+          "fail": "Redis 장애: 안전을 위해 **503**으로 거절합니다."
+        },
+        {
+          "title": "사기 점수 계산",
+          "edges": ["pay-risk"],
+          "token": {"text":"score 12","kind":"text"},
+          "what": "금액, 기기, 최근 시도 횟수로 점수를 냅니다.",
+          "where": "결제 서비스 안의 규칙 엔진.",
+          "fail": "엔진이 300ms 안에 답하지 않으면 보수적으로 3DS를 요구합니다."
+        },
+        {
+          "title": "PENDING 기록 후 PSP 호출",
+          "edges": ["pay-ledger","pay-router","router-a"],
+          "token": {"text":"authorize","kind":"text"},
+          "what": "원장에 PENDING을 쓰고, 라우터가 PSP A에 승인 요청을 보냅니다.",
+          "where": "원장 `payments` 테이블과 PSP A의 HTTPS API.",
+          "fail": "PSP가 3초 안에 답하지 않으면 타임아웃 시나리오로 넘어갑니다."
+        },
+        {
+          "title": "승인 응답",
+          "edges": ["resp"],
+          "token": {"text":"APPROVED","kind":"ctrl"},
+          "what": "원장을 CAPTURED로 바꾸고 앱에 200을 돌려줍니다.",
+          "where": "응답 본문에 `payment_id`.",
+          "fail": "원장 갱신 실패: 응답은 성공이지만 웹훅으로 보정합니다."
+        }
+      ]
+    },
+    {
+      "id": "timeout",
+      "title": "PSP 타임아웃과 재시도",
+      "summary": "PSP A 무응답 → 큐 → 재시도 → PSP B",
+      "tag": "장애",
+      "lead": "PSP A가 3초 안에 답하지 않아서 재시도 큐를 거쳐 PSP B로 넘어가는 경로입니다.",
+      "steps": [
+        {
+          "title": "PSP A가 응답하지 않음",
+          "edges": ["pay-router","router-a"],
+          "token": {"text":"timeout 3s","kind":"err"},
+          "what": "라우터가 3초를 기다리고 포기합니다. 이 시점에 **승인됐는지 알 수 없습니다**.",
+          "where": "라우터의 HTTP 클라이언트 타임아웃.",
+          "fail": "그대로 재시도하면 이중 승인이 날 수 있어, 먼저 PSP A에 조회를 보냅니다.",
+          "markers": [{"node":"psp-a","label":"504"}]
+        },
+        {
+          "title": "재시도 큐에 넣음",
+          "edges": ["router-q"],
+          "token": {"text":"retry #1","kind":"ctrl"},
+          "what": "1초 지연으로 메시지를 넣고 앱에는 `202 PENDING`을 줍니다.",
+          "where": "SQS 지연 큐.",
+          "fail": "큐가 꽉 차면 즉시 실패로 처리합니다.",
+          "gauges": {"retries":{"value":0.33,"label":"1 / 3"}}
+        },
+        {
+          "title": "재시도 실행",
+          "edges": ["q-router","router-b"],
+          "token": {"text":"authorize (B)","kind":"text"},
+          "what": "같은 `Idempotency-Key`로 PSP B에 요청합니다.",
+          "where": "PSP B의 승인 API.",
+          "fail": "PSP B도 실패하면 4초 뒤 두 번째 재시도.",
+          "gauges": {"retries":{"value":0.66,"label":"2 / 3"}}
+        },
+        {
+          "title": "PSP B 승인",
+          "edges": ["resp"],
+          "token": {"text":"APPROVED","kind":"ctrl"},
+          "what": "원장을 CAPTURED로 바꾸고 앱에 푸시로 알립니다.",
+          "where": "앱은 폴링 또는 푸시로 결과를 받습니다.",
+          "fail": "푸시가 유실돼도 폴링으로 확인할 수 있습니다.",
+          "gauges": {"retries":{"value":0,"label":"완료"}}
+        }
+      ]
+    },
+    {
+      "id": "late-hook",
+      "title": "늦은 승인 웹훅",
+      "summary": "타임아웃 뒤 PSP A가 뒤늦게 승인",
+      "tag": "경합",
+      "lead": "타임아웃으로 PSP B에서 이미 승인됐는데, PSP A가 뒤늦게 승인 웹훅을 보내는 경합 상황입니다.",
+      "steps": [
+        {
+          "title": "PSP A의 늦은 웹훅",
+          "edges": ["a-hook"],
+          "token": {"text":"APPROVED (late)","kind":"ctrl"},
+          "what": "타임아웃 직후 PSP A의 승인 결과가 도착합니다.",
+          "where": "웹훅 수신기, 서명 검증 후 처리.",
+          "fail": "서명이 틀리면 400으로 버립니다.",
+          "markers": [{"node":"hook","label":"중복"}]
+        },
+        {
+          "title": "원장과 대조",
+          "edges": ["hook-ledger"],
+          "token": {"text":"dup detected","kind":"text"},
+          "what": "이미 CAPTURED이면 PSP A 승인을 **취소 요청 대상**으로 표시합니다.",
+          "where": "원장 `payments`와 `psp_events`.",
+          "fail": "대조 실패 시 데드레터로 보냅니다."
+        },
+        {
+          "title": "운영자에게 알림",
+          "edges": ["router-q","q-ops"],
+          "token": {"text":"void A","kind":"ctrl"},
+          "what": "이중 승인 건을 운영 대시보드에 올립니다.",
+          "where": "운영 대시보드 `이중 승인` 탭.",
+          "fail": "알림이 누락되면 일 단위 대사에서 잡습니다.",
+          "gauges": {"retries":{"value":1,"label":"3 / 3 · 수동"}}
+        }
+      ]
+    },
+    {
+      "id": "limit",
+      "title": "한도 초과 거절",
+      "summary": "사기 탐지에서 즉시 거절",
+      "tag": "거절",
+      "lead": "사기 점수가 높아 PSP를 호출하지 않고 바로 거절하는 경로입니다.",
+      "steps": [
+        {
+          "title": "요청 접수와 멱등 확인",
+          "edges": ["req","gw-pay","pay-idem"],
+          "token": {"text":"POST /pay","kind":"text"},
+          "what": "정상 경로와 같이 키를 먼저 잡습니다.",
+          "where": "게이트웨이와 Redis.",
+          "fail": "해당 없음."
+        },
+        {
+          "title": "사기 점수 85",
+          "edges": ["pay-risk"],
+          "token": {"text":"score 85","kind":"err"},
+          "what": "점수가 70 이상이라 거절이 확정됩니다.",
+          "where": "규칙 엔진.",
+          "fail": "오탐이면 고객센터에서 수동 해제해야 합니다.",
+          "markers": [{"node":"risk","label":"거절"}]
+        },
+        {
+          "title": "거절 응답",
+          "edges": ["resp"],
+          "token": {"text":"402 DECLINED","kind":"err"},
+          "what": "PSP 호출 없이 원장에 DECLINED를 쓰고 응답합니다.",
+          "where": "원장과 앱 응답.",
+          "fail": "같은 키로 재요청하면 **같은 거절**이 돌아갑니다."
+        }
+      ]
+    }
+  ],
+  "tldr": {
+    "title": "세 줄 요약",
+    "points": [
+      "**멱등 키**가 이중 결제를 막습니다.",
+      "타임아웃은 실패가 아니라 **모름**입니다. 조회 뒤에 재시도합니다.",
+      "재시도는 **3회**까지, 넘으면 사람에게 넘깁니다."
+    ]
+  },
+  "tables": [
+    {
+      "title": "응답 코드",
+      "columns": ["상황","코드","다음 행동"],
+      "rows": [["승인","200","원장 CAPTURED"],["재시도 중","202","폴링 또는 푸시"],["거절","402","다른 카드 안내"]]
+    }
+  ]
+}

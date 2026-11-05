@@ -1,0 +1,306 @@
+// Walkthrough (v3) auto layout: scripts/lib/walkthrough-layout.mjs is pure, so it is tested directly.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { layoutWalkthrough, samplePath, pointAtHalf, isValidPath, GEOMETRY_WT, textWidthWt, TEXT_WT } from "../skills/interactive-architecture-doc/scripts/lib/walkthrough-layout.mjs";
+import { validate } from "../skills/interactive-architecture-doc/scripts/lib/validate.mjs";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const FIXTURE = JSON.parse(readFileSync(join(ROOT, "test/fixtures/walkthrough.en.json"), "utf8"));
+const clone = (v) => JSON.parse(JSON.stringify(v));
+const codes = (doc) => {
+  const r = validate(doc);
+  return [...r.errors, ...r.warnings].map((i) => i.code);
+};
+
+// A minimal document: nodes n0..n(k-1), the given edges, one scenario using every edge.
+function mini(nodes, edges, extra = {}) {
+  const doc = {
+    meta: { title: "T" },
+    legend: { nodes: { app: "App", store: "Store", client: "Client", dep: "Dep" } },
+    nodes: nodes.map((n) => ({ kind: "app", facts: ["f"], ...(typeof n === "string" ? { id: n, title: n.toUpperCase() } : { title: n.id.toUpperCase(), ...n }) })),
+    edges: edges.map(([from, to, kind = "file"], i) => ({ id: `e${i}`, from, to, kind })),
+    scenarios: [{ id: "s", title: "S", summary: "s", lead: "l", steps: [{ title: "x", edges: edges.map((_, i) => `e${i}`), token: { text: "t", kind: "file" }, what: "w", where: "w", fail: "f" }] }],
+    ...extra,
+  };
+  return doc;
+}
+
+test("layout: byte-identical output for the same input", () => {
+  assert.equal(JSON.stringify(layoutWalkthrough(clone(FIXTURE))), JSON.stringify(layoutWalkthrough(clone(FIXTURE))));
+});
+
+test("layout: a 5-node chain without lanes takes lanes 0..4, left to right", () => {
+  const doc = mini(["a", "b", "c", "d", "e"], [["a", "b"], ["b", "c"], ["c", "d", "text"], ["d", "e"]]);
+  const L = layoutWalkthrough(doc);
+  assert.deepEqual(["a", "b", "c", "d", "e"].map((id) => L.nodes[id].lane), [0, 1, 2, 3, 4]);
+  for (let i = 1; i < 5; i++) assert.ok(L.nodes["abcde"[i]].x > L.nodes["abcde"[i - 1]].x + L.nodes["abcde"[i - 1]].w);
+  assert.deepEqual(L.issues, []);
+});
+
+test("layout: ctrl edges do not rank, but a node reached only by ctrl stacks under its ctrl source", () => {
+  // a -file-> b; b -ctrl-> c (c has no data predecessor) -> c shares b's lane, next row
+  const doc = mini(["a", "b", "c", "d"], [["a", "b"], ["b", "c", "ctrl"], ["c", "d"], ["d", "a", "ctrl"]]);
+  const L = layoutWalkthrough(doc);
+  assert.equal(L.nodes.c.lane, L.nodes.b.lane);
+  assert.equal(L.nodes.c.row, 1);
+  assert.equal(L.nodes.d.lane, L.nodes.b.lane + 1);
+});
+
+test("layout: cycles are broken; explicit lanes pin a node and its successors follow", () => {
+  const doc = mini(["a", "b", "c"], [["a", "b"], ["b", "c"], ["c", "a"]]);
+  assert.deepEqual(["a", "b", "c"].map((id) => layoutWalkthrough(doc).nodes[id].lane), [0, 1, 2]);
+  doc.nodes[1].lane = 3;
+  const L = layoutWalkthrough(doc);
+  assert.deepEqual(["a", "b", "c"].map((id) => L.nodes[id].lane), [0, 3, 4]);
+});
+
+test("layout: rows fill the next free cell in nodes[] order; explicit rows are reserved first", () => {
+  const doc = mini([{ id: "a", lane: 0 }, { id: "b", lane: 0 }, { id: "c", lane: 0, row: 0 }], [["a", "b", "ctrl"], ["b", "c", "ctrl"]]);
+  const L = layoutWalkthrough(doc);
+  assert.deepEqual(["a", "b", "c"].map((id) => L.nodes[id].row), [1, 2, 0]);
+});
+
+test("layout: an x/y node takes no grid cell and does not move other nodes", () => {
+  const base = mini([{ id: "a", lane: 0 }, { id: "b", lane: 0 }, { id: "c", lane: 1 }], [["a", "c"], ["b", "c"]]);
+  const before = layoutWalkthrough(base);
+  const doc = clone(base);
+  doc.nodes.splice(1, 0, { id: "m", kind: "app", title: "M", facts: ["f"], x: 600, y: 400 });
+  doc.edges.push({ id: "em", from: "c", to: "m", kind: "ctrl" });
+  doc.scenarios[0].steps[0].edges.push("em");
+  const after = layoutWalkthrough(doc);
+  for (const id of ["a", "b", "c"]) {
+    assert.deepEqual([after.nodes[id].x, after.nodes[id].y, after.nodes[id].row], [before.nodes[id].x, before.nodes[id].y, before.nodes[id].row], id);
+  }
+  assert.deepEqual([after.nodes.m.x, after.nodes.m.y], [600, 400]);
+  // the viewBox grows to hold it
+  const [vx, vy, vw, vh] = after.viewBox;
+  assert.ok(vx + vw >= 600 + after.nodes.m.w && vy + vh >= 400 + after.nodes.m.h);
+});
+
+test("layout: span and rows boxes match the cells they cover", () => {
+  const doc = mini(
+    [{ id: "a", lane: 0, row: 0 }, { id: "b", lane: 1, row: 0 }, { id: "c", lane: 0, row: 1 }, { id: "d", lane: 1, row: 1 }, { id: "wide", lane: 0, row: 2, span: 2 }, { id: "tall", lane: 2, row: 0, rows: 3 }],
+    [["a", "b"], ["c", "d"], ["b", "tall"], ["d", "wide", "ctrl"]]
+  );
+  const L = layoutWalkthrough(doc);
+  const N = L.nodes;
+  assert.equal(N.wide.x, N.a.x);
+  assert.equal(N.wide.x + N.wide.w, N.b.x + N.b.w, "span 2 ends where lane 1 ends");
+  assert.equal(N.tall.y, L.rows[0].y);
+  assert.equal(N.tall.y + N.tall.h, L.rows[2].y + L.rows[2].h, "rows 3 ends where row 2 ends");
+});
+
+test("layout: a bidirectional pair gets two different, parallel paths", () => {
+  const doc = mini(["a", "b"], [["a", "b"], ["b", "a", "ctrl"]]);
+  const L = layoutWalkthrough(doc);
+  assert.notEqual(L.edges.e0.d, L.edges.e1.d);
+  assert.match(L.edges.e0.d, /^M[\d.]+ ([\d.]+) H[\d.]+$/);
+  const y0 = +L.edges.e0.d.split(" ")[1];
+  const y1 = +L.edges.e1.d.split(" ")[1];
+  assert.equal(Math.abs(y0 - y1), 2 * GEOMETRY_WT.bidi);
+});
+
+test("layout: same lane adjacent rows are a straight V; skipping a row detours around the side", () => {
+  const doc = mini([{ id: "a", lane: 0 }, { id: "b", lane: 0 }, { id: "c", lane: 0 }], [["a", "b", "text"], ["a", "c", "text"], ["b", "c", "text"]]);
+  const L = layoutWalkthrough(doc);
+  assert.match(L.edges.e0.d, / V[\d.]+$/);
+  assert.match(L.edges.e1.d, / C/);
+  const xs = samplePath(L.edges.e1.d).map((p) => p[0]);
+  const side = L.nodes.a.x + L.nodes.a.w;
+  assert.ok(Math.max(...xs) > side || Math.min(...xs) < L.nodes.a.x, "bulges out of the lane");
+  assert.ok(!L.issues.some((i) => i.code === "W_EDGE_CROSSES_NODE"));
+});
+
+test("layout: route via / sides / d are honoured", () => {
+  const doc = mini(["a", "b"], [["a", "b"]]);
+  doc.edges[0].route = { via: [[300, 20]] };
+  assert.match(layoutWalkthrough(doc).edges.e0.d, /Q300 20 /);
+  doc.edges[0].route = { from_side: "bottom", to_side: "bottom" };
+  const L = layoutWalkthrough(doc);
+  assert.ok(L.edges.e0.d.startsWith(`M${L.nodes.a.x + L.nodes.a.w / 2} ${L.nodes.a.y + L.nodes.a.h}`), L.edges.e0.d);
+  doc.edges[0].route = { d: "M1 2 L3 4" };
+  assert.equal(layoutWalkthrough(doc).edges.e0.d, "M1 2 L3 4");
+});
+
+test("layout: an edge through an unrelated node warns; route fixes it", () => {
+  const doc = mini(["a", "b", "c"], [["a", "b"], ["b", "c"], ["a", "c", "ctrl"]]);
+  assert.ok(codes(doc).includes("W_EDGE_CROSSES_NODE"));
+  doc.edges[2].route = { from_side: "top", to_side: "top" };
+  assert.ok(!codes(doc).includes("W_EDGE_CROSSES_NODE"));
+});
+
+test("layout: overlapping nodes or groups are E_LAYOUT_OVERLAP", () => {
+  const nodes = mini([{ id: "a", x: 0, y: 0 }, { id: "b", x: 50, y: 20 }], [["a", "b"]]);
+  assert.ok(validate(nodes).errors.some((e) => e.code === "E_LAYOUT_OVERLAP"));
+  const groups = mini([{ id: "a", lane: 0, group: "g1" }, { id: "b", lane: 1, group: "g2" }, { id: "c", lane: 2, group: "g1" }], [["a", "b"], ["b", "c"]], {
+    groups: [{ id: "g1", title: "G1" }, { id: "g2", title: "G2" }],
+  });
+  assert.ok(validate(groups).errors.some((e) => e.code === "E_LAYOUT_OVERLAP" && e.path === "/groups/1"));
+});
+
+test("layout: fully automatic documents keep each group in its own block of lanes", () => {
+  // the same interleaved graph without explicit lanes: groups are compacted, no overlap
+  const doc = mini([{ id: "a", group: "g1" }, { id: "b", group: "g2" }, { id: "c", group: "g1" }], [["a", "b"], ["b", "c"]], {
+    groups: [{ id: "g1", title: "G1" }, { id: "g2", title: "G2" }],
+  });
+  const L = layoutWalkthrough(doc);
+  assert.deepEqual(L.issues.filter((i) => i.code.startsWith("E_")), []);
+  const [g1, g2] = L.groups;
+  assert.ok(g1.x + g1.w <= g2.x || g2.x + g2.w <= g1.x, "group boxes do not overlap");
+});
+
+test("layout: badges sit at the first edge's middle; collisions are nudged by 20", () => {
+  const doc = mini(["a", "b"], [["a", "b"]]);
+  doc.scenarios[0].steps.push({ ...doc.scenarios[0].steps[0], title: "again" });
+  doc.scenarios[0].steps.push({ ...doc.scenarios[0].steps[0], title: "node", edges: [], nodes: ["b"] });
+  const L = layoutWalkthrough(doc);
+  const [p1, p2, p3] = L.badges.s;
+  assert.deepEqual(p1, L.edges.e0.badgeAt);
+  assert.deepEqual(p2, { x: p1.x + GEOMETRY_WT.badgeNudge, y: p1.y });
+  // a node-only step's badge goes top left, away from the error marker (top right)
+  assert.deepEqual(p3, { x: L.nodes.b.x + 4, y: L.nodes.b.y + 4 });
+});
+
+test("samplePath / pointAtHalf: lines, curves and the middle point", () => {
+  const mid = pointAtHalf(samplePath("M0 0 H100"));
+  assert.deepEqual([Math.round(mid.x), Math.round(mid.y), Math.round(mid.length)], [50, 0, 100]);
+  const c = pointAtHalf(samplePath("M0 0 C50 0 50 100 100 100"));
+  assert.ok(Math.abs(c.x - 50) < 1 && Math.abs(c.y - 50) < 1);
+  assert.ok(samplePath("M0 0 L10 0 Q20 0 20 10 V20 Z").length > 5);
+});
+
+test("layout: the shared test fixture is warning-free and within its viewBox", () => {
+  const L = layoutWalkthrough(clone(FIXTURE));
+  assert.deepEqual(L.issues, []);
+  const [vx, vy, vw, vh] = L.viewBox;
+  for (const b of Object.values(L.nodes)) assert.ok(b.x >= vx && b.y >= vy && b.x + b.w <= vx + vw && b.y + b.h <= vy + vh);
+});
+
+test("layout: a fully automatic chain longer than maxAutoLanes folds downward instead of running right", () => {
+  const ids = "abcdefghij".split("");
+  const doc = mini(ids, ids.slice(1).map((id, i) => [ids[i], id, i % 2 ? "text" : "file"]));
+  const L = layoutWalkthrough(doc);
+  assert.equal(L.lanes.length, GEOMETRY_WT.maxAutoLanes);
+  // flow order is kept: within a lane, a later node never sits above an earlier one
+  for (let i = 1; i < ids.length; i++) {
+    const p = L.nodes[ids[i - 1]];
+    const q = L.nodes[ids[i]];
+    assert.ok(q.lane > p.lane || (q.lane === p.lane && q.row > p.row), `${ids[i]} after ${ids[i - 1]}`);
+  }
+  assert.deepEqual(L.issues.filter((i) => i.code === "W_EDGE_CROSSES_NODE"), []);
+  // a chain that fits is not folded
+  const five = mini(ids.slice(0, 6), ids.slice(1, 6).map((id, i) => [ids[i], id]));
+  assert.deepEqual(ids.slice(0, 6).map((id) => layoutWalkthrough(five).nodes[id].lane), [0, 1, 2, 3, 4, 5]);
+});
+
+test("layout: folding only merges lanes of the same group, so group boxes stay apart", () => {
+  const ids = "abcdefgh".split("");
+  const doc = mini(
+    ids.map((id, i) => ({ id, group: i < 4 ? "g1" : "g2" })),
+    ids.slice(1).map((id, i) => [ids[i], id]),
+    { groups: [{ id: "g1", title: "G1" }, { id: "g2", title: "G2" }] }
+  );
+  const L = layoutWalkthrough(doc);
+  assert.ok(L.lanes.length <= GEOMETRY_WT.maxAutoLanes);
+  for (const id of ids) {
+    const other = ids.filter((x) => doc.nodes.find((n) => n.id === x).group !== doc.nodes.find((n) => n.id === id).group);
+    for (const o of other) assert.notEqual(L.nodes[id].lane, L.nodes[o].lane, `${id} / ${o}`);
+  }
+  assert.deepEqual(L.issues.filter((i) => i.code.startsWith("E_")), []);
+});
+
+test("layout: a node without edges sits with its group instead of pulling it to lane 0", () => {
+  const doc = mini(
+    [{ id: "a" }, { id: "b" }, { id: "c", group: "g" }, { id: "lonely", group: "g" }],
+    [["a", "b"], ["b", "c"]],
+    { groups: [{ id: "g", title: "G" }] }
+  );
+  const L = layoutWalkthrough(doc);
+  assert.equal(L.nodes.lonely.lane, L.nodes.c.lane);
+  assert.ok(L.nodes.c.lane > L.nodes.b.lane, "the group stays to the right of its callers");
+  doc.nodes[0].lane = 0; // explicit-lane mode too
+  assert.equal(layoutWalkthrough(doc).nodes.lonely.lane, layoutWalkthrough(doc).nodes.c.lane);
+});
+
+test("text width: calibrated to the embedded fonts (Hangul ~0.86em, Latin ~0.5em), still catches real overflow", () => {
+  // measured in the browser: "합계 상한 + PII 마스킹" 13px bold = 114px, "외부 파싱 (원본 외부 전송)" 11px = 114px
+  const title = textWidthWt("합계 상한 + PII 마스킹", 13, { bold: true });
+  const sub = textWidthWt("외부 파싱 (원본 외부 전송)", 11);
+  assert.ok(title >= 114 && title <= 114 * 1.15, `title estimate ${title}`);
+  assert.ok(sub >= 114 && sub <= 114 * 1.15, `sub estimate ${sub}`);
+  assert.ok(textWidthWt("abcdefghij", 10, { mono: true }) >= 60, "mono 0.6em");
+  // a lane sized by a text never flags that same text (widths are rounded up, not down)
+  const doc = mini([{ id: "a", title: "합계 상한 + PII 마스킹 단계" }, "b"], [["a", "b"]]);
+  assert.ok(!codes(doc).includes("W_TEXT_LONG"));
+  // text wider than the widest lane is still reported
+  doc.nodes[0].title = "아주 긴 제목이 들어가서 가장 넓은 레인보다도 더 넓어지는 경우";
+  assert.ok(codes(doc).includes("W_TEXT_LONG"));
+  assert.ok(textWidthWt(doc.nodes[0].title, TEXT_WT.title.px, TEXT_WT.title) > GEOMETRY_WT.laneMax);
+});
+
+test("layout: parallel edges in the same direction get separate paths", () => {
+  const doc = mini(["a", "b"], [["a", "b", "file"], ["a", "b", "ctrl"]]);
+  const L = layoutWalkthrough(doc);
+  assert.notEqual(L.edges.e0.d, L.edges.e1.d);
+  const y = (d) => +d.split(" ")[1];
+  assert.equal(Math.abs(y(L.edges.e0.d) - y(L.edges.e1.d)), 2 * GEOMETRY_WT.bidi);
+  // three in one slot: evenly spread, both ends of each edge share an offset (straight lines)
+  const three = mini(["a", "b"], [["a", "b"], ["b", "a", "ctrl"], ["a", "b", "text"]]);
+  const ds = Object.values(layoutWalkthrough(three).edges).map((e) => e.d);
+  assert.equal(new Set(ds).size, 3);
+  for (const d of ds) assert.match(d, /^M[\d.]+ [\d.]+ H[\d.]+$/);
+});
+
+test("layout: fully automatic span reserves its lanes (no overlap, also when folding)", () => {
+  const doc = mini([{ id: "a" }, { id: "wide", span: 2 }, { id: "b" }, { id: "c" }], [["a", "wide"], ["a", "b"], ["b", "c"], ["wide", "c", "ctrl"]]);
+  const L = layoutWalkthrough(doc);
+  assert.deepEqual(L.issues.filter((i) => i.code === "E_LAYOUT_OVERLAP"), []);
+  assert.equal(L.nodes.wide.x + L.nodes.wide.w, L.lanes[L.nodes.wide.lane + 1].x + L.lanes[L.nodes.wide.lane + 1].w);
+  const ids = "abcdefghij".split("");
+  const long = mini(ids.map((id, i) => (i === 3 ? { id, span: 3 } : id)), ids.slice(1).map((id, i) => [ids[i], id]));
+  const F = layoutWalkthrough(long);
+  assert.deepEqual(F.issues.filter((i) => i.code === "E_LAYOUT_OVERLAP"), []);
+  assert.ok(F.nodes.d.lane + 3 <= F.lanes.length, "the span stays inside the map");
+});
+
+test("layout: an x/y node with a lane neither switches off automatic layout nor pushes other ranks", () => {
+  const ids = "abcdefgh".split("");
+  const base = mini(ids, ids.slice(1).map((id, i) => [ids[i], id]));
+  const auto = layoutWalkthrough(base);
+  const doc = clone(base);
+  doc.nodes.push({ id: "m", kind: "app", title: "M", facts: ["f"], x: 2000, y: 600, lane: 9 });
+  doc.edges.push({ id: "em", from: "m", to: "a", kind: "file" });
+  doc.scenarios[0].steps[0].edges.push("em");
+  const L = layoutWalkthrough(doc);
+  assert.equal(L.lanes.length, auto.lanes.length, "still folded to maxAutoLanes");
+  for (const id of ids) assert.deepEqual([L.nodes[id].lane, L.nodes[id].row], [auto.nodes[id].lane, auto.nodes[id].row], id);
+  assert.ok(codes(doc).includes("W_POS_IGNORED"));
+});
+
+test("route.d grammar: whole argument groups of finite numbers, M first", () => {
+  for (const d of ["M0 0 L5 5", "M0,0 C1 2 3 4 5 6", "M0 0 H5 V5 L1 1 2 2 Z", "M0 0 Q1 1 2 2", "M-1.5 .5 L1e2 -3"]) assert.equal(isValidPath(d), true, d);
+  for (const d of ["M", "M0 0 L10", "M0 0 LEE 5 5", "M0 0 L1e400 0", "M0 0 L 5 5 Z 3", "L0 0", "m0 0 l1 1", "M0 0 A5 5 0 0 1 9 9", "M0 0 C1 2 3 4", "M0 0 L200000 0", ""]) {
+    assert.equal(isValidPath(d), false, d);
+  }
+});
+
+test("samplePath: bounded work for huge or broken coordinates", () => {
+  const t0 = Date.now();
+  assert.ok(samplePath("M0 0 L1e9 0").length <= 513);
+  assert.equal(samplePath("M0 0 L1e400 0").length, 1, "non-finite segment skipped");
+  assert.ok(Date.now() - t0 < 200);
+});
+
+test("layout: an explicit h shorter than the content is reported", () => {
+  const doc = mini([{ id: "a", h: 40, sub: ["one", "two", "three"] }, "b"], [["a", "b"]]);
+  assert.ok(validate(doc).warnings.some((w) => w.code === "W_TEXT_LONG" && w.path === "/nodes/0/h"));
+  doc.gauges = [{ id: "g", node: "b", caption: "now" }];
+  doc.nodes[0].h = undefined;
+  delete doc.nodes[0].h;
+  doc.nodes[1].h = 70;
+  doc.scenarios[0].steps[0].gauges = { g: { value: 1, label: "full" } };
+  assert.ok(validate(doc).warnings.some((w) => w.code === "W_TEXT_LONG" && w.path === "/nodes/1/h"), "gauge does not fit");
+});

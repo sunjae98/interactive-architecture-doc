@@ -1,59 +1,175 @@
 {
   "meta": {
-    "title": "Image Upload",
-    "subtitle": "The smallest useful document: three steps, one scenario, no branches.",
+    "title": "OAuth2 authorization-code login",
     "lang": "en",
-    "entry_request": "PUT /v1/images\nContent-Type: {{input}}"
+    "intro": "How a web app signs a user in through an identity provider with the authorization-code flow. Pick a scenario and press **Next step →**.",
+    "facts": [
+      {"label":"grant","value":"authorization_code"},
+      {"label":"PKCE","value":"S256"},
+      {"label":"tokens","value":"kept server-side","mono":false}
+    ],
+    "source": "Generic example based on RFC 6749 and RFC 7636 (PKCE)."
   },
-  "steps": [
-    { "label": "Upload" },
-    { "label": "Store" },
-    { "label": "Respond" }
-  ],
   "legend": {
-    "client": "Client — the app uploading the image",
-    "new": "New — the upload service built in this project"
+    "nodes": {"client":"User agent","app":"Our web app","dep":"Identity provider","store":"Session store"},
+    "edges": {"file":"Bulk data","text":"Requests and tokens","ctrl":"Redirects and responses"},
+    "tokens": [{"kind":"text","text":"code=abc"},{"kind":"err","text":"access_denied"}]
   },
+  "nodes": [
+    {
+      "id": "browser",
+      "kind": "client",
+      "title": "Browser",
+      "mono": "user agent",
+      "sub": ["follows redirects"],
+      "facts": [
+        "Holds the user's IdP cookie and follows every **302**.",
+        "Never sees the client secret or the tokens."
+      ]
+    },
+    {
+      "id": "web-app",
+      "kind": "app",
+      "title": "Web app",
+      "mono": "/login, /callback",
+      "sub": ["confidential client"],
+      "facts": ["Creates `state` and the PKCE verifier, then exchanges the code on the back channel."]
+    },
+    {
+      "id": "authz",
+      "kind": "dep",
+      "title": "Authorize endpoint",
+      "mono": "GET /authorize",
+      "facts": ["Authenticates the user and asks for consent."]
+    },
+    {
+      "id": "token",
+      "kind": "dep",
+      "title": "Token endpoint",
+      "mono": "POST /token",
+      "facts": ["Swaps a one-time code for tokens. Needs the client secret and the PKCE verifier."]
+    },
+    {
+      "id": "userinfo",
+      "kind": "dep",
+      "title": "Userinfo endpoint",
+      "mono": "GET /userinfo",
+      "facts": ["Returns the profile for a valid access token."]
+    },
+    {
+      "id": "session",
+      "kind": "store",
+      "title": "Session store",
+      "mono": "redis",
+      "sub": ["TTL 8h"],
+      "facts": ["Maps the session cookie to the user and refresh token."]
+    }
+  ],
+  "edges": [
+    {"id":"visit","from":"browser","to":"web-app","kind":"text"},
+    {"id":"redirect","from":"web-app","to":"authz","kind":"ctrl"},
+    {"id":"login","from":"browser","to":"authz","kind":"text"},
+    {"id":"code","from":"authz","to":"web-app","kind":"ctrl"},
+    {"id":"exchange","from":"web-app","to":"token","kind":"text"},
+    {"id":"who","from":"web-app","to":"userinfo","kind":"text"},
+    {"id":"save","from":"web-app","to":"session","kind":"text"}
+  ],
   "scenarios": [
     {
-      "id": "upload",
-      "label": "Upload a photo",
-      "icon": "📷",
-      "input": "image/png",
-      "steps": {
-        "1": "PUT /v1/images\nContent-Type: image/png\n(1.2 MB body)",
-        "2": "storage.put(\"images/3c9e.png\", body)\nthumbnail.enqueue(\"3c9e\")",
-        "3": "201 Created\n{ \"id\": \"3c9e\", \"url\": \"/images/3c9e.png\" }"
-      }
+      "id": "happy",
+      "title": "Successful sign-in",
+      "summary": "Browser → IdP → code → tokens → session",
+      "lead": "The user clicks **Sign in**, authenticates at the IdP and returns with a one-time code that the app trades for tokens.",
+      "steps": [
+        {
+          "title": "User opens /login",
+          "edges": ["visit"],
+          "token": {"text":"GET /login","kind":"text"},
+          "what": "The browser asks the app to start a login.",
+          "where": "App route `/login`.",
+          "fail": "App down: the user sees a 502 and nothing has started."
+        },
+        {
+          "title": "App redirects to the IdP",
+          "edges": ["redirect"],
+          "token": {"text":"302 + state","kind":"ctrl"},
+          "what": "A redirect carrying `client_id`, `state` and the PKCE `code_challenge`.",
+          "where": "`state` and the verifier are saved in the session.",
+          "fail": "Missing `client_id`: the IdP shows `invalid_request`."
+        },
+        {
+          "title": "User signs in and consents",
+          "edges": ["login"],
+          "token": {"text":"credentials","kind":"text"},
+          "what": "The user types a password and approves the scopes.",
+          "where": "Only at the IdP. The app never sees the password.",
+          "fail": "Wrong password: the IdP re-prompts, the app is not involved."
+        },
+        {
+          "title": "IdP returns a code",
+          "edges": ["code"],
+          "token": {"text":"code=abc","kind":"ctrl"},
+          "what": "A redirect back to `/callback?code=...&state=...`.",
+          "where": "Query string, valid for about 60 seconds.",
+          "fail": "`state` mismatch: the app rejects the callback (CSRF guard)."
+        },
+        {
+          "title": "App exchanges the code",
+          "edges": ["exchange"],
+          "token": {"text":"code+verifier","kind":"text"},
+          "what": "A back-channel POST with the code, secret and `code_verifier`.",
+          "where": "Server to server, never through the browser.",
+          "fail": "Expired or reused code: `invalid_grant`, the user must restart."
+        },
+        {
+          "title": "App stores the session",
+          "edges": ["who","save"],
+          "token": {"text":"profile","kind":"text"},
+          "what": "The app reads the profile and saves a session.",
+          "where": "Redis key `sess:<id>`, cookie is `HttpOnly; Secure`.",
+          "fail": "Redis down: login fails closed with a 503."
+        }
+      ]
+    },
+    {
+      "id": "denied",
+      "title": "User denies consent",
+      "summary": "Browser → IdP → error redirect",
+      "lead": "The user clicks **Cancel** on the consent screen; the IdP sends an error back and the app shows a friendly message.",
+      "steps": [
+        {
+          "title": "App redirects to the IdP",
+          "edges": ["redirect"],
+          "token": {"text":"302 + state","kind":"ctrl"},
+          "what": "The same authorize redirect as the happy path.",
+          "where": "Session holds `state`.",
+          "fail": "None here."
+        },
+        {
+          "title": "User declines",
+          "edges": ["login"],
+          "token": {"text":"Cancel","kind":"text"},
+          "what": "The user refuses the requested scopes.",
+          "where": "IdP consent page.",
+          "fail": "None: this is the user's choice."
+        },
+        {
+          "title": "IdP returns an error",
+          "edges": ["code"],
+          "token": {"text":"access_denied","kind":"err"},
+          "what": "A redirect with `error=access_denied` and the original `state`.",
+          "where": "Query string on `/callback`.",
+          "fail": "The app must check `state` before trusting `error`.",
+          "markers": [{"node":"web-app","label":"no code"}]
+        }
+      ]
     }
   ],
-  "board": [
-    {
-      "type": "node",
-      "kind": "client",
-      "step": 1,
-      "width": "wide",
-      "entry": true,
-      "body": "The app uploads the raw image bytes.",
-      "code": "PUT /v1/images"
-    },
-    { "type": "arrow" },
-    {
-      "type": "node",
-      "kind": "new",
-      "step": 2,
-      "width": "wide",
-      "tag": "Upload service",
-      "body": "Stores the original and queues a **thumbnail** job.",
-      "note": "Thumbnails are generated asynchronously; the response does not wait for them."
-    },
-    { "type": "arrow" },
-    {
-      "type": "node",
-      "kind": "client",
-      "step": 3,
-      "width": "wide",
-      "body": "The app receives the image id and its URL."
-    }
-  ]
+  "tldr": {
+    "points": [
+      "The browser carries only a **code**, never a token.",
+      "`state` stops forged callbacks; PKCE stops stolen codes.",
+      "Tokens stay in the **session store** behind an HttpOnly cookie."
+    ]
+  }
 }
