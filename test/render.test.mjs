@@ -411,7 +411,7 @@ for (const f of readdirSync(EXAMPLES).filter((x) => x.endsWith(".json") && !x.in
   test(`render example ${f}: no warnings, embedded IR round-trips, byte-identical twice`, () => {
     const doc = JSON.parse(readFileSync(join(EXAMPLES, f), "utf8"));
     const { html, warnings } = renderHtml(doc);
-    assert.deepEqual(warnings.filter((w) => w.code !== "W_EDGE_CROSSES_NODE"), []); // crossings are routed away from 5d42189 on
+    assert.deepEqual(warnings, []);
     assert.ok(html.startsWith(`<!DOCTYPE html>\n<html lang="${doc.meta.lang}">`));
     assert.deepEqual(JSON.parse(html.match(/id="iad-data">([\s\S]*?)<\/script>/)[1]), doc);
     assert.equal(html, renderHtml(JSON.parse(readFileSync(join(EXAMPLES, f), "utf8"))).html);

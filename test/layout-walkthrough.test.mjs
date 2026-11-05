@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { layoutWalkthrough, samplePath, pointAtHalf, isValidPath, GEOMETRY_WT, textWidthWt, TEXT_WT } from "../skills/interactive-architecture-doc/scripts/lib/walkthrough-layout.mjs";
+import { layoutWalkthrough, samplePath, pointAtHalf, isValidPath, routeAround, GEOMETRY_WT, textWidthWt, TEXT_WT } from "../skills/interactive-architecture-doc/scripts/lib/walkthrough-layout.mjs";
 import { validate } from "../skills/interactive-architecture-doc/scripts/lib/validate.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -127,13 +127,40 @@ test("layout: route via / sides / d are honoured", () => {
   assert.equal(layoutWalkthrough(doc).edges.e0.d, "M1 2 L3 4");
 });
 
-test("layout: an edge through an unrelated node warns; route fixes it", () => {
+test("layout: an edge whose curve would cross a node is routed around it through the gaps", () => {
   const doc = mini(["a", "b", "c"], [["a", "b"], ["b", "c"], ["a", "c", "ctrl"]]);
-  assert.ok(codes(doc).includes("W_EDGE_CROSSES_NODE"));
-  doc.edges[2].route = { from_side: "top", to_side: "top" };
-  assert.ok(!codes(doc).includes("W_EDGE_CROSSES_NODE"));
+  const L = layoutWalkthrough(doc);
+  assert.ok(!L.issues.some((i) => i.code === "W_EDGE_CROSSES_NODE"));
+  assert.match(L.edges.e2.d, / Q/, "an orthogonal detour with rounded corners");
+  const ys = samplePath(L.edges.e2.d).map((p) => p[1]);
+  assert.ok(Math.min(...ys) < L.nodes.b.y || Math.max(...ys) > L.nodes.b.y + L.nodes.b.h, "it leaves the row of b");
+  // a stack of nodes in one row with an edge from the first to the last
+  const ids = "pqrst".split("");
+  const row = mini(ids.map((id, i) => ({ id, lane: i, row: 0 })), [...ids.slice(1).map((id, i) => [ids[i], id]), ["p", "t", "ctrl"]]);
+  assert.ok(!layoutWalkthrough(row).issues.some((i) => i.code === "W_EDGE_CROSSES_NODE"));
 });
 
+test("layout: a manual via through a node still warns, and the warning points at iad layout", () => {
+  const doc = mini(["a", "b", "c"], [["a", "b"], ["b", "c"], ["a", "c", "ctrl"]]);
+  const L0 = layoutWalkthrough(doc);
+  const b = L0.nodes.b;
+  doc.edges[2].route = { via: [[b.x + b.w / 2, b.y + b.h / 2]] };
+  const w = validate(doc).warnings.find((x) => x.code === "W_EDGE_CROSSES_NODE");
+  assert.ok(w);
+  assert.match(w.message, /iad layout/);
+  assert.match(w.message, /route\.via/);
+});
+
+test("routeAround: returns an axis-aligned path between the ports, or null when boxed in", () => {
+  const boxes = [{ x: 0, y: 0, w: 100, h: 50 }, { x: 200, y: 0, w: 100, h: 50 }, { x: 400, y: 0, w: 100, h: 50 }];
+  const r = routeAround([100, 25], "right", [400, 25], "left", boxes, [150, 350], [-30, 80]);
+  assert.ok(r && r.length >= 4);
+  for (let i = 1; i < r.length; i++) assert.ok(r[i][0] === r[i - 1][0] || r[i][1] === r[i - 1][1], "orthogonal");
+  assert.deepEqual(r[0], [100, 25]);
+  assert.deepEqual(r[r.length - 1], [400, 25]);
+  const wall = [{ x: 0, y: 0, w: 100, h: 50 }, { x: 110, y: -1000, w: 20, h: 3000 }, { x: 400, y: 0, w: 100, h: 50 }];
+  assert.equal(routeAround([100, 25], "right", [400, 25], "left", wall, [], []), null);
+});
 test("layout: overlapping nodes or groups are E_LAYOUT_OVERLAP", () => {
   const nodes = mini([{ id: "a", x: 0, y: 0 }, { id: "b", x: 50, y: 20 }], [["a", "b"]]);
   assert.ok(validate(nodes).errors.some((e) => e.code === "E_LAYOUT_OVERLAP"));
@@ -379,4 +406,38 @@ test("lane hints: overlap errors say which node or group collides, and where", (
   const msgs = validate(g).errors.map((x) => x.message).join("\n");
   assert.match(msgs, /group "g2" \(lanes 1, rows 0\) overlaps group "g1" \(lanes 0-2, rows 0\)/);
   assert.match(msgs, /node "b" at lane 1, row 0 \(hinted\) lies inside the box of group "g1"/);
+});
+
+// ---- iad layout ----------------------------------------------------------------------------
+test("CLI layout: prints lanes, gaps, node boxes and edge paths; --json has the same data", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const CLI = join(ROOT, "skills/interactive-architecture-doc/scripts/iad.mjs");
+  const FX = join(ROOT, "test/fixtures/walkthrough.en.json");
+  const run = (...a) => spawnSync(process.execPath, [CLI, ...a], { encoding: "utf8" });
+  const t = run("layout", FX);
+  assert.equal(t.status, 0, t.stderr);
+  assert.match(t.stdout, /^lane gaps \(x, free for route\.via\): 210, /m);
+  assert.match(t.stdout, /^ {2}browser {2}0 0 {2}40 70 140 64$/m);
+  assert.match(t.stdout, /^ {2}up {2}M180 94 H240$/m);
+  const j = JSON.parse(run("layout", FX, "--json").stdout);
+  const L = layoutWalkthrough(clone(FIXTURE));
+  assert.deepEqual(j.nodes.disk, { lane: L.nodes.disk.lane, row: L.nodes.disk.row, x: L.nodes.disk.x, y: L.nodes.disk.y, w: L.nodes.disk.w, h: L.nodes.disk.h });
+  assert.equal(j.edges.up.d, L.edges.up.d);
+  assert.deepEqual(j.viewBox, L.viewBox);
+  // invalid documents exit 1 with their errors; overview documents and bad usage exit 2
+  const bad = mini(["a", "b"], [["a", "b"]]);
+  bad.edges[0].to = "ghost";
+  const { writeFileSync, mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(join(tmpdir(), "iad-layout-"));
+  try {
+    writeFileSync(join(dir, "bad.json"), JSON.stringify(bad));
+    const r = run("layout", join(dir, "bad.json"));
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /E_NODE_UNKNOWN/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  assert.equal(run("layout", join(ROOT, "skills/interactive-architecture-doc/examples/request-router.overview.en.json")).status, 2);
+  assert.equal(run("layout").status, 2);
 });

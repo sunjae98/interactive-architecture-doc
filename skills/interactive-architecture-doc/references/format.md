@@ -46,7 +46,9 @@ table below (plus the one in format-overview.md) and the validator drift apart. 
 ### `edges[].route`
 
 `{from_side?, to_side?, via?: [[x, y], ...], d?}`. Sides: `top` \| `right` \| `bottom` \| `left`.
-`d` is a raw absolute SVG path (M L H V C Q Z only) and wins over the rest.
+`d` is a raw absolute SVG path (M L H V C Q Z only) and wins over the rest. Without `via`/`d`, an
+edge whose curve would cross a node is routed around the nodes through the lane and row gaps.
+`iad layout <doc>` prints the computed lanes, gaps, node boxes and edge paths for writing `via`.
 
 ### `scenarios[].steps[]`
 

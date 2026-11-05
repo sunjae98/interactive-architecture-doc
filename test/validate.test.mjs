@@ -89,7 +89,7 @@ const FIXTURES = [
   ["E_GROUP_UNKNOWN", (d) => { d.nodes[0].group = "nope"; }],
   ["W_EDGE_UNUSED", (d) => { d.edges.push({ id: "spare", from: "browser", to: "receiver", kind: "ctrl", route: { via: [[200, 40], [530, 40]] } }); }],
   ["W_NODE_ISOLATED", (d) => { d.nodes.push({ id: "lonely", kind: "tool", title: "Lonely", facts: ["x"], x: 40, y: 260 }); d.legend.nodes.tool = "Tool"; }],
-  ["W_EDGE_CROSSES_NODE", (d) => { d.edges.push({ id: "skip", from: "browser", to: "receiver", kind: "ctrl" }); step(d, 0, 0).edges.push("skip"); }],
+  ["W_EDGE_CROSSES_NODE", (d) => { d.edges.push({ id: "skip", from: "browser", to: "receiver", kind: "ctrl", route: { via: [[310, 102]] } }); step(d, 0, 0).edges.push("skip"); }],
   ["W_FACTS_MISSING", (d) => { delete d.nodes[0].facts; }],
   ["W_POS_IGNORED", (d) => { Object.assign(d.nodes[0], { x: 40, y: 400, lane: 0 }); }],
   ["W_GAUGE_UNUSED", (d) => { delete step(d, 0, 2).gauges; delete step(d, 0, 5).gauges; }],
@@ -279,8 +279,7 @@ test("all examples validate with no errors and no warnings; walkthrough examples
     const doc = JSON.parse(readFileSync(join(EXAMPLES, f), "utf8"));
     assert.ok(!("steps" in doc) && !("board" in doc), `${f} is a v2 document`);
     const r = validate(doc);
-    // Until edges are routed around nodes (next commits), payment-auth may only warn about crossings.
-    assert.deepEqual({ f, errors: r.errors, other: r.warnings.filter((w) => w.code !== "W_EDGE_CROSSES_NODE") }, { f, errors: [], other: [] });
+    assert.deepEqual({ f, errors: r.errors, warnings: r.warnings }, { f, errors: [], warnings: [] });
   }
   // every example comes in an en/ko pair
   const stems = new Set(files.map((f) => f.replace(/\.(en|ko)\.json$/, "")));
