@@ -68,7 +68,7 @@ const FIXTURES = [
   ["E_POS_PARTIAL", (d) => { d.nodes[0].y = 10; }],
   ["E_LAYOUT_OVERLAP", (d) => { d.nodes[1].x = 50; d.nodes[1].y = 80; }],
   ["E_LAYOUT_OVERLAP", (d) => { d.nodes[1].lane = 0; d.nodes[1].row = 0; d.nodes[0].lane = 0; d.nodes[0].row = 0; }],
-  ["E_LAYOUT_OVERLAP", (d) => { d.nodes[0].lane = 0; d.nodes[1].group = "external"; }],
+  ["E_LAYOUT_OVERLAP", (d) => { d.nodes.forEach((n, i) => { n.lane = i; }); d.nodes[1].group = "external"; }],
   ["E_ROUTE_PATH", (d) => { d.edges[0].route = { d: "m10 10 l20 20" }; }],
   ["E_ROUTE_PATH", (d) => { d.edges[0].route = { d: "M10 10 A5 5 0 0 1 20 20" }; }],
   ["E_ROUTE_PATH", (d) => { d.edges[0].route = { d: "M" }; }],
