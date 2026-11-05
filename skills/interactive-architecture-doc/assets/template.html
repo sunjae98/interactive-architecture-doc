@@ -132,6 +132,12 @@
   .stage{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;align-items:start;}
   .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;min-width:0;}
   .diagram{padding:8px 6px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  /* When the map scrolls sideways, the clipped edge fades out (a hint that there is more). */
+  .map-wrap{position:relative;}
+  .map-wrap::before,.map-wrap::after{content:"";position:absolute;top:0;bottom:0;width:32px;pointer-events:none;opacity:0;transition:opacity .2s;z-index:1;}
+  .map-wrap::before{left:0;border-top-left-radius:12px;background:linear-gradient(to right, var(--surface), transparent);}
+  .map-wrap::after{right:0;border-top-right-radius:12px;background:linear-gradient(to left, var(--surface), transparent);}
+  .map-wrap.fade-l::before,.map-wrap.fade-r::after{opacity:1;}
   /* Map scale stays between 0.85x (node titles >= 11px) and 1.15x (small maps are not blown up):
      --map-w is the viewBox width. Below 0.85x the panel scrolls sideways instead of shrinking. */
   .diagram svg{display:block;margin:0 auto;width:min(100%, calc(var(--map-w) * 1.15));min-width:calc(var(--map-w) * .85);height:auto;}
@@ -328,6 +334,7 @@
     .wt-map.focus .edge.cur path.ln{animation:none;}
     .wt-map .node,.wt-map .edge,.wt-map .gauge,.wt-map .node rect.box{transition:none;}
     .prog i{transition:none;}
+    .map-wrap::before,.map-wrap::after{transition:none;}
   }
 
   /* ==== Self-check (#iad-selfcheck): result stays in the DOM for tools, hidden from view ==== */
@@ -358,8 +365,10 @@
 
 <div class="stage">
 <div class="panel">
+<div class="map-wrap" id="mapWrap">
 <div class="diagram" id="diagram">
 {{IAD_WT_MAP}}
+</div>
 </div>
 <div class="ctrl" role="group" aria-label="{{t:progress_label}}">
   <button type="button" class="btn" id="prev">{{t:prev}}</button>
@@ -483,6 +492,14 @@
     return [d0, d1];
   }
 
+  // Horizontal scroll that brings [x1, x2] (scroll coordinates) into a view of width `view` with a
+  // margin `pad`: null when it is already visible, else the new scrollLeft (centered, clamped).
+  function scrollTarget(left, view, x1, x2, max, pad) {
+    if (x1 >= left + pad && x2 <= left + view - pad) return null;
+    var target = x2 - x1 > view - 2 * pad ? x1 - pad : (x1 + x2) / 2 - view / 2;
+    return Math.max(0, Math.min(max, Math.round(target)));
+  }
+
   function easeInOut(f) { return f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2; }
 
   function sanitizeFilePart(s) {
@@ -539,6 +556,8 @@
   var counter = document.getElementById("counter");
   var prog = document.getElementById("prog");
   var gMarkers = svg.querySelector(".wt-markers");
+  var diagramEl = document.getElementById("diagram");
+  var mapWrap = document.getElementById("mapWrap");
   var gTok = svg.querySelector(".wt-tokens");
 
   var edgeEls = {}, pathEls = {}, nodeEls = {}, gaugeEls = {}, gaugeLabels = {};
@@ -644,7 +663,34 @@
     prog.style.width = (step < 0 ? 0 : ((step + 1) / total) * 100) + "%";
     if (selNode) renderNode(selNode); else renderStep();
     runToken();
+    if (step >= 0) followStep(f.curE, f.curN);
   }
+
+  // ---- narrow screens: keep the current step in view and show which side has more map
+  function updateFade() {
+    var max = diagramEl.scrollWidth - diagramEl.clientWidth;
+    mapWrap.classList.toggle("fade-l", max > 1 && diagramEl.scrollLeft > 2);
+    mapWrap.classList.toggle("fade-r", max > 1 && diagramEl.scrollLeft < max - 2);
+  }
+  function followStep(curE, curN) {
+    var max = diagramEl.scrollWidth - diagramEl.clientWidth;
+    if (max <= 1) return;
+    var vb = svg.viewBox.baseVal, r = svg.getBoundingClientRect(), dr = diagramEl.getBoundingClientRect();
+    var k = r.width / vb.width, x1 = Infinity, x2 = -Infinity;
+    function add(el) {
+      try { var b = el.getBBox(); x1 = Math.min(x1, b.x); x2 = Math.max(x2, b.x + b.width); } catch (e) { /* not rendered */ }
+    }
+    Object.keys(curN).forEach(function (id) { add(nodeEls[id].querySelector("rect.box")); });
+    Object.keys(curE).forEach(function (id) { add(pathEls[id]); });
+    if (x1 > x2) return;
+    var origin = r.left - dr.left + diagramEl.scrollLeft;
+    var to = scrollTarget(diagramEl.scrollLeft, diagramEl.clientWidth, origin + (x1 - vb.x) * k, origin + (x2 - vb.x) * k, max, 24);
+    if (to === null) return;
+    if (diagramEl.scrollTo) diagramEl.scrollTo({ left: to, behavior: reduce ? "auto" : "smooth" });
+    else diagramEl.scrollLeft = to;
+  }
+  diagramEl.addEventListener("scroll", updateFade, { passive: true });
+  window.addEventListener("resize", updateFade);
 
   function renderStep() {
     var sc = SC[cur];
@@ -769,6 +815,7 @@
   });
 
   pickScenario(0);
+  updateFade();
 
   // ---- Theme toggle: flips data-theme on <html> (set early in <head>) and remembers the choice.
   // Without a saved choice the page keeps following the OS preference.
