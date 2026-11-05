@@ -99,7 +99,11 @@ test("theme: toggle button and UI strings exist (behaviour: test/runtime.test.mj
 test("template: reference breakpoints (1180 / 820 / 640) and the 340px narration column", () => {
   const src = readFileSync(TEMPLATE_PATH, "utf8");
   assert.match(src, /\.stage\{display:grid;grid-template-columns:minmax\(0,1fr\) 340px;/);
-  assert.match(src, /@media \(max-width:1180px\)\{\s*\.stage\{grid-template-columns:1fr;\}\s*aside\.detail\{position:static;\}/);
+  assert.match(src, /@media \(max-width:1180px\)\{\s*\.stage\{grid-template-columns:1fr;grid-template-areas:"map" "ctrl" "aside";\}\s*aside\.detail\{position:static;margin-top:12px;\}/);
+  // wide maps on desktop: stacked mode puts the narration between the map and the controls
+  assert.match(src, /\.stage\[data-fit="stacked"\]\{grid-template-columns:minmax\(0,1fr\);grid-template-areas:"map" "aside" "ctrl";\}/);
+  assert.match(src, /@media \(min-width:1181px\)\{\.stage\[data-fit="side"\] \.diagram svg\{min-width:calc\(var\(--map-w\) \* \.8\);\}\}/);
+  assert.ok(src.includes('<div class="stage" id="stage" data-fit="side">'));
   assert.match(src, /@media \(max-width:820px\)\{\s*\.cases\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}?;?\}?/);
   assert.match(src, /@media \(max-width:640px\)\{\s*\.cases\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/);
   assert.match(src, /\.diagram\{[^}]*overflow-x:auto;/, "the map scrolls on narrow screens, not the page");

@@ -234,3 +234,16 @@ test("scroll reset: the full path, a new scenario and the end of the self-check 
   const pick = HTML.slice(HTML.indexOf("function pickScenario(i)"), HTML.indexOf("function render()"));
   assert.ok(pick.includes("cur = i; step = -1;") && pick.includes("render();"));
 });
+
+test("chooseFit: beside the narration only when the map fits there at >= 0.80x", () => {
+  const h = loadHelpers();
+  // 1328px stage, 352px narration column, 14px chrome -> 962px for the map
+  assert.equal(h.chooseFit(1328, 603, 352, 14), "side");
+  assert.equal(h.chooseFit(1328, 1200, 352, 14), "side", "962 / 1200 = 0.80");
+  assert.equal(h.chooseFit(1328, 1210, 352, 14), "stacked");
+  assert.equal(h.chooseFit(1328, 1393, 352, 14), "stacked");
+  // the mode is decided at load and on a debounced resize, and only for wide (> 1180px) screens
+  assert.ok(HTML.includes("fitTimer = setTimeout(decideFit, 120);"));
+  assert.ok(HTML.includes('window.matchMedia("(max-width:1180px)").matches'));
+  assert.ok(HTML.includes('var mode = narrow ? "narrow" : chooseFit('));
+});
