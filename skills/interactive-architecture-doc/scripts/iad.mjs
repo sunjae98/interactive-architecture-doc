@@ -34,12 +34,13 @@ Options:
   -o, --out <file>   render output path (default: next to the JSON, same name, .html)
   layout             walkthrough only: print the computed map (each node's lane, row and box, the
                      lane/row gaps, each edge's path) to write route.via or lane/row hints
-  --style s          init: walkthrough (default; step-by-step scenarios) or overview (one layered
-                     diagram with optional path highlighting)
+  --style s          init: walkthrough (default; scenarios stepped through a component map) or
+                     overview (one layered diagram with optional path highlighting)
   --lang ko|en       init: UI and placeholder language (default en)
   --steps N          init: steps per scenario, 1..20 (default 3)
   --scenarios ids    init: comma-separated kebab-case scenario ids, at most ${MAX_SCENARIOS} (default "default")
-  --lanes N          init: components in the starting chain, ${MIN_LANES}..${MAX_LANES} (default 3)
+  --lanes N          init: components in the starting chain, ${MIN_LANES}..${MAX_LANES} (default 3); the
+                     map is laid out automatically, add lane/row hints only where needed
   --paths ids        init (overview): comma-separated kebab-case path ids, at most ${MAX_PATHS}; one component each
   --force            init: overwrite an existing file
   -h, --help         show this help`;
