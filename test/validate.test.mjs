@@ -64,6 +64,8 @@ const FIXTURES = [
   ["E_GAUGE_RANGE", (d) => { step(d, 0, 2).gauges["disk-use"].value = 1.5; }],
   ["E_GAUGE_RANGE", (d) => { step(d, 0, 2).gauges["disk-use"].value = -0.1; }],
   ["E_GAUGE_DUP_NODE", (d) => { d.gauges.push({ id: "disk-two", node: "disk" }); step(d, 0, 3).gauges = { "disk-two": { value: 1, label: "x" } }; }],
+  ["E_LANE_GROUPS", (d) => { d.nodes[2].lane = 0; d.nodes[0].lane = 0; }],
+  ["W_LANE_EMPTY", (d) => { d.nodes[5].lane = 9; }],
   ["E_POS_PARTIAL", (d) => { d.nodes[0].x = 10; }],
   ["E_POS_PARTIAL", (d) => { d.nodes[0].y = 10; }],
   ["E_LAYOUT_OVERLAP", (d) => { d.nodes[1].x = 50; d.nodes[1].y = 80; }],

@@ -150,8 +150,11 @@ The map is computed when the document is rendered; the page ships a static SVG.
   own block of lanes. When a map would be wider than 6 lanes, neighbouring lanes of the same group fold
   together so long chains run downward. Rows fill top to bottom.
 - **Hints.** `lane` and `row` on some nodes are constraints on top of the automatic layout: the node
-  gets exactly that lane or row, and the groups around it move or grow so they stay together. Only when
-  every node has a `lane` are lanes used exactly as given. `x` / `y` place a node outside the grid.
+  gets exactly that lane or row, and the groups around it move or grow so they stay together. In such a
+  partly automatic map a lane belongs to one group: hinting nodes of two groups (or a grouped and an
+  ungrouped node) into the same lane is `E_LANE_GROUPS`, and lanes a hint skips over stay empty
+  (`W_LANE_EMPTY`, drawn without width). Only when every node has a `lane` are lanes used exactly as
+  given. `x` / `y` place a node outside the grid.
 - **Edges.** Each edge leaves and enters its boxes on the facing sides; edges between the same pair
   are spread apart. When a curve would run through another box, the edge is routed around the boxes
   through the gaps between lanes and rows (detours sharing a gap are spread 6px apart). `route`
@@ -201,6 +204,7 @@ listed in [format-overview.md](format-overview.md) and apply here too.
 | `E_GAUGE_UNKNOWN` | error | A step (`gauges`) or a scenario (`gauge_empty`) names a gauge id that does not exist. |
 | `E_GAUGE_RANGE` | error | A gauge value is outside 0..1. |
 | `E_GAUGE_DUP_NODE` | error | Two gauges are drawn on the same node (one gauge per node). |
+| `E_LANE_GROUPS` | error | Lane hints put nodes of different groups (or grouped and ungrouped nodes) in the same lane of a partly automatic map; each lane belongs to one group there. |
 | `E_POS_PARTIAL` | error | A node has only one of `x` / `y`; absolute positions need both. |
 | `E_LAYOUT_OVERLAP` | error | Two nodes, two groups, or a node and a group it does not belong to overlap on the map. |
 | `E_ROUTE_PATH` | error | `route.d` is not an absolute SVG path: it must start with M and use M L H V C Q Z with whole argument groups (M/L 2, H/V 1, C 6, Q 4, Z 0) of finite numbers within ±1e5. |
@@ -212,6 +216,7 @@ listed in [format-overview.md](format-overview.md) and apply here too.
 | `W_FACTS_MISSING` | warning | A node has no `facts`, so clicking it shows an empty panel. |
 | `W_POS_IGNORED` | warning | A node has both `x`/`y` and `lane`/`row`; `x`/`y` wins and `lane`/`row` are ignored. |
 | `W_GAUGE_UNUSED` | warning | No step sets this gauge, so it always shows its empty state. |
+| `W_LANE_EMPTY` | warning | Lane hints leave lanes without any node; they are drawn without width, but a lower hint is usually meant. |
 | `W_BADGE_CROWDED` | warning | A step badge found no spot clear of the scenario's other badges and of node boxes (many steps start on one short edge); it overlaps. |
 | `W_PLACEHOLDER` | warning | A string still contains a `[...]` placeholder or `TODO`. |
 
