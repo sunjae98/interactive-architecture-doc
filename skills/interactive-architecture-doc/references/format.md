@@ -29,7 +29,7 @@ and the legend.
 |---|---|---|---|
 | `meta` | yes | object | see below |
 | `legend` | yes | object | see below |
-| `nodes` | yes | array (≥1) | the boxes of the map |
+| `nodes` | yes | array (1..64) | the boxes of the map |
 | `edges` | yes | array (≥1) | the arrows between them |
 | `scenarios` | yes | array (1..6) | one card each; each has its own steps |
 | `groups` | no | array | dashed boxes around nodes |
@@ -201,6 +201,7 @@ listed in [format-overview.md](format-overview.md) and apply here too.
 | `E_EDGE_UNKNOWN` | error | A step names an edge id that does not exist. |
 | `E_STEP_EMPTY` | error | A step has neither `edges` nor `nodes`, so nothing would be highlighted. |
 | `E_SCENARIO_LIMIT` | error | More than 6 scenarios (there are 6 scenario colors). |
+| `E_NODE_LIMIT` | error | More than 64 nodes; split the map into several documents. |
 | `E_GAUGE_UNKNOWN` | error | A step (`gauges`) or a scenario (`gauge_empty`) names a gauge id that does not exist. |
 | `E_GAUGE_RANGE` | error | A gauge value is outside 0..1. |
 | `E_GAUGE_DUP_NODE` | error | Two gauges are drawn on the same node (one gauge per node). |
