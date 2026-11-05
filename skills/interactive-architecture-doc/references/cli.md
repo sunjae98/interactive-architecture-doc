@@ -8,19 +8,29 @@ All commands run from the skill folder (or use absolute paths). Node.js 18+, no 
 node scripts/iad.mjs validate doc.json          # human-readable: <JSON pointer> <CODE> <message>
 node scripts/iad.mjs validate doc.json --json   # {ok, errors[], warnings[]}
 node scripts/iad.mjs render doc.json [-o out.html]
-node scripts/iad.mjs init doc.json [--lang ko|en] [--steps N] [--scenarios id1,id2] [--fork] [--force]
+node scripts/iad.mjs layout doc.json [--json]   # walkthrough: the computed map
+node scripts/iad.mjs init doc.json [--lang ko|en] [--steps N] [--scenarios id1,id2] [--lanes N] [--force]
 node scripts/iad.mjs init doc.json --style overview [--lang ko|en] [--paths id1,id2] [--force]
 ```
 
-`init` writes a skeleton with 0 errors whose strings are all `[...]` placeholders (reported as
-`W_PLACEHOLDER` until filled). Defaults: `en`, 3 steps, one scenario `default`, no fork. `--fork`
-(needs ≥2 scenarios and ≥2 steps) adds a decision `fan_hub` and one branch-scoped `fan_target`
-column per scenario. It refuses to overwrite an existing file (exit 2) unless `--force`.
+`init` writes a walkthrough skeleton with 0 errors whose strings are all `[...]` placeholders (reported
+as `W_PLACEHOLDER` until filled): `--lanes` components (2..8, default 3) in a chain joined by edges,
+and one scenario per `--scenarios` id (kebab-case, at most 6, default `default`) with `--steps` steps
+(1..20, default 3) that walk the chain. No node has a lane, so the map is laid out automatically and
+nodes you add later are placed too. `--fork` was removed in v3 and exits 2. `init` refuses to
+overwrite an existing file (exit 2) unless `--force`.
 
 `--style overview` writes an overview skeleton instead ([format-overview.md](format-overview.md)): a
 client, an entry component and one component per `--paths` id (three without `--paths`, at most four),
-with one path per id. `--steps`, `--scenarios` and `--fork` are walkthrough-only and `--paths` is
-overview-only; mixing them exits 2. `validate` and `render` read `meta.style` and need no option.
+with one path per id. `--steps`, `--scenarios` and `--lanes` are walkthrough-only and `--paths` is
+overview-only; mixing them exits 2. `validate`, `render` and `layout` read `meta.style` and need no option.
+
+`layout` (walkthrough only) prints the map the renderer would draw: the viewBox, every lane (`x`, `w`)
+and row (`y`, `h`), the free gaps between lanes and between rows (good `x` / `y` values for
+`route.via`), each node's `lane row x y w h`, each group's box and each edge's SVG path. Warnings go to
+stderr. `--json` prints the same data as one object (`viewBox`, `lanes`, `rows`, `laneGaps`, `rowGaps`,
+`nodes`, `groups`, `edges`, `warnings`). A document with errors prints them and exits 1; an overview
+document exits 2.
 
 Exit codes: `0` valid (warnings allowed) · `1` validation errors · `2` usage, read, JSON parse, or write error.
 `render` re-validates and refuses to write anything if there are errors. The default output is
@@ -35,20 +45,31 @@ is the input file itself.
 ## Self-check (browser)
 
 Open the rendered page with `#iad-selfcheck` appended (`doc.html#iad-selfcheck`), or call
-`window.iadSelfCheck()` (returns a Promise of the result). The page replays every scenario × step and
-writes one JSON line into `<pre id="iad-selfcheck-result" data-state="pass|fail">` (visually hidden)
-and the console (`IAD_SELFCHECK {...}`):
+`window.iadSelfCheck()` (returns a Promise of the result). The page replays every scenario, from the
+full path (step -1) through every step, and writes one JSON line into
+`<pre id="iad-selfcheck-result" data-state="pass|fail">` (visually hidden) and the console
+(`IAD_SELFCHECK {...}`):
 
 ```json
-{"ok":true,"checked":21,"scenarios":3,"steps":7,"failures":[],"warnings":[],"errors":[]}
+{"ok":true,"checked":11,"scenarios":2,"failures":[],"errors":[]}
 ```
 
-`failures[]` items are `{scenario, step, check, detail}` with `check` one of `active-node` (no node is
-active), `data-panel` (empty data panel), `entry-request` (empty entry request box), `fan-arrows` (a
-fork has visible fan targets but no arrow was drawn), `overflow` (horizontal page overflow).
-`warnings[]` has `step-text` for steps a scenario has no `steps` text for. `errors[]` lists page
-errors (`error`, `unhandledrejection`, `csp`) since load. `ok` is true when `failures` and `errors` are
-both empty. The scenario, step and auto-play state are restored afterwards.
+`checked` counts the scenario × step views (each scenario's steps plus its full path). `failures[]`
+items are `{scenario, step, check, detail}` (`step` is -1 for the full path) with `check` one of:
+
+| Check | Fails when |
+|---|---|
+| `cur-edges` | the highlighted edges differ from the step's `edges` (all of the scenario's edges at -1) |
+| `cur-nodes` | the highlighted nodes differ from the step's nodes and edge ends |
+| `narration` | the narration panel is empty |
+| `badges` | the number of step badges differs from the scenario's step count |
+| `gauge` | a gauge label differs from its carried-forward value |
+| `markers` | the number of error markers differs from the step's `markers` |
+| `overflow` | the page scrolls horizontally (the map may scroll inside its own panel) |
+
+`errors[]` lists page errors (`error`, `unhandledrejection`, `csp`) since load. `ok` is true when
+`failures` and `errors` are both empty. The scenario and step are restored afterwards and the map is
+scrolled back to its start.
 
 An overview page uses the same hash, function and result element. It shows the overview and then each
 path, and prints `{"ok":true,"checked":4,"paths":3,"failures":[],"errors":[]}`. `failures[]` items are
