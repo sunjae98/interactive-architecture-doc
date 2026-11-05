@@ -16,6 +16,10 @@ The walkthrough style is rebuilt around a **component map**. Overview documents 
   `new` are gone); `legend` became `legend.nodes`. `meta.subtitle` and `meta.entry_request` are
   removed from walkthroughs (`meta.intro` replaces the subtitle).
 - `iad init --fork` is removed (exit 2); `references/migration-v1.md` is removed.
+- Validator codes of the v2 walkthrough are removed: `E_BRANCH_UNKNOWN`, `E_ENTRY`,
+  `E_FAN_HUB_NO_TARGET`, `E_FAN_OUTSIDE_FORK`, `E_FAN_TARGET_NO_HUB`, `E_SCENARIO_STEP_KEY`,
+  `E_STEP_NO_NODE`, `E_STEP_RANGE`, `E_UNKNOWN_BLOCK`, `W_ENTRY_NO_INPUT`, `W_SCENARIO_NO_ACTIVE`,
+  `W_SCENARIO_STEP_MISSING`.
 - The rendered walkthrough page is new: scenario cards instead of a drop-down, a map instead of the
   block board and stepper, and export of the map instead of the whole page.
 
@@ -40,10 +44,13 @@ The walkthrough style is rebuilt around a **component map**. Overview documents 
 - Self-check (`#iad-selfcheck`) for every scenario and step: highlighted edges and nodes, narration,
   badges, gauge labels, markers, page overflow and page errors. A headless Chromium smoke test runs it
   in CI when a browser is available.
-- Validator codes for the new format, including `E_EDGE_UNKNOWN`, `E_STEP_EMPTY`, `E_SCENARIO_LIMIT`,
-  `E_GAUGE_*`, `E_POS_PARTIAL`, `E_LAYOUT_OVERLAP` (with the lanes and rows involved), `E_ROUTE_PATH`,
-  `E_EDGE_SELF`, `E_TABLE_SHAPE` and the warnings `W_EDGE_UNUSED`, `W_NODE_ISOLATED`,
-  `W_EDGE_CROSSES_NODE`, `W_FACTS_MISSING`, `W_POS_IGNORED`, `W_GAUGE_UNUSED`.
+- Validator codes for the new format: `E_V2_WALKTHROUGH`, `E_EDGE_UNKNOWN`, `E_STEP_EMPTY`,
+  `E_SCENARIO_LIMIT`, `E_NODE_LIMIT` (at most 64 nodes), `E_GAUGE_UNKNOWN`, `E_GAUGE_RANGE`,
+  `E_GAUGE_DUP_NODE`, `E_POS_PARTIAL`, `E_LAYOUT_OVERLAP` (with the lanes and rows involved),
+  `E_LANE_GROUPS` (lane hints of two groups in one lane), `E_ROUTE_PATH`, `E_EDGE_SELF`,
+  `E_TABLE_SHAPE`, and the warnings `W_EDGE_UNUSED`, `W_NODE_ISOLATED`, `W_EDGE_CROSSES_NODE`,
+  `W_FACTS_MISSING`, `W_POS_IGNORED`, `W_GAUGE_UNUSED`, `W_LANE_EMPTY` (lanes a hint skips over) and
+  `W_BADGE_CROWDED` (no clear spot for a step badge).
 - New examples: `minimal.{en,ko}` (a small login flow) and `payment-auth.{en,ko}` (groups, a gauge,
   error markers, a table, four scenarios).
 

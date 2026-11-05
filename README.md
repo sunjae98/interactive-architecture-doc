@@ -71,14 +71,14 @@ and a browser self-check.
 | Consistency | step count / step total, `data-step` / `data-branch`, fan hub/target pairs, scenario options and keys kept in sync by hand | all generated from one JSON definition |
 | Validation | mismatches found by clicking through the page | rejected before render with a JSON pointer and rule code, e.g. `/scenarios/0/steps/2/edges/0 E_EDGE_UNKNOWN` |
 | Verification | manual clicking, many screenshots | `doc.html#iad-selfcheck` replays every scenario × step and returns one JSON line |
-| Agent reads | ≈46 KB (`SKILL.md` + reference notes + a ~34 KB HTML template) | ≈24–29 KB (`SKILL.md` 7.4 KB + `format.md` 14.4 KB + `iad init` skeleton 2.0–7.4 KB); the template is used only by the renderer |
+| Agent reads | ≈46 KB (`SKILL.md` + reference notes + a ~34 KB HTML template) | ≈25 KB (`SKILL.md` 7.4 KB + `format.md` 15.8 KB + the default `iad init` skeleton ≈2 KB); the template is used only by the renderer |
 | Agent writes | ~34 KB+ of HTML | a JSON file (≈7–13 KB for the examples) |
 | Updates | re-edit the HTML | edit the JSON and render again; the JSON is embedded in the HTML and can be recovered |
 | Distribution | folder copied into each project (copies drift) | one-line install and updates with `npx skills add` / `npx skills update` |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/token-comparison-dark.svg">
-  <img alt="Estimated tokens for one 3-scenario document: single SKILL.md + hand-edited template reads about 11.6K and writes about 8.5K (20.2K total); interactive-architecture-doc reads about 7.3K and writes about 3.2K (10.5K total)." src="docs/token-comparison-light.svg" width="720">
+  <img alt="Estimated tokens for one 3-scenario document: single SKILL.md + hand-edited template reads about 11.6K and writes about 8.5K (20.2K total); interactive-architecture-doc reads about 7.6K and writes about 3.2K (10.8K total)." src="docs/token-comparison-light.svg" width="720">
 </picture>
 
 - Table figures are file sizes in bytes; the chart estimates tokens as bytes / 4. Neither is an exact

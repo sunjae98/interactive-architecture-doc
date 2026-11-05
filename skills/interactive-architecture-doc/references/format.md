@@ -221,17 +221,24 @@ listed in [format-overview.md](format-overview.md) and apply here too.
 | `W_BADGE_CROWDED` | warning | A step badge found no spot clear of the scenario's other badges and of node boxes (many steps start on one short edge); it overlaps. |
 | `W_PLACEHOLDER` | warning | A string still contains a `[...]` placeholder or `TODO`. |
 
-## Differences from the v3 design plan
+## Design notes
 
-| Change | Why |
-|---|---|
-| `scenarios[].gauge_empty` and `{text, muted}` items in `lines` | the reference maps needed a per-scenario empty label and muted metadata lines |
-| `lane` on some nodes is a constraint, not a switch to manual layout | a single hint used to invalidate the whole map |
-| fully automatic maps fold to at most 6 lanes | a long chain stays readable instead of becoming a strip |
-| edges are routed around boxes automatically | most crossings never need a `route` |
-| lane gap +20 (not +40) where the set of groups changes | matches the reference spacing |
-| lane/row/span/rows ≤ 64, coordinates and sizes within ±1e5 | bounded layout work |
-| self-loop edges are rejected (`E_EDGE_SELF`) | a single-node step uses `step.nodes` |
+Why the format works the way it does, for authors deciding how much to specify:
+
+- **Layout is computed, hints are constraints.** Most maps need no `lane`, `row` or `route`. A hint on
+  a few nodes keeps the rest automatic; only a `lane` on every node turns the grid fully manual.
+- **Groups own their lanes.** A group's box is drawn around its members, so in an automatic map each
+  group gets a contiguous block of lanes and a lane never mixes groups (`E_LANE_GROUPS`).
+- **Wide maps fold.** More than 6 lanes would make the map unreadable at desktop width, so
+  neighbouring lanes of the same group fold and long chains run downward.
+- **Crossings are routed, not just reported.** An edge that would cross a box goes around it through
+  the gaps; `W_EDGE_CROSSES_NODE` remains only when no gap is free or a manual `route` crosses a box.
+- **Bounded work.** At most 64 nodes, lanes / rows / spans up to 64 and coordinates within ±1e5 keep
+  validation and rendering well under a second.
+- **Per-scenario details.** `gauge_empty` says why a gauge stays empty in one scenario ("nothing
+  written"), and `{text, muted}` lines separate a node's data from its metadata.
+- **One node per step needs no edge.** A step that only highlights a node uses `nodes`; edges from a
+  node to itself are rejected (`E_EDGE_SELF`).
 
 ## Starting point
 
