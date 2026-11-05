@@ -519,3 +519,26 @@ test("lane hints: lanes a hint skips over are reported once per range and drawn 
   assert.ok(L.viewBox[2] < 64 * (GEOMETRY_WT.laneMin + GEOMETRY_WT.laneGap), "narrower than 64 full lanes");
   assert.deepEqual(validate(clone(FIXTURE)).warnings, [], "no hints, no empty lanes");
 });
+
+test("clampShift: a shared-gap offset never folds the first or last segment back into its box", async () => {
+  const { clampShift } = await import("../skills/interactive-architecture-doc/scripts/lib/walkthrough-layout.mjs");
+  // port (100, 50) -> stub 14px right -> up the gap -> ... -> stub into (300, 50)
+  const pts = [[100, 50], [114, 50], [114, 0], [286, 0], [286, 50], [300, 50]];
+  assert.equal(clampShift(pts, 1, 0, 6), 6, "away from the box: unchanged");
+  assert.equal(clampShift(pts, 1, 0, -30), -10, "toward the box: the stub keeps 4px");
+  assert.equal(clampShift(pts, 3, 0, 30), 10, "the last stub keeps 4px too");
+  assert.equal(clampShift(pts, 2, 1, -18), -18, "a middle segment is free");
+  // many detours through one gap: no route enters the box it leaves or enters
+  const ids = ["a", "b", "c"];
+  const edges = [["a", "b"], ["b", "c"], ...Array.from({ length: 8 }, (_, i) => ["a", "c", i % 2 ? "ctrl" : "text"])];
+  const doc = mini(ids, edges);
+  const L = layoutWalkthrough(doc);
+  for (const [id, e] of Object.entries(L.edges)) {
+    const pts2 = samplePath(e.d);
+    for (const end of ["a", "c"]) {
+      const b = L.nodes[end];
+      const inner = pts2.slice(1, -1).filter(([x, y]) => x > b.x + 1 && x < b.x + b.w - 1 && y > b.y + 1 && y < b.y + b.h - 1);
+      assert.deepEqual(inner, [], `${id} re-enters ${end}`);
+    }
+  }
+});

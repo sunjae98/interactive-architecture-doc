@@ -615,6 +615,25 @@ export function routeAround(p1, s1, p2, s2, boxes, xs, ys) {
   return out;
 }
 
+// Shifting segment k of a route moves its two points along `axis`. When that segment touches the
+// first or last segment (the stubs leaving and entering the boxes), the shift is limited so those
+// keep at least `keep` px in their own direction: a large shift would otherwise fold the line back
+// into the box it leaves or enters.
+export function clampShift(pts, k, axis, off, keep = 4) {
+  let lo = -Infinity;
+  let hi = Infinity;
+  const limit = (port, moving) => {
+    const d = moving[axis] - port[axis];
+    if (Math.abs(d) < 0.5) return; // the stub runs along the other axis: unaffected
+    if (d > 0) lo = Math.max(lo, keep - d);
+    else hi = Math.min(hi, -d - keep);
+  };
+  if (k === 1) limit(pts[0], pts[1]);
+  if (k + 2 === pts.length - 1) limit(pts[pts.length - 1], pts[pts.length - 2]);
+  if (lo > hi) return 0;
+  return Math.max(lo, Math.min(hi, off));
+}
+
 const inside = (b, x, y, m) => x > b.x + m && x < b.x + b.w - m && y > b.y + m && y < b.y + b.h - m;
 const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
@@ -1012,8 +1031,9 @@ export function layoutWalkthrough(doc) {
       any = true;
       const vertical = Math.abs(pts[k][0] - pts[k + 1][0]) < 0.5;
       const axis = vertical ? 0 : 1;
-      moved[k][axis] = pts[k][axis] + off;
-      moved[k + 1][axis] = pts[k + 1][axis] + off;
+      const o = clampShift(pts, k, axis, off);
+      moved[k][axis] = pts[k][axis] + o;
+      moved[k + 1][axis] = pts[k + 1][axis] + o;
     }
     if (!any) continue;
     const e = doc.edges[edgeIndex[id]];
