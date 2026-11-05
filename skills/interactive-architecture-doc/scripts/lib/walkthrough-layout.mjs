@@ -33,11 +33,11 @@ export const GEOMETRY_WT = {
   bidi: 8, // offset of each edge of a bidirectional pair
   portGap: 20, // minimum distance between port slots on one side
   radius: 8, // corner radius of `via` polylines
-  badgeNudge: 20,
   channel: 6, // spacing between detours that share a lane or row gap
   badgeR: 9.5,
   badgeGap: 3, // minimum clear space between two badges, and between a badge and a node box
   badgeOff: 14, // sideways offset from the path when the path itself has no room
+  badgeTries: 6, // last resort: up to this many badge-sized steps in each direction
   maxAutoLanes: 6, // fully automatic maps fold into at most this many lanes (about the stage's aspect)
 };
 
@@ -1026,10 +1026,11 @@ export function layoutWalkthrough(doc) {
   const nodeBoxes = Object.values(nodes);
   const clearOfNodes = (p) => !nodeBoxes.some((b) => p.x > b.x - G.badgeR - G.badgeGap && p.x < b.x + b.w + G.badgeR + G.badgeGap && p.y > b.y - G.badgeR - G.badgeGap && p.y < b.y + b.h + G.badgeR + G.badgeGap);
   const SPOTS = [[0.5, 0], [0.5, -1], [0.5, 1], [0.35, 0], [0.65, 0], [0.35, -1], [0.65, 1], [0.25, 0], [0.75, 0], [0.2, -1], [0.8, 1]];
-  for (const sc of doc.scenarios) {
+  doc.scenarios.forEach((sc, si) => {
     const placed = [];
-    badges[sc.id] = sc.steps.map((st) => {
+    badges[sc.id] = sc.steps.map((st, ti) => {
       let p;
+      let found = false;
       if (st.edges.length) {
         const pts = edges[st.edges[0]].pts;
         p = edges[st.edges[0]].badgeAt;
@@ -1038,6 +1039,7 @@ export function layoutWalkthrough(doc) {
           const c = { x: q.x - q.ty * side * G.badgeOff, y: q.y + q.tx * side * G.badgeOff };
           if (clearOfNodes(c) && !placed.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < minDist)) {
             p = c;
+            found = true;
             break;
           }
         }
@@ -1045,14 +1047,33 @@ export function layoutWalkthrough(doc) {
         const b = nodes[st.nodes[0]];
         p = { x: b.x + 4, y: b.y + 4 }; // top left: error markers use the top right
       }
-      let k = 0;
-      // last resort (no clear spot): step right until clear of the other badges
-      while (placed.some((q) => Math.hypot(q.x - (p.x + k * G.badgeNudge), q.y - p.y) < minDist)) k++;
-      const at = { x: round(p.x + k * G.badgeNudge), y: round(p.y) };
+      // last resort: step right, left, up or down from there until clear of the other badges (and,
+      // for an edge's badge, of node boxes; a node-only badge sits on its node's corner by design)
+      const onNode = !st.edges.length;
+      const fits = (c) => (onNode || clearOfNodes(c)) && !placed.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < minDist);
+      let at = found || fits(p) ? p : null;
+      for (let k = 1; !at && k <= G.badgeTries; k++) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1], [0, 1]]) {
+          const c = { x: p.x + dx * k * minDist, y: p.y + dy * k * minDist };
+          if (fits(c)) {
+            at = c;
+            break;
+          }
+        }
+      }
+      if (!at) {
+        at = p;
+        issues.push({
+          path: `/scenarios/${si}/steps/${ti}`,
+          code: "W_BADGE_CROWDED",
+          message: `no clear spot for the step badge: too many steps of scenario ${JSON.stringify(sc.id)} start on the same edge; it overlaps another badge or a box`,
+        });
+      }
+      at = { x: round(at.x), y: round(at.y) };
       placed.push(at);
       return at;
     });
-  }
+  });
 
   // ---- viewBox: nodes, groups, edge samples, badges
   let minX = Infinity;

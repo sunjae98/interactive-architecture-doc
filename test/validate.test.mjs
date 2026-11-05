@@ -93,6 +93,7 @@ const FIXTURES = [
   ["W_FACTS_MISSING", (d) => { delete d.nodes[0].facts; }],
   ["W_POS_IGNORED", (d) => { Object.assign(d.nodes[0], { x: 40, y: 400, lane: 0 }); }],
   ["W_GAUGE_UNUSED", (d) => { delete step(d, 0, 2).gauges; delete step(d, 0, 5).gauges; }],
+  ["W_BADGE_CROWDED", (d) => { d.scenarios[0].steps = Array.from({ length: 20 }, (_, i) => ({ ...step(d, 0, 1), title: `s${i}` })); delete d.gauges; }],
   ["W_PLACEHOLDER", (d) => { step(d, 0, 0).what = "[what moves here]"; }],
   ["W_PLACEHOLDER", (d) => { d.tldr.points[0] = "TODO fill in"; }],
   ["W_TEXT_LONG", (d) => { d.nodes[0].title = "A component title that is far too long for any lane"; }],
