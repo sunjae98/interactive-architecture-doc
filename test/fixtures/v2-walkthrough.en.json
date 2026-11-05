@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "title": "Image Upload",
+    "subtitle": "The smallest useful document: three steps, one scenario, no branches.",
+    "lang": "en",
+    "entry_request": "PUT /v1/images\nContent-Type: {{input}}"
+  },
+  "steps": [
+    { "label": "Upload" },
+    { "label": "Store" },
+    { "label": "Respond" }
+  ],
+  "legend": {
+    "client": "Client — the app uploading the image",
+    "new": "New — the upload service built in this project"
+  },
+  "scenarios": [
+    {
+      "id": "upload",
+      "label": "Upload a photo",
+      "icon": "📷",
+      "input": "image/png",
+      "steps": {
+        "1": "PUT /v1/images\nContent-Type: image/png\n(1.2 MB body)",
+        "2": "storage.put(\"images/3c9e.png\", body)\nthumbnail.enqueue(\"3c9e\")",
+        "3": "201 Created\n{ \"id\": \"3c9e\", \"url\": \"/images/3c9e.png\" }"
+      }
+    }
+  ],
+  "board": [
+    {
+      "type": "node",
+      "kind": "client",
+      "step": 1,
+      "width": "wide",
+      "entry": true,
+      "body": "The app uploads the raw image bytes.",
+      "code": "PUT /v1/images"
+    },
+    { "type": "arrow" },
+    {
+      "type": "node",
+      "kind": "new",
+      "step": 2,
+      "width": "wide",
+      "tag": "Upload service",
+      "body": "Stores the original and queues a **thumbnail** job.",
+      "note": "Thumbnails are generated asynchronously; the response does not wait for them."
+    },
+    { "type": "arrow" },
+    {
+      "type": "node",
+      "kind": "client",
+      "step": 3,
+      "width": "wide",
+      "body": "The app receives the image id and its URL."
+    }
+  ]
+}

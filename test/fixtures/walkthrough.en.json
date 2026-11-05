@@ -1,0 +1,71 @@
+{
+  "meta": {
+    "title": "Upload pipeline",
+    "lang": "en",
+    "intro": "How an uploaded file is received, parsed and handed to a model. Pick a scenario and press **Next step →**.",
+    "facts": [{ "label": "service", "value": "uploader" }, { "label": "retention", "value": "none", "mono": false }],
+    "source": "Source: example document for tests."
+  },
+  "legend": {
+    "nodes": { "client": "Client", "infra": "Infrastructure", "app": "Service step", "store": "Temporary disk", "dep": "External" },
+    "edges": { "file": "File bytes", "text": "Text", "ctrl": "Control / response" },
+    "tokens": [{ "kind": "file", "text": "PDF 2MB" }, { "kind": "err", "text": "413" }]
+  },
+  "groups": [
+    { "id": "service", "title": "Upload service", "meta": "deploy uploader · 2 replicas" },
+    { "id": "external", "title": "External", "tone": "muted" }
+  ],
+  "nodes": [
+    { "id": "browser", "kind": "client", "title": "Browser", "mono": "web app", "sub": ["checks size"], "facts": ["Checks the file type and size first."] },
+    { "id": "gateway", "kind": "infra", "title": "Gateway", "mono": "load balancer", "facts": ["Forwards the body without buffering."] },
+    { "id": "receiver", "kind": "app", "title": "Receiver", "mono": "multipart", "sub": ["1MB chunks"], "group": "service", "facts": ["Writes each chunk to disk right away."] },
+    { "id": "disk", "kind": "store", "title": "Temp disk", "mono": "emptyDir", "lines": ["/tmp/uploads/", " <request>/"], "group": "service", "facts": ["Deleted when parsing ends."] },
+    { "id": "parser", "kind": "app", "title": "Parser", "mono": "worker pool", "group": "service", "facts": ["Reads the file by path."] },
+    { "id": "model", "kind": "dep", "title": "Model API", "mono": "vendor", "group": "external", "facts": ["Receives text only."] }
+  ],
+  "edges": [
+    { "id": "up", "from": "browser", "to": "gateway", "kind": "file" },
+    { "id": "back", "from": "gateway", "to": "browser", "kind": "ctrl" },
+    { "id": "fwd", "from": "gateway", "to": "receiver", "kind": "file" },
+    { "id": "write", "from": "receiver", "to": "disk", "kind": "file" },
+    { "id": "cleanup", "from": "disk", "to": "receiver", "kind": "ctrl" },
+    { "id": "read", "from": "disk", "to": "parser", "kind": "file" },
+    { "id": "ask", "from": "parser", "to": "model", "kind": "text" },
+    { "id": "answer", "from": "model", "to": "parser", "kind": "ctrl" }
+  ],
+  "gauges": [{ "id": "disk-use", "node": "disk", "caption": "this request", "empty": "empty" }],
+  "scenarios": [
+    {
+      "id": "upload",
+      "title": "Upload a file",
+      "summary": "Browser → disk → parser → model",
+      "lead": "The normal path: the file lands on disk, is parsed, and only text leaves.",
+      "steps": [
+        { "title": "Send the file", "edges": ["up"], "token": { "text": "PDF 2MB", "kind": "file" }, "what": "A 2MB PDF.", "where": "Network.", "fail": "Too big: blocked in the browser." },
+        { "title": "Forward to the receiver", "edges": ["fwd"], "token": { "text": "multipart", "kind": "file" }, "what": "The same bytes.", "where": "Network stream.", "fail": "—" },
+        { "title": "Write chunks to disk", "edges": ["write"], "token": { "text": "chunk 1MB", "kind": "file" }, "what": "1MB at a time.", "where": "`/tmp/uploads/<request>/`.", "fail": "Over the limit: **413**.", "gauges": { "disk-use": { "value": 0.5, "label": "2MB" } } },
+        { "title": "Parse by path", "edges": ["read"], "token": { "text": "path", "kind": "file" }, "what": "The worker opens the file.", "where": "Disk.", "fail": "Encrypted files fail." },
+        { "title": "Ask the model", "edges": ["ask", "answer"], "token": { "text": "text 12k", "kind": "text" }, "what": "Extracted text.", "where": "Memory → vendor.", "fail": "Vendor error." },
+        { "title": "Delete the file", "edges": ["cleanup"], "token": { "text": "rm", "kind": "ctrl" }, "what": "The request folder is removed.", "where": "Nowhere.", "fail": "Retried on restart.", "gauges": { "disk-use": { "value": 0, "label": "0B · deleted" } } },
+        { "title": "Answer the browser", "edges": ["back"], "token": { "text": "200", "kind": "ctrl" }, "what": "The answer.", "where": "Network.", "fail": "—" }
+      ]
+    },
+    {
+      "id": "rejected",
+      "title": "Too large",
+      "summary": "413 before the disk",
+      "tag": "limit",
+      "lead": "A file over the limit is rejected while it streams in.",
+      "note": { "title": "Limits", "items": ["50MB per request"] },
+      "skip": [{ "node": "disk", "label": "nothing written" }],
+      "steps": [
+        { "title": "Send a huge file", "edges": ["up", "fwd"], "token": { "text": "PDF 80MB", "kind": "file" }, "what": "An 80MB PDF.", "where": "Network.", "fail": "—" },
+        { "title": "Receiver stops", "edges": [], "nodes": ["receiver"], "token": { "text": "413", "kind": "err" }, "what": "The limit is hit.", "where": "Memory buffer only.", "fail": "**413**.", "markers": [{ "node": "receiver", "label": "413" }] },
+        { "title": "Error to the browser", "edges": ["back"], "token": { "text": "413", "kind": "err" }, "what": "The status code.", "where": "Network.", "fail": "—" }
+      ]
+    }
+  ],
+  "tldr": { "title": "Summary", "points": ["Files go **to disk only**.", "Only text reaches the model."] },
+  "tables": [{ "title": "Limits", "columns": ["Item", "Limit", "Over it"], "rows": [["Request", "50MB", "413"], ["Speed", "64KB/s", "408"]] }],
+  "considerations": { "title": "Decisions", "items": [{ "decision": "Stream to disk", "why": "Memory stays flat." }] }
+}

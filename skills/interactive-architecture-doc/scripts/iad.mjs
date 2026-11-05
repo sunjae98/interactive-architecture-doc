@@ -3,7 +3,7 @@
 //
 //   node scripts/iad.mjs validate <doc.json>... [--json]
 //   node scripts/iad.mjs render <doc.json> [-o <out.html>] [--json]
-//   node scripts/iad.mjs init <out.json> [--style walkthrough|overview] [--lang ko|en] [--steps N] [--scenarios a,b] [--fork]
+//   node scripts/iad.mjs init <out.json> [--style walkthrough|overview] [--lang ko|en] [--steps N] [--scenarios a,b] [--lanes N]
 //                             [--paths a,b] [--force] [--json]
 //
 // Exit codes: 0 = valid (warnings allowed), 1 = validation errors, 2 = usage / read / parse / write error.
@@ -14,14 +14,15 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { validate, formatIssue } from "./lib/validate.mjs";
 import { renderHtml, writeFileAtomic, defaultOutputPath, ValidationFailed } from "./lib/render.mjs";
-import { scaffold, scaffoldOverview, formatJson, KEBAB, LANGS, STYLES, MAX_STEPS, MAX_PATHS } from "./lib/scaffold.mjs";
+import { scaffold, scaffoldOverview, formatJson, KEBAB, LANGS, STYLES, MAX_STEPS, MAX_PATHS, MIN_LANES, MAX_LANES } from "./lib/scaffold.mjs";
+import { MAX_SCENARIOS } from "./lib/validate.mjs";
 import { RESERVED_PATH_IDS } from "./lib/validate.mjs";
 
 const USAGE = `Usage:
   iad validate <doc.json>... [--json]
   iad render <doc.json> [-o <out.html>] [--json]
   iad init <out.json> [--style walkthrough|overview] [--lang ko|en] [--force] [--json]
-           walkthrough: [--steps N] [--scenarios id1,id2,...] [--fork]
+           walkthrough: [--steps N] [--scenarios id1,id2,...] [--lanes N]
            overview:    [--paths id1,id2,...]
 
 Options:
@@ -31,9 +32,9 @@ Options:
   --style s          init: walkthrough (default; step-by-step scenarios) or overview (one layered
                      diagram with optional path highlighting)
   --lang ko|en       init: UI and placeholder language (default en)
-  --steps N          init: number of steps, 1..20 (default 3)
-  --scenarios ids    init: comma-separated kebab-case scenario ids (default "default")
-  --fork             init: a decision node fanning out to one column per scenario (needs >= 2 scenarios, >= 2 steps)
+  --steps N          init: steps per scenario, 1..20 (default 3)
+  --scenarios ids    init: comma-separated kebab-case scenario ids, at most ${MAX_SCENARIOS} (default "default")
+  --lanes N          init: components in the starting chain, ${MIN_LANES}..${MAX_LANES} (default 3)
   --paths ids        init (overview): comma-separated kebab-case path ids, at most ${MAX_PATHS}; one component each
   --force            init: overwrite an existing file
   -h, --help         show this help`;
@@ -55,8 +56,8 @@ function readDoc(file) {
   }
 }
 
-const INIT_OPTIONS = ["--style", "--lang", "--steps", "--scenarios", "--fork", "--paths", "--force"];
-const VALUE_HINT = { "--style": STYLES.join(" or "), "--lang": "ko or en", "--steps": "a number", "--scenarios": "scenario ids", "--paths": "path ids" };
+const INIT_OPTIONS = ["--style", "--lang", "--steps", "--scenarios", "--lanes", "--fork", "--paths", "--force"];
+const VALUE_HINT = { "--style": STYLES.join(" or "), "--lang": "ko or en", "--steps": "a number", "--scenarios": "scenario ids", "--lanes": "a number", "--paths": "path ids" };
 
 function parseArgs(argv) {
   const args = { command: argv[0], files: [], json: false, help: false, out: null, init: {} };
@@ -148,12 +149,13 @@ function cmdInit(args) {
   if (args.out) throw new UsageError("init takes the output path as its argument, not -o");
   const file = args.files[0];
   const o = args.init;
+  if (o.fork) throw new UsageError("--fork was removed in v3 (walkthroughs are a node/edge map now; see references/migration-v2.md)");
   const style = o.style ?? "walkthrough";
   if (!STYLES.includes(style)) throw new UsageError(`--style must be one of: ${STYLES.join(", ")}`);
   const lang = o.lang ?? "en";
   if (!LANGS.includes(lang)) throw new UsageError(`--lang must be one of: ${LANGS.join(", ")}`);
   if (style === "overview") {
-    for (const key of ["steps", "scenarios", "fork"]) {
+    for (const key of ["steps", "scenarios", "lanes"]) {
       if (key in o) throw new UsageError(`--${key} is only valid with --style walkthrough`);
     }
     const paths = o.paths === undefined ? [] : o.paths.split(",").map((id) => id.trim());
@@ -175,9 +177,10 @@ function cmdInit(args) {
     if (!KEBAB.test(id)) throw new UsageError(`scenario id ${JSON.stringify(id)} must be kebab-case`);
   }
   if (new Set(scenarios).size !== scenarios.length) throw new UsageError("scenario ids must be unique");
-  if (o.fork && scenarios.length < 2) throw new UsageError("--fork needs at least 2 scenarios (--scenarios a,b)");
-  if (o.fork && steps < 2) throw new UsageError("--fork needs --steps 2 or more");
-  return writeSkeleton(args, file, o, scaffold({ lang, steps, scenarios, fork: !!o.fork }));
+  if (scenarios.length > MAX_SCENARIOS) throw new UsageError(`--scenarios takes at most ${MAX_SCENARIOS} ids`);
+  const lanesText = o.lanes ?? "3";
+  if (!/^[0-9]+$/.test(lanesText) || +lanesText < MIN_LANES || +lanesText > MAX_LANES) throw new UsageError(`--lanes must be an integer in ${MIN_LANES}..${MAX_LANES}`);
+  return writeSkeleton(args, file, o, scaffold({ lang, steps, scenarios, lanes: +lanesText }));
 }
 
 function writeSkeleton(args, file, o, doc) {

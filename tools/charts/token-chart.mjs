@@ -27,7 +27,7 @@ function measure() {
   const baselineRead = BASELINE_FILES.reduce((n, f) => n + gitBytes(BASELINE_REV, f), 0);
   const baselineWrite = gitBytes(BASELINE_REV, BASELINE_TEMPLATE); // the whole template is rewritten
   const iadRead = size("SKILL.md") + size("references/format.md") + scaffoldBytes();
-  const iadWrite = size("examples/three-branch.en.json"); // a filled-in forked document
+  const iadWrite = size("examples/payment-auth.en.json"); // a filled-in grouped map with 4 scenarios
   const tok = (b) => Math.round(b / BYTES_PER_TOKEN);
   return [
     { label: "Reads", a: tok(baselineRead), b: tok(iadRead) },
@@ -36,14 +36,14 @@ function measure() {
   ];
 }
 
-// Size of a 3-scenario, 7-step forked `iad init` skeleton (the starting file for a forked doc).
+// Size of a 3-scenario, 7-step `iad init` skeleton (the starting file for a document like that).
 function scaffoldBytes() {
   const dir = mkdtempSync(join(tmpdir(), "iad-chart-"));
   const tmp = join(dir, "init.json");
   try {
     execFileSync(process.execPath, [
       join(SKILL, "scripts", "iad.mjs"), "init", tmp,
-      "--steps", "7", "--scenarios", "simple,lookup,job", "--fork",
+      "--steps", "7", "--scenarios", "simple,lookup,job", "--lanes", "5",
     ], { cwd: ROOT, stdio: "ignore" });
     return readFileSync(tmp).length;
   } finally {
