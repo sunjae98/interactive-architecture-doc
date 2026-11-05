@@ -38,7 +38,7 @@ table below (plus the one in format-overview.md) and the validator drift apart. 
 | `mono` / `sub` (≤3) / `lines` | no | mono subtitle, extra lines, fixed-width lines (leading spaces kept). A `lines` item is a string or `{text, muted?}`; `muted: true` draws it in the muted color |
 | `facts` | no | markup lines shown when the box is clicked |
 | `group` | no | group id |
-| `lane` / `row` | no | grid column / row (≥0); automatic when omitted. With no `lane` anywhere the map is fully automatic: lanes follow the file/text flow, each group gets its own block of lanes, and a map wider than 6 lanes folds neighbouring lanes so long chains run downward |
+| `lane` / `row` | no | grid column / row (≥0); automatic when omitted. Lanes follow the file/text flow, each group gets its own block of lanes, and a map wider than 6 lanes folds neighbouring lanes so long chains run downward. A `lane` on some nodes is a constraint on top of that: the node gets exactly that lane and the groups around it move or grow so they stay contiguous. Only when every node has a `lane` are lanes used exactly as given |
 | `span` / `rows` | no | lanes / rows the box covers (≥1) |
 | `x`, `y` | no | absolute position (both or neither); wins over lane/row |
 | `w`, `h` | no | forced size |
@@ -118,6 +118,7 @@ Decided at the prototype gate; recorded here until the plan is updated.
 | lane gap +20 (not +40) where the set of groups changes | matches the reference map's spacing |
 | a node with no edge takes its group's lowest lane | an unlinked member must not pull its group to lane 0 |
 | fully automatic maps fold to at most 6 lanes (`maxAutoLanes`) | a long chain turns downward instead of becoming an unreadable strip |
+| `lane` on some nodes is a constraint on the automatic layout, not a switch to manual layout | one hint used to invalidate the whole map |
 | lane/row/span/rows ≤ 64, coordinates and sizes within ±1e5 | bounded layout work |
 | self-loop edges rejected (`E_EDGE_SELF`) | no geometry for them; a single-node step uses `step.nodes` |
 

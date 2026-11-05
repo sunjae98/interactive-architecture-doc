@@ -49,12 +49,14 @@ test("layout: ctrl edges do not rank, but a node reached only by ctrl stacks und
   assert.equal(L.nodes.d.lane, L.nodes.b.lane + 1);
 });
 
-test("layout: cycles are broken; explicit lanes pin a node and its successors follow", () => {
+test("layout: cycles are broken; when every node has a lane, successors rank after a pinned node", () => {
   const doc = mini(["a", "b", "c"], [["a", "b"], ["b", "c"], ["c", "a"]]);
   assert.deepEqual(["a", "b", "c"].map((id) => layoutWalkthrough(doc).nodes[id].lane), [0, 1, 2]);
   doc.nodes[1].lane = 3;
-  const L = layoutWalkthrough(doc);
-  assert.deepEqual(["a", "b", "c"].map((id) => L.nodes[id].lane), [0, 3, 4]);
+  assert.equal(layoutWalkthrough(doc).nodes.b.lane, 3, "a single hint keeps its lane");
+  doc.nodes[0].lane = 0;
+  doc.nodes[2].lane = 4;
+  assert.deepEqual(["a", "b", "c"].map((id) => layoutWalkthrough(doc).nodes[id].lane), [0, 3, 4]);
 });
 
 test("layout: rows fill the next free cell in nodes[] order; explicit rows are reserved first", () => {
@@ -303,4 +305,78 @@ test("layout: an explicit h shorter than the content is reported", () => {
   doc.nodes[1].h = 70;
   doc.scenarios[0].steps[0].gauges = { g: { value: 1, label: "full" } };
   assert.ok(validate(doc).warnings.some((w) => w.code === "W_TEXT_LONG" && w.path === "/nodes/1/h"), "gauge does not fit");
+});
+
+// ---- lane hints on an otherwise automatic map ------------------------------------------------
+const grouped = () =>
+  mini(
+    [
+      { id: "u", group: "g1" }, { id: "v", group: "g1" },
+      { id: "w", group: "g2" }, { id: "x", group: "g2" }, { id: "y", group: "g2" },
+      { id: "z", group: "g3" },
+    ],
+    [["u", "v"], ["v", "w"], ["w", "x"], ["x", "y"], ["y", "z"]],
+    { groups: [{ id: "g1", title: "G1" }, { id: "g2", title: "G2" }, { id: "g3", title: "G3" }] }
+  );
+const groupsApart = (L) => {
+  for (let a = 0; a < L.groups.length; a++)
+    for (let b = a + 1; b < L.groups.length; b++) {
+      const p = L.groups[a];
+      const q = L.groups[b];
+      assert.ok(p.x + p.w <= q.x || q.x + q.w <= p.x || p.y + p.h <= q.y || q.y + q.h <= p.y, `${p.id} / ${q.id}`);
+    }
+};
+
+test("lane hints: one hinted node keeps its lane, the rest stays automatic and valid", () => {
+  const doc = grouped();
+  const auto = layoutWalkthrough(doc);
+  doc.nodes[3].lane = 4; // x, inside g2's own block (lanes 2..4)
+  const L = layoutWalkthrough(doc);
+  assert.equal(L.nodes.x.lane, 4);
+  assert.deepEqual(validate(doc).errors, []);
+  for (const id of ["u", "v", "z"]) assert.equal(L.nodes[id].lane, auto.nodes[id].lane, id);
+  groupsApart(L);
+});
+
+test("lane hints: mixed lane and row hints combine; un-hinted nodes are still placed around them", () => {
+  const doc = grouped();
+  doc.nodes[0].lane = 0;
+  doc.nodes[0].row = 2;
+  doc.nodes[5].lane = 7; // z beyond the map: g3 grows to reach it
+  doc.nodes[4].row = 1;
+  const L = layoutWalkthrough(doc);
+  assert.deepEqual([L.nodes.u.lane, L.nodes.u.row, L.nodes.z.lane, L.nodes.y.row], [0, 2, 7, 1]);
+  assert.deepEqual(validate(doc).errors, []);
+  groupsApart(L);
+});
+
+test("lane hints: a hint into another group's lane moves the groups instead of overlapping them", () => {
+  const doc = grouped();
+  doc.nodes[5].lane = 1; // z (g3) into g1's lane 1
+  const L = layoutWalkthrough(doc);
+  assert.equal(L.nodes.z.lane, 1);
+  assert.deepEqual(validate(doc).errors, []);
+  groupsApart(L);
+  // an ungrouped node hinted into a group's lane gets its own column there
+  const d2 = grouped();
+  d2.nodes.push({ id: "solo", kind: "app", title: "SOLO", facts: ["f"], lane: 3 });
+  d2.edges.push({ id: "es", from: "y", to: "solo", kind: "ctrl" });
+  d2.scenarios[0].steps[0].edges.push("es");
+  const L2 = layoutWalkthrough(d2);
+  assert.equal(L2.nodes.solo.lane, 3);
+  assert.deepEqual(validate(d2).errors, []);
+  groupsApart(L2);
+});
+
+test("lane hints: overlap errors say which node or group collides, and where", () => {
+  const doc = mini([{ id: "a", lane: 0, row: 0 }, { id: "b", lane: 0, row: 0 }], [["a", "b"]]);
+  const [e] = validate(doc).errors;
+  assert.equal(e.code, "E_LAYOUT_OVERLAP");
+  assert.match(e.message, /node "b" at lane 0, row 0 \(hinted\) overlaps node "a" at lane 0, row 0/);
+  const g = mini([{ id: "a", lane: 0, group: "g1" }, { id: "b", lane: 1, group: "g2" }, { id: "c", lane: 2, group: "g1" }], [["a", "b"], ["b", "c"]], {
+    groups: [{ id: "g1", title: "G1" }, { id: "g2", title: "G2" }],
+  });
+  const msgs = validate(g).errors.map((x) => x.message).join("\n");
+  assert.match(msgs, /group "g2" \(lanes 1, rows 0\) overlaps group "g1" \(lanes 0-2, rows 0\)/);
+  assert.match(msgs, /node "b" at lane 1, row 0 \(hinted\) lies inside the box of group "g1"/);
 });

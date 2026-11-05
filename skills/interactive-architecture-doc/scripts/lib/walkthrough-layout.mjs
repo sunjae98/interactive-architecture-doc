@@ -148,7 +148,12 @@ function computeLanes(doc) {
   const byId = Object.fromEntries(doc.nodes.map((n) => [n.id, n]));
   // x/y nodes sit outside the grid: they neither pin lanes nor push their successors' ranks
   const manual = (id) => typeof byId[id].x === "number" && typeof byId[id].y === "number";
-  const fixed = (id) => Number.isInteger(byId[id].lane) && !manual(id);
+  const hinted = (id) => Number.isInteger(byId[id].lane) && !manual(id);
+  // every grid node has a lane: the author placed them all, lanes are used as given. Otherwise lane
+  // hints are constraints applied after the automatic layout (applyLaneHints).
+  const grid = ids.filter((id) => !manual(id));
+  const allHinted = grid.length > 0 && grid.every(hinted);
+  const fixed = (id) => allHinted && hinted(id);
   // file/text edges rank +1; ctrl edges into a node without file/text predecessors rank +0
   const dataIn = new Set();
   for (const e of doc.edges) if (e.kind !== "ctrl" && e.from !== e.to && !manual(e.from)) dataIn.add(e.to);
@@ -181,7 +186,7 @@ function computeLanes(doc) {
     const sib = doc.nodes.filter((m) => m.group === n.group && linked.has(m.id)).map((m) => rank.get(m.id));
     if (sib.length) rank.set(n.id, Math.min(...sib));
   }
-  if (ids.some(fixed)) return { lane: rank, order: null }; // author-placed lanes: rows in nodes[] order
+  if (allHinted) return { lane: rank, order: null }; // author-placed lanes: rows in nodes[] order
 
   // fully automatic: blocks = groups, and ungrouped nodes of the same rank
   const blocks = new Map();
@@ -231,9 +236,57 @@ function computeLanes(doc) {
     lanes[best].ids.push(...lanes[best + 1].ids);
     lanes.splice(best + 1, 1);
   }
+  applyLaneHints(doc, lanes, grid.filter(hinted), byId);
   const lane = new Map();
   lanes.forEach((l, i) => l.ids.forEach((id) => lane.set(id, i)));
   return { lane, order: compact };
+}
+
+// Lane hints on a partly automatic map. Each hinted node ends up in exactly its lane; groups stay
+// contiguous, so the columns around it move instead:
+// - the lane is one of its group's columns (or an ungrouped column for an ungrouped node): it moves there;
+// - the lane is right of its group: the group grows with empty columns up to that lane;
+// - the lane is left of its group: the whole group moves to the nearest boundary at or before the
+//   lane (never inside another group), then grows if needed;
+// - an ungrouped node in another group's lane: new ungrouped columns are inserted at the nearest
+//   boundary at or before the lane, pushing that group right.
+// Hints are applied in lane order; boundaries left of an earlier hint are not used, so earlier
+// hints keep their lanes.
+function applyLaneHints(doc, cols, hintIds, byId) {
+  if (!hintIds.length) return;
+  for (const id of hintIds) {
+    const c = cols.findIndex((col) => col.ids.includes(id));
+    if (c >= 0) cols[c].ids.splice(cols[c].ids.indexOf(id), 1);
+  }
+  // drop columns left empty, unless they are part of a group run (they keep the run contiguous)
+  for (let i = cols.length - 1; i >= 0; i--) if (!cols[i].ids.length) cols.splice(i, 1);
+  const hints = hintIds.map((id) => ({ id, lane: byId[id].lane, group: byId[id].group || "" })).sort((p, q) => p.lane - q.lane);
+  let floor = 0; // boundaries below this would shift an earlier hint
+  const boundary = (i) => i === 0 || i === cols.length || !(cols[i - 1].group && cols[i - 1].group === cols[i].group);
+  const lastBoundary = (max) => {
+    for (let i = Math.min(max, cols.length); i >= floor; i--) if (boundary(i)) return i;
+    return Math.min(Math.max(floor, 0), cols.length);
+  };
+  const empty = (group, n) => Array.from({ length: n }, () => ({ group, ids: [] }));
+  for (const h of hints) {
+    const L = h.lane;
+    const run = h.group ? cols.map((c, i) => (c.group === h.group ? i : -1)).filter((i) => i >= 0) : [];
+    if (L < cols.length && cols[L].group === h.group) {
+      // its own group's column (or an ungrouped column)
+    } else if (run.length && L > run[run.length - 1]) {
+      const b = run[run.length - 1];
+      cols.splice(b + 1, 0, ...empty(h.group, L - b));
+    } else if (run.length) {
+      const block = cols.splice(run[0], run.length);
+      const p = lastBoundary(L);
+      cols.splice(p, 0, ...block, ...empty(h.group, Math.max(0, L - (p + block.length - 1))));
+    } else {
+      const p = lastBoundary(L);
+      cols.splice(p, 0, ...empty(h.group, L - p + 1));
+    }
+    cols[L].ids.push(h.id);
+    floor = L + 1;
+  }
 }
 
 // ---- path geometry ----------------------------------------------------------
@@ -583,17 +636,30 @@ export function layoutWalkthrough(doc) {
 
   // ---- overlaps: node/node, group/group, node/foreign group
   const ids = doc.nodes.map((n) => n.id);
+  // where a node or group sits, in the author's terms (lane/row for grid nodes, x/y otherwise)
+  const at = (id) => {
+    const b = nodes[id];
+    const n = doc.nodes[nodeIndex[id]];
+    const hint = Number.isInteger(n.lane) || Number.isInteger(n.row) ? " (hinted)" : "";
+    return b.lane === undefined ? `x ${b.x}, y ${b.y}` : `lane ${b.lane}, row ${b.row}${hint}`;
+  };
+  const span = (list) => (list.length ? (Math.min(...list) === Math.max(...list) ? `${Math.min(...list)}` : `${Math.min(...list)}-${Math.max(...list)}`) : "-");
+  const groupAt = (g) => {
+    const m = doc.nodes.filter((n) => n.group === g.id).map((n) => nodes[n.id]).filter((b) => b.lane !== undefined);
+    return `lanes ${span(m.map((b) => b.lane))}, rows ${span(m.map((b) => b.row))}`;
+  };
+  const q = (v) => JSON.stringify(v);
   for (let a = 0; a < ids.length; a++) {
     for (let b = a + 1; b < ids.length; b++) {
       if (overlaps(nodes[ids[a]], nodes[ids[b]])) {
-        issues.push({ path: nodes[ids[b]].path, code: "E_LAYOUT_OVERLAP", message: `node ${JSON.stringify(ids[b])} overlaps node ${JSON.stringify(ids[a])}; change lane/row or x/y` });
+        issues.push({ path: nodes[ids[b]].path, code: "E_LAYOUT_OVERLAP", message: `node ${q(ids[b])} at ${at(ids[b])} overlaps node ${q(ids[a])} at ${at(ids[a])}; give one of them another row, lane or x/y` });
       }
     }
   }
   for (let a = 0; a < groups.length; a++) {
     for (let b = a + 1; b < groups.length; b++) {
       if (overlaps(groups[a], groups[b])) {
-        issues.push({ path: groups[b].path, code: "E_LAYOUT_OVERLAP", message: `group ${JSON.stringify(groups[b].id)} overlaps group ${JSON.stringify(groups[a].id)}; move their members apart` });
+        issues.push({ path: groups[b].path, code: "E_LAYOUT_OVERLAP", message: `group ${q(groups[b].id)} (${groupAt(groups[b])}) overlaps group ${q(groups[a].id)} (${groupAt(groups[a])}); a group box spans all its members, so keep each group's lanes and rows apart from the other's` });
       }
     }
   }
@@ -601,7 +667,7 @@ export function layoutWalkthrough(doc) {
     for (const n of doc.nodes) {
       if (n.group === g.id) continue;
       if (overlaps(g, nodes[n.id])) {
-        issues.push({ path: nodes[n.id].path, code: "E_LAYOUT_OVERLAP", message: `node ${JSON.stringify(n.id)} lies inside group ${JSON.stringify(g.id)} but is not a member; set its group or move it` });
+        issues.push({ path: nodes[n.id].path, code: "E_LAYOUT_OVERLAP", message: `node ${q(n.id)} at ${at(n.id)} lies inside the box of group ${q(g.id)} (${groupAt(g)}) but is not a member; set its group to ${q(g.id)} or move it outside those lanes/rows` });
       }
     }
   }
