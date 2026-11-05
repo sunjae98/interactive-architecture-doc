@@ -3,6 +3,7 @@
 //
 //   node scripts/iad.mjs validate <doc.json>... [--json]
 //   node scripts/iad.mjs render <doc.json> [-o <out.html>] [--json]
+//   node scripts/iad.mjs layout <doc.json> [--json]          (walkthrough: computed map geometry)
 //   node scripts/iad.mjs init <out.json> [--style walkthrough|overview] [--lang ko|en] [--steps N] [--scenarios a,b] [--lanes N]
 //                             [--paths a,b] [--force] [--json]
 //
@@ -12,7 +13,8 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { validate, formatIssue } from "./lib/validate.mjs";
+import { validate, formatIssue, isOverview } from "./lib/validate.mjs";
+import { layoutWalkthrough } from "./lib/walkthrough-layout.mjs";
 import { renderHtml, writeFileAtomic, defaultOutputPath, ValidationFailed } from "./lib/render.mjs";
 import { scaffold, scaffoldOverview, formatJson, KEBAB, LANGS, STYLES, MAX_STEPS, MAX_PATHS, MIN_LANES, MAX_LANES } from "./lib/scaffold.mjs";
 import { MAX_SCENARIOS } from "./lib/validate.mjs";
@@ -21,6 +23,7 @@ import { RESERVED_PATH_IDS } from "./lib/validate.mjs";
 const USAGE = `Usage:
   iad validate <doc.json>... [--json]
   iad render <doc.json> [-o <out.html>] [--json]
+  iad layout <doc.json> [--json]
   iad init <out.json> [--style walkthrough|overview] [--lang ko|en] [--force] [--json]
            walkthrough: [--steps N] [--scenarios id1,id2,...] [--lanes N]
            overview:    [--paths id1,id2,...]
@@ -29,6 +32,8 @@ Options:
   --json             print {ok, errors[], warnings[]} (render adds "output") as JSON;
                      unreadable/unwritable files print {ok:false, error}
   -o, --out <file>   render output path (default: next to the JSON, same name, .html)
+  layout             walkthrough only: print the computed map (each node's lane, row and box, the
+                     lane/row gaps, each edge's path) to write route.via or lane/row hints
   --style s          init: walkthrough (default; step-by-step scenarios) or overview (one layered
                      diagram with optional path highlighting)
   --lang ko|en       init: UI and placeholder language (default en)
@@ -144,6 +149,43 @@ function cmdRender(args) {
   }
 }
 
+function cmdLayout(args) {
+  if (args.files.length !== 1) throw new UsageError("layout needs exactly one file");
+  const file = args.files[0];
+  const doc = readDoc(file);
+  if (isOverview(doc)) throw new UsageError("layout is for walkthrough documents (the overview has a fixed grid)");
+  const result = validate(doc);
+  if (!result.ok) {
+    if (args.json) process.stdout.write(JSON.stringify(strip(result), null, 2) + "\n");
+    else for (const i of result.errors) process.stdout.write(formatIssue(i) + "\n");
+    process.stderr.write(`${file}: no layout (${result.errors.length} error(s))\n`);
+    return 1;
+  }
+  const L = layoutWalkthrough(doc);
+  const nodes = Object.fromEntries(Object.entries(L.nodes).map(([id, b]) => [id, { lane: b.lane ?? null, row: b.row ?? null, x: b.x, y: b.y, w: b.w, h: b.h }]));
+  const edges = Object.fromEntries(Object.entries(L.edges).map(([id, e]) => [id, { d: e.d }]));
+  const groups = L.groups.map((g) => ({ id: g.id, x: g.x, y: g.y, w: g.w, h: g.h }));
+  const gapsX = L.lanes.slice(0, -1).map((l, i) => Math.round(((l.x + l.w + L.lanes[i + 1].x) / 2) * 10) / 10);
+  const gapsY = L.rows.slice(0, -1).map((r, i) => Math.round(((r.y + r.h + L.rows[i + 1].y) / 2) * 10) / 10);
+  if (args.json) {
+    process.stdout.write(JSON.stringify({ ok: true, viewBox: L.viewBox, lanes: L.lanes, rows: L.rows, laneGaps: gapsX, rowGaps: gapsY, nodes, groups, edges, warnings: result.warnings }, null, 2) + "\n");
+    return 0;
+  }
+  const out = [`viewBox ${L.viewBox.join(" ")}`, "", "lanes (x, w):"];
+  L.lanes.forEach((l, i) => out.push(`  ${i}  x ${l.x}  w ${l.w}`));
+  out.push(`lane gaps (x, free for route.via): ${gapsX.join(", ") || "-"}`, "rows (y, h):");
+  L.rows.forEach((r, i) => out.push(`  ${i}  y ${r.y}  h ${r.h}`));
+  out.push(`row gaps (y, free for route.via): ${gapsY.join(", ") || "-"}`, "", "nodes (id  lane row  x y w h):");
+  for (const [id, b] of Object.entries(nodes)) out.push(`  ${id}  ${b.lane ?? "-"} ${b.row ?? "-"}  ${b.x} ${b.y} ${b.w} ${b.h}`);
+  out.push("", "groups (id  x y w h):");
+  for (const g of groups) out.push(`  ${g.id}  ${g.x} ${g.y} ${g.w} ${g.h}`);
+  out.push("", "edges (id  path):");
+  for (const [id, e] of Object.entries(edges)) out.push(`  ${id}  ${e.d}`);
+  process.stdout.write(out.join("\n") + "\n");
+  for (const w of result.warnings) process.stderr.write(formatIssue(w) + "\n");
+  return 0;
+}
+
 function cmdInit(args) {
   if (args.files.length !== 1) throw new UsageError("init needs exactly one output file");
   if (args.out) throw new UsageError("init takes the output path as its argument, not -o");
@@ -214,6 +256,7 @@ function main(argv) {
     }
     if (args.command === "validate") return cmdValidate(args);
     if (args.command === "render") return cmdRender(args);
+    if (args.command === "layout") return cmdLayout(args);
     if (args.command === "init") return cmdInit(args);
     throw new UsageError(`unknown command "${args.command}"`);
   } catch (e) {

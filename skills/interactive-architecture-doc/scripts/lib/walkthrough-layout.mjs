@@ -480,6 +480,121 @@ function portToward(box, side, p) {
   return sidePoint(box, side, Math.min(len - 6, Math.max(6, pos)));
 }
 
+// ---- obstacle routing --------------------------------------------------------
+// Used when an edge's curve would run through an unrelated node: an orthogonal path through the
+// free corridors (lane gaps, row gaps and the space just around each node), found by a shortest-path
+// search over that grid with a penalty per bend, then drawn with rounded corners.
+const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+const dirOf = (side) => DIRS.findIndex(([x, y]) => x === NORMAL[side][0] && y === NORMAL[side][1]);
+
+function heapPush(h, item) {
+  h.push(item);
+  let i = h.length - 1;
+  while (i > 0) {
+    const p = (i - 1) >> 1;
+    if (h[p][0] < item[0] || (h[p][0] === item[0] && h[p][1] <= item[1])) break;
+    h[i] = h[p];
+    i = p;
+  }
+  h[i] = item;
+}
+function heapPop(h) {
+  const top = h[0];
+  const last = h.pop();
+  if (h.length) {
+    let i = 0;
+    for (;;) {
+      const l = 2 * i + 1;
+      const r = l + 1;
+      let m = i;
+      const less = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+      if (l < h.length && less(h[l], m === i ? last : h[m])) m = l;
+      if (r < h.length && less(h[r], m === i ? last : h[m])) m = r;
+      if (m === i) break;
+      h[i] = h[m];
+      i = m;
+    }
+    h[i] = last;
+  }
+  return top;
+}
+
+// p1/p2: ports on sides s1/s2; boxes: every node box; xs/ys: corridor lines. Returns a point list or null.
+export function routeAround(p1, s1, p2, s2, boxes, xs, ys) {
+  const G = GEOMETRY_WT;
+  const m = 6;
+  const obs = boxes.map((b) => ({ x1: b.x - m, y1: b.y - m, x2: b.x + b.w + m, y2: b.y + b.h + m }));
+  const stub = 14;
+  const a = [p1[0] + NORMAL[s1][0] * stub, p1[1] + NORMAL[s1][1] * stub];
+  const z = [p2[0] + NORMAL[s2][0] * stub, p2[1] + NORMAL[s2][1] * stub];
+  const X = [...new Set([...xs, a[0], z[0], ...obs.flatMap((o) => [o.x1 - G.laneGap / 4, o.x2 + G.laneGap / 4])].map(round))].sort((u, v) => u - v);
+  const Y = [...new Set([...ys, a[1], z[1], ...obs.flatMap((o) => [o.y1 - G.rowGap / 4, o.y2 + G.rowGap / 4])].map(round))].sort((u, v) => u - v);
+  const blocked = (x, y) => obs.some((o) => x > o.x1 && x < o.x2 && y > o.y1 && y < o.y2);
+  const segFree = (xa, ya, xb, yb) =>
+    !obs.some((o) => Math.max(xa, xb) > o.x1 && Math.min(xa, xb) < o.x2 && Math.max(ya, yb) > o.y1 && Math.min(ya, yb) < o.y2);
+  const W = X.length;
+  const idx = (i, j) => j * W + i;
+  const ai = X.indexOf(round(a[0]));
+  const aj = Y.indexOf(round(a[1]));
+  const zi = X.indexOf(round(z[0]));
+  const zj = Y.indexOf(round(z[1]));
+  if (blocked(a[0], a[1]) || blocked(z[0], z[1])) return null;
+  const bend = 40;
+  const dist = new Map();
+  const prev = new Map();
+  const h = [];
+  let seq = 0;
+  const start = idx(ai, aj) * 4 + dirOf(s1);
+  dist.set(start, 0);
+  heapPush(h, [0, seq++, start]);
+  const endDir = (dirOf(s2) + 2) % 4; // moving into the target
+  let best = null;
+  while (h.length) {
+    const [cost, , state] = heapPop(h);
+    if (cost > (dist.get(state) ?? Infinity)) continue;
+    const cell = state >> 2;
+    const d = state & 3;
+    const i = cell % W;
+    const j = (cell - i) / W;
+    if (i === zi && j === zj) {
+      const total = cost + (d === endDir ? 0 : bend);
+      if (!best || total < best[0]) best = [total, state];
+      continue;
+    }
+    if (best && cost >= best[0]) break;
+    for (let nd = 0; nd < 4; nd++) {
+      if (nd === (d + 2) % 4) continue; // no U-turns
+      const ni = i + Math.sign(DIRS[nd][0]);
+      const nj = j + Math.sign(DIRS[nd][1]);
+      if (ni < 0 || nj < 0 || ni >= W || nj >= Y.length) continue;
+      if (blocked(X[ni], Y[nj]) || !segFree(X[i], Y[j], X[ni], Y[nj])) continue;
+      const nc = cost + Math.abs(X[ni] - X[i]) + Math.abs(Y[nj] - Y[j]) + (nd === d ? 0 : bend);
+      const ns = idx(ni, nj) * 4 + nd;
+      if (nc < (dist.get(ns) ?? Infinity)) {
+        dist.set(ns, nc);
+        prev.set(ns, state);
+        heapPush(h, [nc, seq++, ns]);
+      }
+    }
+  }
+  if (!best) return null;
+  const cells = [];
+  for (let st = best[1]; st !== undefined; st = prev.get(st)) cells.push(st >> 2);
+  cells.reverse();
+  const pts = [p1, ...cells.map((c) => [X[c % W], Y[(c - (c % W)) / W]]), p2];
+  // drop repeated and collinear points
+  const out = [];
+  for (const p of pts) {
+    if (out.length && out[out.length - 1][0] === p[0] && out[out.length - 1][1] === p[1]) continue;
+    if (out.length >= 2) {
+      const [q, r] = [out[out.length - 2], out[out.length - 1]];
+      if ((q[0] === r[0] && r[0] === p[0]) || (q[1] === r[1] && r[1] === p[1])) out.pop();
+    }
+    out.push(p);
+  }
+  return out;
+}
+
 const inside = (b, x, y, m) => x > b.x + m && x < b.x + b.w - m && y > b.y + m && y < b.y + b.h - m;
 const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
@@ -782,6 +897,17 @@ export function layoutWalkthrough(doc) {
   }
 
   // ---- edge paths
+  // corridors for routing around nodes: lane gaps, row gaps, and the margin outside the grid
+  const corridorX = [];
+  const corridorY = [];
+  laneX.forEach((x0, l) => {
+    if (l + 1 < laneX.length) corridorX.push((x0 + laneW[l] + laneX[l + 1]) / 2);
+  });
+  if (laneX.length) corridorX.push(laneX[0] - G.laneGap / 2, laneX[laneX.length - 1] + laneW[laneX.length - 1] + G.laneGap / 2);
+  rowY.forEach((y0, r) => {
+    if (r + 1 < rowY.length) corridorY.push((y0 + rowH[r] + rowY[r + 1]) / 2);
+  });
+  if (rowY.length) corridorY.push(rowY[0] - G.rowGap / 2, rowY[rowY.length - 1] + rowH[rowY.length - 1] + G.rowGap / 2);
   const edges = {};
   doc.edges.forEach((e, i) => {
     const r = e.route || {};
@@ -795,13 +921,31 @@ export function layoutWalkthrough(doc) {
     } else {
       const { s1, s2 } = plan[e.id];
       d = curve(portPos[`${e.id}:from`], s1, portPos[`${e.id}:to`], s2);
+      // the curve runs through an unrelated node: route around the nodes instead
+      const crosses = (path) => {
+        const sp = samplePath(path);
+        return ids.some((id) => id !== e.from && id !== e.to && sp.some(([px, py]) => inside(nodes[id], px, py, 2)));
+      };
+      if (crosses(d)) {
+        const route = routeAround(portPos[`${e.id}:from`], s1, portPos[`${e.id}:to`], s2, Object.values(nodes), corridorX, corridorY);
+        if (route) {
+          const alt = polyline(route);
+          if (!crosses(alt)) d = alt;
+        }
+      }
     }
     const pts = samplePath(d);
     const mid = pointAtHalf(pts);
     edges[e.id] = { d, badgeAt: { x: round(mid.x), y: round(mid.y) }, length: round(mid.length), path: `/edges/${i}`, pts };
     // crossing: a sample strictly inside an unrelated node
     const hit = ids.find((id) => id !== e.from && id !== e.to && pts.some(([px, py]) => inside(nodes[id], px, py, 2)));
-    if (hit) issues.push({ path: `/edges/${i}`, code: "W_EDGE_CROSSES_NODE", message: `edge ${JSON.stringify(e.id)} runs through node ${JSON.stringify(hit)}; set route (from_side/to_side, via) or change lane/row` });
+    if (hit) {
+      issues.push({
+        path: `/edges/${i}`,
+        code: "W_EDGE_CROSSES_NODE",
+        message: `edge ${JSON.stringify(e.id)} runs through node ${JSON.stringify(hit)} and no free corridor was found; run \`iad layout\` to see node boxes and lane/row gaps, then set route.via through a gap (or from_side/to_side), or give one node another row`,
+      });
+    }
   });
 
   // ---- step badges per scenario (the reference map's runtime nudge, done at build time)
