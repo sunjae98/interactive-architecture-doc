@@ -129,7 +129,15 @@
   .case[aria-pressed="true"]{border-color:var(--cc);box-shadow:0 0 0 1px var(--cc) inset;background:var(--cc-bg);}
   .case[aria-pressed="true"]::before{opacity:1;}
 
-  .stage{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;align-items:start;}
+  /* Stage: the map and the controls are two joined panels so the narration can sit beside both
+     ("side") or, for a map too wide to fit beside it, between them ("stacked", set by the runtime on
+     #stage[data-fit]). Narrow screens (<= 1180px, data-fit "narrow") keep the narration under everything. */
+  .stage{display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-areas:"map aside" "ctrl aside";column-gap:12px;row-gap:0;align-items:start;}
+  .map-panel{grid-area:map;border-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0;}
+  .ctrl-panel{grid-area:ctrl;border-top:0;border-top-left-radius:0;border-top-right-radius:0;}
+  .stage[data-fit="stacked"]{grid-template-columns:minmax(0,1fr);grid-template-areas:"map" "aside" "ctrl";}
+  .stage[data-fit="stacked"] aside.detail{position:static;border-radius:0;border-bottom:0;border-top:1px solid var(--border-soft);}
+  .stage[data-fit="stacked"] .tri{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));}
   .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;min-width:0;}
   .diagram{padding:8px 6px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;}
   /* When the map scrolls sideways, the clipped edge fades out (a hint that there is more). */
@@ -141,6 +149,9 @@
   /* Map scale stays between 0.85x (node titles >= 11px) and 1.15x (small maps are not blown up):
      --map-w is the viewBox width. Below 0.85x the panel scrolls sideways instead of shrinking. */
   .diagram svg{display:block;margin:0 auto;width:min(100%, calc(var(--map-w) * 1.15));min-width:calc(var(--map-w) * .85);height:auto;}
+  /* beside the narration a map may go down to 0.80x (titles ~10.4px); the runtime picks "side" only
+     when it fits there at that scale */
+  @media (min-width:1181px){.stage[data-fit="side"] .diagram svg{min-width:calc(var(--map-w) * .8);}}
 
   /* ==== Map ================================================================
      Every rule starts with .wt-map: the export copies exactly these rules into the SVG file.
@@ -247,7 +258,7 @@
   ol.steps li.cur::before{background:var(--cc);color:var(--surface);}
   ol.steps li.done{opacity:.72;}
 
-  aside.detail{position:sticky;top:12px;padding:14px 16px 16px;display:flex;flex-direction:column;gap:10px;}
+  aside.detail{grid-area:aside;position:sticky;top:12px;padding:14px 16px 16px;display:flex;flex-direction:column;gap:10px;}
   .dh{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .chip{display:inline-block;font:700 11.5px var(--font-mono);border-radius:6px;padding:1px 8px;background:var(--cc-bg);color:var(--cc-tx);border:1px solid var(--cc);}
   .chip.role{background:var(--surface-2);border-color:var(--border);color:var(--muted);}
@@ -313,8 +324,8 @@
   footer{font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:10px;}
 
   @media (max-width:1180px){
-    .stage{grid-template-columns:1fr;}
-    aside.detail{position:static;}
+    .stage{grid-template-columns:1fr;grid-template-areas:"map" "ctrl" "aside";}
+    aside.detail{position:static;margin-top:12px;}
     .below{grid-template-columns:1fr 1fr;}
     .below .table-card{grid-column:1 / -1;order:-1;}
   }
@@ -363,13 +374,16 @@
 </div>
 </section>
 
-<div class="stage">
-<div class="panel">
+<div class="stage" id="stage" data-fit="side">
+<div class="panel map-panel">
 <div class="map-wrap" id="mapWrap">
 <div class="diagram" id="diagram">
 {{IAD_WT_MAP}}
 </div>
 </div>
+</div>
+<aside class="panel detail" id="detail"></aside>
+<div class="panel ctrl-panel">
 <div class="ctrl" role="group" aria-label="{{t:progress_label}}">
   <button type="button" class="btn" id="prev">{{t:prev}}</button>
   <button type="button" class="btn pri" id="next">{{t:next_step}}</button>
@@ -386,7 +400,6 @@
 <div class="prog" aria-hidden="true"><i id="prog"></i></div>
 <ol class="steps" id="steps" aria-label="{{t:steps_label}}"></ol>
 </div>
-<aside class="panel detail" id="detail"></aside>
 </div>
 
 {{IAD_WT_BELOW}}
@@ -498,6 +511,13 @@
     if (x1 >= left + pad && x2 <= left + view - pad) return null;
     var target = x2 - x1 > view - 2 * pad ? x1 - pad : (x1 + x2) / 2 - view / 2;
     return Math.max(0, Math.min(max, Math.round(target)));
+  }
+
+  // Desktop stage mode: "side" when the map fits beside the narration at >= 0.80x, else "stacked"
+  // (map full width, narration under it). stageW: the stage's width; asideW: narration column +
+  // gap; chrome: panel border + map padding.
+  function chooseFit(stageW, vbW, asideW, chrome) {
+    return (stageW - asideW - chrome) / vbW >= 0.8 ? "side" : "stacked";
   }
 
   function easeInOut(f) { return f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2; }
@@ -694,7 +714,20 @@
     else diagramEl.scrollLeft = left;
   }
   diagramEl.addEventListener("scroll", updateFade, { passive: true });
-  window.addEventListener("resize", updateFade);
+
+  // ---- stage mode: decided at load and on resize (debounced); CSS does the rest
+  var stageEl = document.getElementById("stage");
+  function decideFit() {
+    var narrow = window.matchMedia && window.matchMedia("(max-width:1180px)").matches;
+    var mode = narrow ? "narrow" : chooseFit(stageEl.clientWidth, svg.viewBox.baseVal.width, 340 + 12, 2 + 12);
+    if (stageEl.getAttribute("data-fit") !== mode) stageEl.setAttribute("data-fit", mode);
+    updateFade();
+  }
+  var fitTimer = null;
+  window.addEventListener("resize", function () {
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(decideFit, 120);
+  });
 
   function renderStep() {
     var sc = SC[cur];
@@ -818,8 +851,8 @@
     else if (ev.key === "ArrowLeft") { stopPlay(); go(step - 1); }
   });
 
+  decideFit();
   pickScenario(0);
-  updateFade();
 
   // ---- Theme toggle: flips data-theme on <html> (set early in <head>) and remembers the choice.
   // Without a saved choice the page keeps following the OS preference.
