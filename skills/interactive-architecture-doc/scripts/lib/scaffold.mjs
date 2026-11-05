@@ -50,7 +50,8 @@ const TEXT = {
 
 // v3 walkthrough: `lanes` nodes in a chain (client -> app ... -> store), one file edge between
 // neighbors, and per scenario `steps` steps that walk the chain (the last step also carries any
-// edges the earlier steps did not reach, so every edge is used).
+// edges the earlier steps did not reach, so every edge is used). No node has a lane: the map is
+// fully automatic (a chain already lays out left to right), so nodes added later are placed too.
 export function scaffold({ lang = "en", steps = 3, scenarios = ["default"], lanes = 3 } = {}) {
   const T = TEXT[lang];
   const kindOf = (i) => (i === 0 ? "client" : i === lanes - 1 ? "store" : "app");
@@ -60,7 +61,6 @@ export function scaffold({ lang = "en", steps = 3, scenarios = ["default"], lane
     title: T.node(i + 1),
     mono: T.mono,
     facts: [T.fact(i + 1)],
-    lane: i,
   }));
   const edges = nodes.slice(1).map((n, i) => ({ id: `edge-${i + 1}`, from: nodes[i].id, to: n.id, kind: "file" }));
   const stepList = () =>

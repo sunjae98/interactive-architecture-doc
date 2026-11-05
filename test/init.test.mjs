@@ -51,14 +51,15 @@ for (const combo of COMBOS) {
     }));
 }
 
-test("init defaults: en, v3 skeleton with 3 chained lanes and one scenario of 3 steps", () =>
+test("init defaults: en, fully automatic v3 skeleton with a 3-node chain and one scenario of 3 steps", () =>
   withDir((dir) => {
     const out = join(dir, "doc.json");
     assert.equal(run("init", out).status, 0);
     const doc = JSON.parse(readFileSync(out, "utf8"));
     assert.equal(doc.meta.lang, "en");
     assert.ok(!("steps" in doc) && !("board" in doc), "no v2 fields");
-    assert.deepEqual(doc.nodes.map((n) => [n.kind, n.lane]), [["client", 0], ["app", 1], ["store", 2]]);
+    assert.deepEqual(doc.nodes.map((n) => n.kind), ["client", "app", "store"]);
+    assert.ok(doc.nodes.every((n) => !("lane" in n) && !("row" in n)), "no layout hints: the map is automatic");
     assert.deepEqual(doc.edges.map((e) => [e.from, e.to]), [["node-1", "node-2"], ["node-2", "node-3"]]);
     assert.deepEqual(doc.scenarios.map((s) => [s.id, s.steps.length]), [["default", 3]]);
     assert.ok(!("gauges" in doc));
@@ -125,4 +126,16 @@ test("formatJson: round-trips and keeps short values on one line", async () => {
   assert.ok(text.includes('"token": {"text":"[데이터]","kind":"file"}'), "short objects stay on one line");
   assert.ok(text.split("\n").every((l) => l.length <= 140), "long values are broken into lines");
   assert.deepEqual(JSON.parse(formatJson({ s: "a\n\"b\"", n: null, e: [], o: {} })), { s: "a\n\"b\"", n: null, e: [], o: {} });
+});
+
+test("init skeleton: the automatic chain renders left to right, and an added node is placed automatically", async () => {
+  const { scaffold } = await import("../skills/interactive-architecture-doc/scripts/lib/scaffold.mjs");
+  const { layoutWalkthrough } = await import("../skills/interactive-architecture-doc/scripts/lib/walkthrough-layout.mjs");
+  const doc = scaffold({ lanes: 4 });
+  const L = layoutWalkthrough(doc);
+  assert.deepEqual(doc.nodes.map((n) => L.nodes[n.id].lane), [0, 1, 2, 3]);
+  doc.nodes.push({ id: "extra", kind: "app", title: "[Extra]", facts: ["[x]"] });
+  doc.edges.push({ id: "edge-x", from: "node-2", to: "extra", kind: "text" });
+  doc.scenarios[0].steps[0].edges.push("edge-x");
+  assert.deepEqual(validate(doc).errors, []);
 });
