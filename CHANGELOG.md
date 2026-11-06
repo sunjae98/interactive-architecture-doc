@@ -15,6 +15,10 @@
   on hover and in the narration. `W_TOKEN_LONG` flags tokens that will be cut.
 - Gauge labels stay inside the gauge: a longer label is cut with `…` (whole on hover), `W_TEXT_LONG`
   reports it, and the self-check fails when a label spills out of its gauge.
+- Edges and step badges keep off group titles: a long edge across several groups runs in the corridor
+  under their titles, badges pick a spot clear of them, and an edge that still runs over a title is
+  `W_EDGE_CROSSES_NODE` (a crowded badge's `W_BADGE_CROWDED` counts titles too). The layout returns the
+  title areas as `titles`.
 
 ## 3.0.0 — 2026-11-05
 

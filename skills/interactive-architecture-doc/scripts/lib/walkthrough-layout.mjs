@@ -585,16 +585,18 @@ function heapPop(h) {
   return top;
 }
 
-// p1/p2: ports on sides s1/s2; boxes: every node box; xs/ys: corridor lines. Returns a point list or null.
-export function routeAround(p1, s1, p2, s2, boxes, xs, ys) {
+// p1/p2: ports on sides s1/s2; boxes: every node box; xs/ys: corridor lines; keepOut: more areas to
+// avoid, taken as they are (group titles). Returns a point list or null.
+export function routeAround(p1, s1, p2, s2, boxes, xs, ys, keepOut = []) {
   const G = GEOMETRY_WT;
   const m = 6;
   const obs = boxes.map((b) => ({ x1: b.x - m, y1: b.y - m, x2: b.x + b.w + m, y2: b.y + b.h + m }));
+  for (const k of keepOut) obs.push({ x1: k.x, y1: k.y, x2: k.x + k.w, y2: k.y + k.h, keep: true });
   const stub = 14;
   const a = [p1[0] + NORMAL[s1][0] * stub, p1[1] + NORMAL[s1][1] * stub];
   const z = [p2[0] + NORMAL[s2][0] * stub, p2[1] + NORMAL[s2][1] * stub];
-  const X = [...new Set([...xs, a[0], z[0], ...obs.flatMap((o) => [o.x1 - G.laneGap / 4, o.x2 + G.laneGap / 4])].map(round))].sort((u, v) => u - v);
-  const Y = [...new Set([...ys, a[1], z[1], ...obs.flatMap((o) => [o.y1 - G.rowGap / 4, o.y2 + G.rowGap / 4])].map(round))].sort((u, v) => u - v);
+  const X = [...new Set([...xs, a[0], z[0], ...obs.flatMap((o) => (o.keep ? [o.x2 + 6] : [o.x1 - G.laneGap / 4, o.x2 + G.laneGap / 4]))].map(round))].sort((u, v) => u - v);
+  const Y = [...new Set([...ys, a[1], z[1], ...obs.flatMap((o) => (o.keep ? [] : [o.y1 - G.rowGap / 4, o.y2 + G.rowGap / 4]))].map(round))].sort((u, v) => u - v);
   const blocked = (x, y) => obs.some((o) => x > o.x1 && x < o.x2 && y > o.y1 && y < o.y2);
   const segFree = (xa, ya, xb, yb) =>
     !obs.some((o) => Math.max(xa, xb) > o.x1 && Math.min(xa, xb) < o.x2 && Math.max(ya, yb) > o.y1 && Math.min(ya, yb) < o.y2);
@@ -938,6 +940,16 @@ export function layoutWalkthrough(doc) {
 
   // an edge end's box: its node, or the border of its group
   const boxOf = (id) => nodes[id] || groupBox[id];
+  // group title areas (title and meta lines at the group's top left): edges route around them, badges
+  // stay off them. Under each title runs a free horizontal corridor down to the members' margin.
+  const titles = groups.map((g) => {
+    const text = Math.max(measure(g.title, TEXT_WT.groupTitle), g.meta ? measure(g.meta, TEXT_WT.groupMeta) : 0);
+    return { group: g.id, x: g.x + 6, y: g.y + 4, w: Math.min(g.w - 12, text + 12), h: g.meta ? 32 : 18 };
+  });
+  const titleCorridors = groups.map((g) => g.y + (g.meta ? 36 : 22) + ((g.meta ? G.groupTopMeta : G.groupTop) - 6 - (g.meta ? 36 : 22)) / 2);
+  const inTitle = (t, px, py) => px > t.x && px < t.x + t.w && py > t.y && py < t.y + t.h;
+  // titles an edge must not pass over: all but those of the groups it ends at
+  const titlesFor = (e) => titles.filter((t) => t.group !== e.from && t.group !== e.to);
 
   // ---- edge ports
   // Each edge end lives on one side of its node. Ends of the same node pair on one side share a
@@ -1065,11 +1077,12 @@ export function layoutWalkthrough(doc) {
   const edges = {};
   const routed = {}; // edge id -> point list of an automatic detour (offset below where channels are shared)
   const dOf = {};
-  const crossesFor = (e) => {
+  const crossesFor = (e, withTitles = false) => {
     const rel = related(e);
+    const keep = withTitles ? titlesFor(e) : [];
     return (path) => {
       const sp = samplePath(path);
-      return ids.some((id) => !rel.has(id) && sp.some(([px, py]) => inside(nodes[id], px, py, 2)));
+      return ids.some((id) => !rel.has(id) && sp.some(([px, py]) => inside(nodes[id], px, py, 2))) || keep.some((t) => sp.some(([px, py]) => inTitle(t, px, py)));
     };
   };
   doc.edges.forEach((e) => {
@@ -1084,13 +1097,13 @@ export function layoutWalkthrough(doc) {
     } else {
       const { s1, s2 } = plan[e.id];
       d = curve(portPos[`${e.id}:from`], s1, portPos[`${e.id}:to`], s2);
-      // the curve runs through an unrelated node: route around the nodes instead
-      const crosses = crossesFor(e);
+      // the curve runs through an unrelated node or over a group title: route around them instead
+      const crosses = crossesFor(e, true);
       if (crosses(d)) {
-        const route = routeAround(portPos[`${e.id}:from`], s1, portPos[`${e.id}:to`], s2, Object.values(nodes), corridorX, corridorY);
+        const route = routeAround(portPos[`${e.id}:from`], s1, portPos[`${e.id}:to`], s2, Object.values(nodes), corridorX, [...corridorY, ...titleCorridors], titlesFor(e));
         if (route) {
           const alt = polyline(route);
-          if (!crosses(alt)) {
+          if (!crosses(alt) || (crossesFor(e)(d) && !crossesFor(e)(alt))) {
             d = alt;
             routed[e.id] = route;
           }
@@ -1137,7 +1150,7 @@ export function layoutWalkthrough(doc) {
     if (!any) continue;
     const e = doc.edges[edgeIndex[id]];
     const alt = polyline(moved);
-    if (!crossesFor(e)(alt)) dOf[id] = alt;
+    if (!crossesFor(e, true)(alt)) dOf[id] = alt;
   }
 
   doc.edges.forEach((e, i) => {
@@ -1154,6 +1167,15 @@ export function layoutWalkthrough(doc) {
         code: "W_EDGE_CROSSES_NODE",
         message: `edge ${JSON.stringify(e.id)} runs through node ${JSON.stringify(hit)} and no free corridor was found; run \`iad layout\` to see node boxes and lane/row gaps, then set route.via through a gap (or from_side/to_side), or give one node another row`,
       });
+    } else {
+      const over = titlesFor(e).find((t) => pts.some(([px, py]) => inTitle(t, px, py)));
+      if (over) {
+        issues.push({
+          path: `/edges/${i}`,
+          code: "W_EDGE_CROSSES_NODE",
+          message: `edge ${JSON.stringify(e.id)} runs over the title of group ${JSON.stringify(over.group)} and no free corridor was found; set route.via below the title (\`iad layout\` shows the gaps) or move one of its nodes`,
+        });
+      }
     }
   });
 
@@ -1163,7 +1185,8 @@ export function layoutWalkthrough(doc) {
   const badges = {};
   const minDist = 2 * G.badgeR + G.badgeGap;
   const nodeBoxes = Object.values(nodes);
-  const clearOfNodes = (p) => !nodeBoxes.some((b) => p.x > b.x - G.badgeR - G.badgeGap && p.x < b.x + b.w + G.badgeR + G.badgeGap && p.y > b.y - G.badgeR - G.badgeGap && p.y < b.y + b.h + G.badgeR + G.badgeGap);
+  const keepClear = [...nodeBoxes, ...titles];
+  const clearOfNodes = (p) => !keepClear.some((b) => p.x > b.x - G.badgeR - G.badgeGap && p.x < b.x + b.w + G.badgeR + G.badgeGap && p.y > b.y - G.badgeR - G.badgeGap && p.y < b.y + b.h + G.badgeR + G.badgeGap);
   const SPOTS = [[0.5, 0], [0.5, -1], [0.5, 1], [0.35, 0], [0.65, 0], [0.35, -1], [0.65, 1], [0.25, 0], [0.75, 0], [0.2, -1], [0.8, 1]];
   doc.scenarios.forEach((sc, si) => {
     const placed = [];
@@ -1205,7 +1228,7 @@ export function layoutWalkthrough(doc) {
         issues.push({
           path: `/scenarios/${si}/steps/${ti}`,
           code: "W_BADGE_CROWDED",
-          message: `no clear spot for the step badge: too many steps of scenario ${JSON.stringify(sc.id)} start on the same edge; it overlaps another badge or a box`,
+          message: `no clear spot for the step badge: too many steps of scenario ${JSON.stringify(sc.id)} start on the same edge; it overlaps another badge, a box or a group title`,
         });
       }
       at = { x: round(at.x), y: round(at.y) };
@@ -1232,5 +1255,5 @@ export function layoutWalkthrough(doc) {
   const viewBox = [round(minX - G.pad), round(minY - G.pad), round(maxX - minX + 2 * G.pad), round(maxY - minY + 2 * G.pad)];
   for (const e of Object.values(edges)) delete e.pts;
 
-  return { viewBox, lanes: laneX.map((x0, l) => ({ x: x0, w: laneW[l] })), rows: rowY.map((y0, r) => ({ y: y0, h: rowH[r] })), nodes, groups, edges, badges, issues };
+  return { viewBox, lanes: laneX.map((x0, l) => ({ x: x0, w: laneW[l] })), rows: rowY.map((y0, r) => ({ y: y0, h: rowH[r] })), nodes, groups, titles, edges, badges, issues };
 }
