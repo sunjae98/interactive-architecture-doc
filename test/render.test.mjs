@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { renderHtml, ValidationFailed, TEMPLATE_PATH, fontFaces, writeFileAtomic } from "../skills/interactive-architecture-doc/scripts/lib/render.mjs";
 import { UI } from "../skills/interactive-architecture-doc/scripts/lib/i18n.mjs";
+import { MAX_SCENARIOS } from "../skills/interactive-architecture-doc/scripts/lib/validate.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SKILL = join(ROOT, "skills/interactive-architecture-doc");
@@ -74,13 +75,29 @@ test("tokens: text on surfaces >= 4.5:1; kind and scenario text on their own bg 
   for (const [theme, t] of Object.entries(themes)) {
     const pairs = [["--text", "--surface"], ["--text", "--bg"], ["--muted", "--surface"], ["--muted", "--bg"], ["--muted", "--surface-2"], ["--err-tx", "--err-bg"]];
     for (const k of ["client", "infra", "app", "store", "tool", "dep"]) pairs.push([`--${k}-tx`, `--${k}-bg`]);
-    for (let i = 1; i <= 6; i++) pairs.push([`--s${i}-tx`, `--s${i}-bg`]);
+    for (let i = 1; i <= MAX_SCENARIOS; i++) pairs.push([`--s${i}-tx`, `--s${i}-bg`]);
     for (const [fg, bg] of pairs) {
       const ratio = contrast(t[fg], t[bg]);
       if (ratio < 4.5) fails.push(`${theme} ${fg} on ${bg}: ${ratio.toFixed(2)}`);
     }
   }
   assert.deepEqual(fails, []);
+});
+
+test("tokens: one scenario color slot per allowed scenario, mapped by [data-s] and distinct in both themes", () => {
+  const src = readFileSync(TEMPLATE_PATH, "utf8");
+  for (const [theme, t] of Object.entries(themeTokens())) {
+    const accents = [];
+    for (let i = 1; i <= MAX_SCENARIOS; i++) {
+      for (const suf of ["", "-bg", "-tx"]) assert.ok(t[`--s${i}${suf}`], `${theme}: --s${i}${suf} missing`);
+      accents.push(t[`--s${i}`].toLowerCase());
+    }
+    assert.equal(new Set(accents).size, MAX_SCENARIOS, `${theme}: scenario accents repeat`);
+  }
+  for (let i = 1; i <= MAX_SCENARIOS; i++) {
+    assert.match(src, new RegExp(`\\[data-s="s${i}"\\]\\{--cc:var\\(--s${i}\\);--cc-bg:var\\(--s${i}-bg\\);--cc-tx:var\\(--s${i}-tx\\);\\}`));
+  }
+  assert.ok(!themeTokens().light[`--s${MAX_SCENARIOS + 1}`], "a color slot beyond MAX_SCENARIOS");
 });
 
 test("theme: toggle button and UI strings exist (behaviour: test/runtime.test.mjs)", () => {
@@ -219,6 +236,13 @@ test("render: muted lines get class \"nl m\"", () => {
   const { html } = renderHtml(doc);
   assert.match(html, /<text class="nl" x="[\d.]+" y="[\d.]+">plain<\/text>/);
   assert.match(html, /<text class="nl m" x="[\d.]+" y="[\d.]+">dim<\/text>/);
+});
+
+test("render: eight scenarios get color slots s1..s8", () => {
+  const d = load();
+  while (d.scenarios.length < 8) d.scenarios.push({ ...JSON.parse(JSON.stringify(d.scenarios[1])), id: `extra-${d.scenarios.length}` });
+  const { html } = renderHtml(d);
+  for (let i = 1; i <= 8; i++) assert.match(html, new RegExp(`class="case" data-s="s${i}"`));
 });
 
 test("render: refuses documents with errors", () => {

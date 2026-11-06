@@ -46,7 +46,7 @@ ask first instead of inventing content.
    `tool`, `dep`), a short title, a mono line (route, resource, version) and 1-4 facts.
 3. **Arrows**: which component sends what to which: `file` (bulk data), `text` (requests, text),
    `ctrl` (control, responses, callbacks).
-4. **Scenarios** (1-6): the normal path plus the interesting variations (failure, retry, a second
+4. **Scenarios** (1-8): the normal path plus the interesting variations (failure, retry, a second
    turn, a rejection). For each step: which arrows carry it, a short token ("PDF 12MB", "429"), what
    moves, where it lives, what happens if it fails.
 5. **State worth showing**: a gauge that fills and empties (disk use, retries, queue depth), nodes a

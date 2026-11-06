@@ -16,7 +16,7 @@ slot is a render error.
 | `{{IAD_TITLE}}` | `meta.title` as plain text |
 | `{{IAD_FONTS}}` | `<style>` with `@font-face` rules for every `assets/fonts/*.woff2` (base64), or empty when there are none. `iad-sans.woff2` → family "IAD Sans", `geist-mono.woff2` → "Geist Mono" (with their variable weight ranges); any other file uses its basename, reduced to `[A-Za-z0-9 _-]` |
 | `{{IAD_WT_HEADER}}` | `<h1>`, the intro (`.sub`) and the fact chips (`.facts > .fact`) |
-| `{{IAD_WT_CASES}}` | one `button.case` per scenario with `data-s="s1".."s6"` (its color slot) and `data-scenario` |
+| `{{IAD_WT_CASES}}` | one `button.case` per scenario with `data-s="s1".."s8"` (its color slot) and `data-scenario` |
 | `{{IAD_WT_MAP}}` | the whole map as inline `<svg id="wtMap" class="wt-map">`, computed by `scripts/lib/walkthrough-layout.mjs` and written by `scripts/lib/walkthrough-svg.mjs` |
 | `{{IAD_WT_BELOW}}` | `.below`: the summary (`tldr`), one `.table-card` per table and the legend card; then `.extra` with callouts, considerations and tool examples |
 | `{{IAD_WT_FOOTER}}` | `<footer>` with `meta.source`, or empty |
@@ -52,7 +52,7 @@ Neutral **slate**; dark mode uses the Radix dark scales.
 | `--text`, `--muted` | text, secondary text |
 | `--primary`, `--primary-bg` | focus rings |
 | `--<kind>-bg` / `-bd` / `-tx` for `client`, `infra`, `app`, `store`, `tool`, `dep` | node fill, border, mono and line text; also the legend swatches, the token chips and gauges of nodes of that kind |
-| `--s1` … `--s6` with `-bg` / `-tx` | scenario color slots: card accent, current edges and nodes, badges, step list, chips. `[data-s="sN"]` maps them to `--cc`, `--cc-bg`, `--cc-tx` |
+| `--s1` … `--s8` with `-bg` / `-tx` | scenario color slots: card accent, current edges and nodes, badges, step list, chips. `[data-s="sN"]` maps them to `--cc`, `--cc-bg`, `--cc-tx` |
 | `--err`, `--err-bg`, `--err-tx` | error tokens and markers, the "if it fails" dot |
 | `--dim` | opacity of everything outside the current scenario (0.15 light, 0.14 dark) |
 

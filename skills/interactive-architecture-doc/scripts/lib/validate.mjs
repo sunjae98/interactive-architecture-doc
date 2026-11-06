@@ -11,7 +11,7 @@ export const KINDS = ["client", "infra", "app", "store", "tool", "dep"];
 export const EDGE_KINDS = ["file", "text", "ctrl"];
 export const TOKEN_KINDS = ["file", "text", "ctrl", "err"];
 export const GROUP_TONES = ["default", "muted"];
-export const MAX_SCENARIOS = 6;
+export const MAX_SCENARIOS = 8;
 export const MAX_NODES = 64; // keeps the build-time layout (routing around boxes) well under a second
 export const MAX_SUB = 3;
 export const MAX_GRID = 64; // lane / row / span / rows; coordinates and sizes stay within MAX_COORD
@@ -39,7 +39,7 @@ export const RULES = [
   { code: "E_V2_WALKTHROUGH", level: "error", summary: "The document is a v2 walkthrough (top-level `steps` or `board`); v3 replaced that format. Rewrite it by hand (references/migration-v2.md)." },
   { code: "E_EDGE_UNKNOWN", level: "error", summary: "A step names an edge id that does not exist." },
   { code: "E_STEP_EMPTY", level: "error", summary: "A step has neither `edges` nor `nodes`, so nothing would be highlighted." },
-  { code: "E_SCENARIO_LIMIT", level: "error", summary: "More than 6 scenarios (there are 6 scenario colors)." },
+  { code: "E_SCENARIO_LIMIT", level: "error", summary: "More than 8 scenarios (there are 8 scenario colors)." },
   { code: "E_NODE_LIMIT", level: "error", summary: "More than 64 nodes; split the map into several documents." },
   { code: "E_GAUGE_UNKNOWN", level: "error", summary: "A step (`gauges`) or a scenario (`gauge_empty`) names a gauge id that does not exist." },
   { code: "E_GAUGE_RANGE", level: "error", summary: "A gauge value is outside 0..1." },

@@ -104,7 +104,7 @@ test("init: bad arguments exit 2 and write nothing", () =>
       [out, "--lanes", "1"],
       [out, "--lanes", "9"],
       [out, "--lanes", "x"],
-      [out, "--scenarios", "a,b,c,d,e,f,g"],
+      [out, "--scenarios", "a,b,c,d,e,f,g,h,i"],
       [out, "--bogus"],
       [out, "-o", join(dir, "x.json")],
     ];

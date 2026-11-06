@@ -56,7 +56,7 @@ const FIXTURES = [
   ["E_V2_WALKTHROUGH", (d) => { d.board = []; }],
   ["E_EDGE_UNKNOWN", (d) => { step(d, 0, 0).edges = ["nope"]; }],
   ["E_STEP_EMPTY", (d) => { delete step(d, 1, 1).nodes; }],
-  ["E_SCENARIO_LIMIT", (d) => { for (let i = 0; i < 5; i++) d.scenarios.push({ ...clone(d.scenarios[1]), id: `extra-${i}` }); }],
+  ["E_SCENARIO_LIMIT", (d) => { for (let i = 0; i < 7; i++) d.scenarios.push({ ...clone(d.scenarios[1]), id: `extra-${i}` }); }],
   ["E_NODE_LIMIT", (d) => { for (let i = 0; i < 60; i++) d.nodes.push({ id: `extra-${i}`, kind: "app", title: "X", facts: ["f"] }); }],
   ["E_GAUGE_UNKNOWN", (d) => { step(d, 0, 2).gauges = { nope: { value: 0.5, label: "x" } }; }],
   ["E_GAUGE_UNKNOWN", (d) => { d.scenarios[1].gauge_empty = { nope: "x" }; }],
@@ -204,6 +204,14 @@ for (const [code, mutate, base = BASE] of [...FIXTURES, ...OVERVIEW_FIXTURES]) {
     for (const i of [...r.errors, ...r.warnings]) assert.match(i.path, /^(\/.*)?$/);
   });
 }
+
+test("MAX_SCENARIOS scenarios validate; one more is E_SCENARIO_LIMIT", () => {
+  const d = clone(BASE);
+  while (d.scenarios.length < 8) d.scenarios.push({ ...clone(d.scenarios[1]), id: `extra-${d.scenarios.length}` });
+  assert.equal(validate(d).ok, true, JSON.stringify(validate(d).errors));
+  d.scenarios.push({ ...clone(d.scenarios[1]), id: "ninth" });
+  assert.deepEqual(validate(d).errors.map((e) => e.code), ["E_SCENARIO_LIMIT"]);
+});
 
 test("every rule code has at least one failing fixture", () => {
   const covered = new Set([...FIXTURES, ...OVERVIEW_FIXTURES].map(([c]) => c));

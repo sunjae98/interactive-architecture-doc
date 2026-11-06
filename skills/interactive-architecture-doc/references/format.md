@@ -31,7 +31,7 @@ and the legend.
 | `legend` | yes | object | see below |
 | `nodes` | yes | array (1..64) | the boxes of the map |
 | `edges` | yes | array (≥1) | the arrows between them |
-| `scenarios` | yes | array (1..6) | one card each; each has its own steps |
+| `scenarios` | yes | array (1..8) | one card each; each has its own steps |
 | `groups` | no | array | dashed boxes around nodes |
 | `gauges` | no | array | a fill gauge drawn inside a node, set by steps |
 | `tldr` | no | object | `{title?, points: string[]}`: a numbered summary under the map |
@@ -209,7 +209,7 @@ listed in [format-overview.md](format-overview.md) and apply here too.
 | `E_V2_WALKTHROUGH` | error | The document is a v2 walkthrough (top-level `steps` or `board`); v3 replaced that format. Rewrite it by hand (references/migration-v2.md). |
 | `E_EDGE_UNKNOWN` | error | A step names an edge id that does not exist. |
 | `E_STEP_EMPTY` | error | A step has neither `edges` nor `nodes`, so nothing would be highlighted. |
-| `E_SCENARIO_LIMIT` | error | More than 6 scenarios (there are 6 scenario colors). |
+| `E_SCENARIO_LIMIT` | error | More than 8 scenarios (there are 8 scenario colors). |
 | `E_NODE_LIMIT` | error | More than 64 nodes; split the map into several documents. |
 | `E_GAUGE_UNKNOWN` | error | A step (`gauges`) or a scenario (`gauge_empty`) names a gauge id that does not exist. |
 | `E_GAUGE_RANGE` | error | A gauge value is outside 0..1. |
