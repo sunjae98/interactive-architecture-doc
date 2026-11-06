@@ -3,7 +3,7 @@
 
 import { hasPlaceholder } from "./markup.mjs";
 import { layoutOverview } from "./layout.mjs";
-import { layoutWalkthrough, SIDES, isValidPath, MAX_COORD } from "./walkthrough-layout.mjs";
+import { layoutWalkthrough, SIDES, isValidPath, MAX_COORD, groupMembers, endNodes } from "./walkthrough-layout.mjs";
 
 // Walkthrough (v3) node kinds; their colors follow the reference design (client crimson, infra
 // violet, app amber, store green, tool gray, dep blue). What each kind means is set by `legend.nodes`.
@@ -48,19 +48,19 @@ export const RULES = [
   { code: "E_POS_PARTIAL", level: "error", summary: "A node has only one of `x` / `y`; absolute positions need both." },
   { code: "E_LAYOUT_OVERLAP", level: "error", summary: "Two nodes, two groups, or a node and a group it does not belong to overlap on the map." },
   { code: "E_ROUTE_PATH", level: "error", summary: "`route.d` is not an absolute SVG path: it must start with M and use M L H V C Q Z with whole argument groups (M/L 2, H/V 1, C 6, Q 4, Z 0) of finite numbers within ±1e5." },
-  { code: "E_EDGE_SELF", level: "error", summary: "An edge starts and ends at the same node (use `step.nodes` to highlight a single node)." },
+  { code: "E_EDGE_SELF", level: "error", summary: "An edge starts and ends at the same node, or connects a group with one of its own members (use `step.nodes` to highlight a single node)." },
   { code: "E_TABLE_SHAPE", level: "error", summary: "A table row does not have one cell per column." },
   { code: "W_EDGE_UNUSED", level: "warning", summary: "An edge is not used by any step of any scenario." },
-  { code: "W_NODE_ISOLATED", level: "warning", summary: "A node has no edge." },
+  { code: "W_NODE_ISOLATED", level: "warning", summary: "A node has no edge (an edge to or from its group counts)." },
   { code: "W_EDGE_CROSSES_NODE", level: "warning", summary: "An edge runs through a node it does not connect; set `route` or move a node." },
   { code: "W_FACTS_MISSING", level: "warning", summary: "A node has no `facts`, so clicking it shows an empty panel." },
   { code: "W_POS_IGNORED", level: "warning", summary: "A node has both `x`/`y` and `lane`/`row`; `x`/`y` wins and `lane`/`row` are ignored." },
   { code: "W_GAUGE_UNUSED", level: "warning", summary: "No step sets this gauge, so it always shows its empty state." },
   { code: "W_LANE_EMPTY", level: "warning", summary: "Lane hints leave lanes without any node; they are drawn without width, but a lower hint is usually meant." },
   { code: "W_BADGE_CROWDED", level: "warning", summary: "A step badge found no spot clear of the scenario's other badges and of node boxes (many steps start on one short edge); it overlaps." },
-  { code: "E_NODE_UNKNOWN", level: "error", summary: "An edge, step, gauge, marker, skip entry or overview path names a node id that does not exist." },
+  { code: "E_NODE_UNKNOWN", level: "error", summary: "An edge, step, gauge, marker, skip entry or overview path names a node id that does not exist (an edge end may also be a group id)." },
   { code: "E_PATH_UNKNOWN", level: "error", summary: "Overview: a `label_by_path` key is not a path id." },
-  { code: "E_GROUP_UNKNOWN", level: "error", summary: "A node's `group` (walkthrough) or `layers[].group` (overview) is not a group id, or an overview group's layers are not contiguous." },
+  { code: "E_GROUP_UNKNOWN", level: "error", summary: "A node's `group` (walkthrough) or `layers[].group` (overview) is not a group id, an edge ends at a group without members, or an overview group's layers are not contiguous." },
   { code: "E_LAYOUT", level: "error", summary: "Overview: the grid cannot hold the layer (`meta.columns` outside 2..4, a node outside the grid or on another node, a boundary on the first layer, `rows` with `code` or with `tone: outer`)." },
   { code: "E_EDGE_LAYER", level: "error", summary: "Overview: an edge does not connect two nodes in adjacent layers." },
   { code: "E_PATH_DISCONNECTED", level: "error", summary: "Overview: a path node has no edge to another node of the same path." },
@@ -358,13 +358,22 @@ function checkSemantics(doc, out) {
   const missingKinds = KINDS.filter((k) => usedKinds.has(k) && !Object.hasOwn(doc.legend.nodes, k));
   if (missingKinds.length) report(out, "/legend/nodes", "E_LEGEND_MISSING_KIND", `legend.nodes is missing kind(s) used by nodes: ${missingKinds.join(", ")}`);
 
-  // edges
+  // edges: each end is a node id or a group id (the arrow meets the group's border)
+  const members = groupMembers(doc);
+  const groupOf = Object.fromEntries(doc.nodes.map((n) => [n.id, n.group]));
   const linked = new Set();
   doc.edges.forEach((e, i) => {
-    nodeRef(e.from, `/edges/${i}/from`);
-    nodeRef(e.to, `/edges/${i}/to`);
-    if (e.from === e.to) report(out, `/edges/${i}`, "E_EDGE_SELF", `edge ${q(e.id)} starts and ends at ${q(e.from)}; a step on one node uses step.nodes instead`);
-    linked.add(e.from).add(e.to);
+    for (const key of ["from", "to"]) {
+      const id = e[key];
+      const at = `/edges/${i}/${key}`;
+      if (nodeIds.has(id)) continue; // a node id wins over a group of the same name
+      if (!groupIds.has(id)) report(out, at, "E_NODE_UNKNOWN", `${q(id)} is not a node id or a group id`);
+      else if (!members.get(id).length) report(out, at, "E_GROUP_UNKNOWN", `group ${q(id)} has no member nodes, so there is no box to draw the edge to`);
+    }
+    const isGroup = (id) => members.has(id);
+    const self = e.from === e.to || (isGroup(e.to) && groupOf[e.from] === e.to) || (isGroup(e.from) && groupOf[e.to] === e.from);
+    if (self) report(out, `/edges/${i}`, "E_EDGE_SELF", `edge ${q(e.id)} connects ${q(e.from)} with ${e.from === e.to ? "itself" : q(e.to) + ", which contains it"}; a step on one node uses step.nodes instead`);
+    for (const end of [e.from, e.to]) for (const id of endNodes(members, end)) linked.add(id);
     if (e.route && e.route.d !== undefined) {
       if (!isValidPath(e.route.d)) {
         report(out, `/edges/${i}/route/d`, "E_ROUTE_PATH", `route.d must start with M and use absolute M L H V C Q Z with whole argument groups (M/L 2, H/V 1, C 6, Q 4, Z 0) of finite numbers within ±${MAX_COORD}`);

@@ -65,6 +65,18 @@ test("focusSets: step -1 lights the whole scenario; a step lights its edges, the
   assert.deepEqual(keys(two.curN), ["model", "parser"]);
 });
 
+test("focusSets: an edge that ends at a group lights every member of the group", () => {
+  const h = loadHelpers();
+  const edges = { ...EDGES, fan: { id: "fan", from: "gateway", to: "service", kind: "file" } };
+  const members = { service: ["receiver", "disk", "parser"] };
+  const steps = [{ edges: ["fan"] }, { edges: ["up"] }];
+  const one = plain(h.focusSets(steps, 0, edges, members));
+  assert.deepEqual(keys(one.curN), ["disk", "gateway", "parser", "receiver"]);
+  assert.ok(!one.curN.service, "the group id itself is not a node");
+  assert.deepEqual(keys(plain(h.focusSets(steps, -1, edges, members)).allN), ["browser", "disk", "gateway", "parser", "receiver"]);
+  assert.deepEqual(keys(plain(h.focusSets(steps, 0, edges)).curN), ["gateway", "service"], "without members: as before");
+});
+
 test("gaugeState: empty until set, then carries forward until changed", () => {
   const h = loadHelpers();
   const steps = DOC.scenarios[0].steps;
