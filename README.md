@@ -24,17 +24,31 @@ When you ask for a document, the agent picks the style from your request ("for o
 Walkthrough, "for the docs" → Overview) and asks you once if it cannot tell. `meta.style` in the JSON records
 the choice; documents without it are Walkthrough.
 
-**Walkthrough**
+The screenshots link to the live pages: a static image here, the real interactive HTML one click away.
 
-| Light | Dark |
-|---|---|
-| ![Walkthrough document, light theme](docs/screenshot-light.png) | ![Walkthrough document, dark theme](docs/screenshot-dark.png) |
+**Walkthrough** (the payment example, "PSP timeout and retry" scenario, step 3)
+
+<a href="https://sunjae98.github.io/interactive-architecture-doc/demo/payment-auth.en.html#s2/3">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+    <img alt="Walkthrough document, light theme" src="docs/screenshot-light.png">
+  </picture>
+</a>
+
+[▶ Try it live](https://sunjae98.github.io/interactive-architecture-doc/demo/payment-auth.en.html#s2/3) · [Korean version](https://sunjae98.github.io/interactive-architecture-doc/demo/payment-auth.ko.html#s2/3)
 
 **Overview** (with the "Needs a lookup" path selected)
 
-| Light | Dark |
-|---|---|
-| ![Overview document, light theme](docs/screenshot-overview-light.png) | ![Overview document, dark theme](docs/screenshot-overview-dark.png) |
+<a href="https://sunjae98.github.io/interactive-architecture-doc/demo/request-router.overview.en.html#lookup">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-overview-dark.png">
+    <img alt="Overview document, light theme" src="docs/screenshot-overview-light.png">
+  </picture>
+</a>
+
+[▶ Try it live](https://sunjae98.github.io/interactive-architecture-doc/demo/request-router.overview.en.html#lookup) · [Korean version](https://sunjae98.github.io/interactive-architecture-doc/demo/request-router.overview.ko.html#lookup)
+
+All live demos: [sunjae98.github.io/interactive-architecture-doc/demo/](https://sunjae98.github.io/interactive-architecture-doc/demo/) (every bundled example, English and Korean).
 
 ## How it works
 
