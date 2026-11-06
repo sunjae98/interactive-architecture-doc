@@ -6,6 +6,7 @@ node_modules/
 !skills/interactive-architecture-doc/assets/template.html
 !skills/interactive-architecture-doc/assets/template.overview.html
 !docs/mockups/*.html
+!docs/demo/*.html
 # font build venv / downloads
 tools/build-fonts/.venv/
 tools/build-fonts/.cache/

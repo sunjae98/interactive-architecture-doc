@@ -34,6 +34,10 @@ After changing `assets/template.html`, render the examples and open each with `#
 (wide and narrow windows); `#iad-selfcheck-result` must have `data-state="pass"`. See the *Self-check*
 section of `references/design-system.md`.
 
+The live demo pages in `docs/demo/` (served by GitHub Pages) are renders of the examples. After changing
+a template, the renderer or an example, run `npm run demo` and commit the result; `test/demo.test.mjs`
+fails while they are stale.
+
 ## Regenerating fonts
 
 Fonts are committed as subset woff2 files in `skills/interactive-architecture-doc/assets/fonts/`.

@@ -10,6 +10,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "check": "node skills/interactive-architecture-doc/scripts/iad.mjs validate skills/interactive-architecture-doc/examples/*.json"
+    "check": "node skills/interactive-architecture-doc/scripts/iad.mjs validate skills/interactive-architecture-doc/examples/*.json",
+    "demo": "node tools/demo/build.mjs"
   }
 }
