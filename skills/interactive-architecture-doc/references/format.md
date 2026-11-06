@@ -112,7 +112,8 @@ its own member (`E_EDGE_SELF`).
 
 `{id, node, caption?, empty?}`: one gauge per node. A step sets it with `gauges: {id: {value, label}}`
 (`value` 0..1); the value carries forward to later steps. At the start of a scenario it shows 0 and the
-`empty` label, or the scenario's `gauge_empty` label for that gauge.
+`empty` label, or the scenario's `gauge_empty` label for that gauge. A label wider than the gauge is cut with `…` on the map (the
+whole label shows on hover) and reported as `W_TEXT_LONG`.
 
 ### `scenarios[]`
 

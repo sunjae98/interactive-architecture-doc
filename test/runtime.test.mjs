@@ -106,14 +106,14 @@ test("tokenAt: the distance is split across the step's paths in order", () => {
   assert.equal(h.easeInOut(0.5), 0.5);
 });
 
-test("fitChip: a long token is cut to the chip width with an ellipsis; a short one is kept whole", async () => {
+test("fitText: a long token is cut to the chip width with an ellipsis; a short one is kept whole", async () => {
   const { GEOMETRY_WT } = await import("../skills/interactive-architecture-doc/scripts/lib/walkthrough-layout.mjs");
   const h = loadHelpers();
   assert.equal(h.TOKEN_MAX_W, GEOMETRY_WT.tokenMax, "runtime and layout agree on the cap");
   const widthOf = (s) => Array.from(s).length * 7; // 7px per character
-  assert.deepEqual(plain(h.fitChip("req.json", widthOf, 220)), { text: "req.json", cut: false });
+  assert.deepEqual(plain(h.fitText("req.json", widthOf, 220, 16)), { text: "req.json", cut: false });
   const long = "📎 report.pdf · chart.png “요약해줘” and a few more words";
-  const r = plain(h.fitChip(long, widthOf, 220));
+  const r = plain(h.fitText(long, widthOf, 220, 16));
   assert.equal(r.cut, true);
   assert.ok(r.text.endsWith("…") && !/\s…$/.test(r.text), r.text);
   assert.ok(widthOf(r.text) + 16 <= 220, "fits");
@@ -123,10 +123,23 @@ test("fitChip: a long token is cut to the chip width with an ellipsis; a short o
 
 test("token chip: the map chip is capped, gets a hover title when cut; narration chips stay whole", () => {
   const src = HTML.slice(HTML.indexOf("function runToken()"), HTML.indexOf("// ---- progress"));
-  assert.match(src, /fitChip\(st\.token\.text, widthOf, TOKEN_MAX_W\)/);
+  assert.match(src, /fitText\(st\.token\.text, widthOf, TOKEN_MAX_W, TOKEN_PAD\)/);
   assert.match(src, /if \(fit\.cut\) \{ tok\.classList\.add\("cut"\); mk\("title", null, tok, st\.token\.text\); \}/);
   assert.match(HTML, /\.wt-map \.tok\.cut\{pointer-events:auto;/, "a cut chip takes the hover");
   assert.match(HTML, /<span class="tk-s ' \+ st\.token\.kind \+ '">' \+ escapeHtml\(st\.token\.text\)/, "narration shows the whole token");
+});
+
+test("gauge labels: cut to the gauge's room at runtime; the self-check reads the whole label and flags a spill", () => {
+  const h = loadHelpers();
+  const widthOf = (str) => Array.from(str).length * 7;
+  assert.deepEqual(plain(h.fitText("0.375 → REASONING (override)", widthOf, 100)), { text: "0.375 → REASO…", cut: true });
+  assert.deepEqual(plain(h.fitText("full", widthOf, 100)), { text: "full", cut: false });
+  assert.match(HTML, /class="gauge-l" data-gauge-label="disk-use" data-room="\d+(\.\d)?"/);
+  assert.match(HTML, /setFitted\(gaugeLabels\[id\], gs\[id\]\.label, \+gaugeLabels\[id\]\.getAttribute\("data-room"\)\)/);
+  assert.match(HTML, /gauges\[id\] = el\.getAttribute\("data-label"\)/);
+  const out = [];
+  h.judgeStep("upload", 0, expected(), goodObs({ gaugeSpill: ["disk-use"] }), out);
+  assert.deepEqual(plain(out).map((f) => f.check), ["gauge-fit"]);
 });
 
 test("file names: unsafe characters removed, whitespace dashed, trimmed, capped at 80", () => {

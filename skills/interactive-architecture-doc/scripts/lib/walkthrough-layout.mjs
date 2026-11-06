@@ -52,6 +52,7 @@ export const TEXT_WT = {
   groupTitle: { px: 12.5, bold: true },
   groupMeta: { px: 10.5, mono: true },
   token: { px: 11, mono: true, bold: true },
+  gaugeLabel: { px: 11, mono: true, bold: true },
 };
 // Advance widths in em, measured from the embedded fonts (IAD Sans, Geist Mono) and rounded up a
 // little so real overflow is still caught: Hangul/CJK 0.864 measured, Latin lowercase 0.47-0.49,
@@ -71,6 +72,9 @@ export function textWidthWt(s, px, { mono = false, bold = false } = {}) {
   return em * px;
 }
 const measure = (s, style) => textWidthWt(s, style.px, style);
+// Width a gauge label may take in a node box w wide: the gauge is inset 20 on each side, the label
+// keeps 2 clear of its edges. The runtime cuts longer labels at this width (data-room).
+export const gaugeRoom = (w) => round(w - 2 * GEOMETRY_WT.gaugeSide - 4);
 export const lineText = (l) => (typeof l === "string" ? l : l.text);
 
 export const SIDES = ["top", "right", "bottom", "left"];
@@ -856,6 +860,26 @@ export function layoutWalkthrough(doc) {
     if (n.mono !== undefined) fit(n.mono, TEXT_WT.mono, path + "/mono");
     (n.sub || []).forEach((s, j) => fit(s, TEXT_WT.sub, `${path}/sub/${j}`));
     (n.lines || []).forEach((s, j) => fit(lineText(s), TEXT_WT.line, `${path}/lines/${j}`));
+  });
+
+  // gauge labels: the empty label, scenario overrides and every step's label must fit the gauge
+  (doc.gauges || []).forEach((g, gi) => {
+    const box = nodes[g.node];
+    if (!box) return;
+    const room = gaugeRoom(box.w);
+    const fitLabel = (label, at) => {
+      if (label && measure(label, TEXT_WT.gaugeLabel) > room) {
+        issues.push({ path: at, code: "W_TEXT_LONG", message: `gauge label is wider than its gauge (${Math.round(room)}px); the map cuts it with "…", so shorten it or widen the node (w, span)` });
+      }
+    };
+    fitLabel(g.empty, `/gauges/${gi}/empty`);
+    doc.scenarios.forEach((sc, si) => {
+      if (sc.gauge_empty && Object.hasOwn(sc.gauge_empty, g.id)) fitLabel(sc.gauge_empty[g.id], `/scenarios/${si}/gauge_empty/${g.id}`);
+      sc.steps.forEach((st, ti) => {
+        const set = st.gauges && Object.hasOwn(st.gauges, g.id) ? st.gauges[g.id] : null;
+        if (set) fitLabel(set.label, `/scenarios/${si}/steps/${ti}/gauges/${g.id}/label`);
+      });
+    });
   });
 
   // ---- groups
