@@ -275,29 +275,36 @@ function computeLanes(doc) {
 }
 
 // Lane hints on a partly automatic map. Each hinted node ends up in exactly its lane; groups stay
-// contiguous, and the other columns keep their flow order (left to right) wherever the hint allows:
+// contiguous, so the columns around it move instead:
 // - the lane is one of its group's columns (or an ungrouped column for an ungrouped node): it moves there;
-// - the lane is right of where the node sits in the flow: its group grows with empty columns up to that
-//   lane (an ungrouped node gets empty columns after its own), so the columns after it move right
-//   instead of jumping ahead of it;
+// - the lane is right of its group: the group grows with empty columns up to that lane;
 // - the lane is left of its group: the whole group moves to the nearest boundary at or before the
-//   lane (never inside another group), then grows if needed. Only this case reorders the flow, and
-//   the layout reports the edges it turns around (W_HINT_REVERSES_FLOW);
-// - an ungrouped node left of its column, in another group's lane: new ungrouped columns are inserted
-//   at the nearest boundary at or before the lane, pushing that group right.
-// A column the hinted nodes leave empty keeps its place (that is where they sit in the flow) until the
-// end; then the empty ones that no hint needs are dropped. Hints are applied in lane order; boundaries
-// left of an earlier hint are not used, so earlier hints keep their lanes.
+//   lane (never inside another group), then grows if needed;
+// - the hinted nodes emptied every column of their group (or their own ungrouped column): the group
+//   goes back where it sat in the flow when the lane is at or right of that place, growing with empty
+//   columns up to the lane, so the columns after it move right instead of ending up ahead of it;
+// - otherwise new columns are inserted at the nearest boundary at or before the lane, pushing the
+//   group there right.
+// Only moving left of the flow reorders it; the layout reports the file/text edges that then run right
+// to left (W_HINT_REVERSES_FLOW). Hints are applied in lane order; boundaries left of an earlier hint
+// are not used, so earlier hints keep their lanes.
 function applyLaneHints(doc, cols, hintIds, byId) {
   if (!hintIds.length) return;
-  const home = new Map(); // hinted node -> the column the automatic layout gave it
+  const home = new Map(); // hinted node -> its automatic column
   for (const id of hintIds) {
-    const c = cols.find((col) => col.ids.includes(id));
-    if (!c) continue;
-    c.ids.splice(c.ids.indexOf(id), 1);
-    home.set(id, c);
+    const c = cols.findIndex((col) => col.ids.includes(id));
+    if (c < 0) continue;
+    cols[c].ids.splice(cols[c].ids.indexOf(id), 1);
+    home.set(id, cols[c]);
   }
-  for (const c of home.values()) if (!c.ids.length) c.vacated = true;
+  // where a node whose column is now empty sat in the flow: the next column that stays (null: the end)
+  const after = new Map();
+  for (const [id, c] of home) {
+    if (c.ids.length) continue;
+    after.set(id, cols.slice(cols.indexOf(c) + 1).find((col) => col.ids.length) || null);
+  }
+  // drop the columns the hinted nodes left empty; placing a hint recreates the columns it needs
+  for (let i = cols.length - 1; i >= 0; i--) if (!cols[i].ids.length) cols.splice(i, 1);
   const hints = hintIds.map((id) => ({ id, lane: byId[id].lane, group: byId[id].group || "" })).sort((p, q) => p.lane - q.lane);
   let floor = 0; // boundaries below this would shift an earlier hint
   const boundary = (i) => i === 0 || i === cols.length || !(cols[i - 1].group && cols[i - 1].group === cols[i].group);
@@ -305,37 +312,29 @@ function applyLaneHints(doc, cols, hintIds, byId) {
     for (let i = Math.min(max, cols.length); i >= floor; i--) if (boundary(i)) return i;
     return Math.min(Math.max(floor, 0), cols.length);
   };
-  const empty = (group, n) => Array.from({ length: n }, () => ({ group, ids: [], vacated: true }));
+  const empty = (group, n) => Array.from({ length: n }, () => ({ group, ids: [] }));
   for (const h of hints) {
     const L = h.lane;
     const run = h.group ? cols.map((c, i) => (c.group === h.group ? i : -1)).filter((i) => i >= 0) : [];
-    const at = cols.indexOf(home.get(h.id));
+    const next = after.get(h.id);
+    const back = next === undefined ? -1 : next === null ? cols.length : cols.indexOf(next);
     if (L < cols.length && cols[L].group === h.group) {
       // its own group's column (or an ungrouped column)
     } else if (run.length && L > run[run.length - 1]) {
       const b = run[run.length - 1];
       cols.splice(b + 1, 0, ...empty(h.group, L - b));
-    } else if (!h.group && at >= 0 && at < L) {
-      cols.splice(at + 1, 0, ...empty("", L - at));
     } else if (run.length) {
       const block = cols.splice(run[0], run.length);
       const p = lastBoundary(L);
       cols.splice(p, 0, ...block, ...empty(h.group, Math.max(0, L - (p + block.length - 1))));
+    } else if (back >= floor && back <= L && boundary(back)) {
+      cols.splice(back, 0, ...empty(h.group, L - back + 1));
     } else {
       const p = lastBoundary(L);
       cols.splice(p, 0, ...empty(h.group, L - p + 1));
     }
     cols[L].ids.push(h.id);
-    cols[L].vacated = false;
     floor = L + 1;
-  }
-  // drop the columns left empty that no hint needs: those right of every hinted lane, and those whose
-  // removal only shifts columns without hinted nodes
-  const hinted = new Set(hintIds);
-  for (let i = cols.length - 1; i >= 0; i--) {
-    if (!cols[i].vacated || cols[i].ids.length) continue;
-    if (cols.slice(i + 1).some((c) => c.ids.some((id) => hinted.has(id)))) continue;
-    cols.splice(i, 1);
   }
 }
 
