@@ -948,7 +948,7 @@ export function layoutWalkthrough(doc) {
   const titleCorridors = groups.map((g) => g.y + (g.meta ? 36 : 22) + ((g.meta ? G.groupTopMeta : G.groupTop) - 6 - (g.meta ? 36 : 22)) / 2);
   const inTitle = (t, px, py) => px > t.x && px < t.x + t.w && py > t.y && py < t.y + t.h;
   // titles an edge must not pass over: all but those of the groups it ends at
-  const titlesFor = (e) => titles.filter((t) => t.group !== e.from && t.group !== e.to);
+  const titlesFor = (e) => titles.filter((t) => !(members.has(t.group) && (t.group === e.from || t.group === e.to)));
 
   // ---- edge ports
   // Each edge end lives on one side of its node. Ends of the same node pair on one side share a
@@ -1031,7 +1031,7 @@ export function layoutWalkthrough(doc) {
         // (a group's border keeps its ends in the middle of the side)
         let want = len / 2;
         const otherSide = plan[end.edge][end.which === "from" ? "s2" : "s1"];
-        if (otherSide === OPPOSITE[side] && !groupBox[end.node] && !groupBox[end.other]) {
+        if (otherSide === OPPOSITE[side] && !members.has(end.node) && !members.has(end.other)) {
           const lo = isHorizontal(side) ? Math.max(box.y, other.y) : Math.max(box.x, other.x);
           const hi = isHorizontal(side) ? Math.min(box.y + box.h, other.y + other.h) : Math.min(box.x + box.w, other.x + other.w);
           if (hi - lo >= 16) want = (lo + hi) / 2 - (isHorizontal(side) ? box.y : box.x);
@@ -1172,7 +1172,7 @@ export function layoutWalkthrough(doc) {
         issues.push({
           path: `/edges/${i}`,
           code: "W_EDGE_CROSSES_NODE",
-          message: `edge ${JSON.stringify(e.id)} runs over the title of group ${JSON.stringify(over.group)} and no free corridor was found; set route.via below the title (\`iad layout\` shows the gaps) or move one of its nodes`,
+          message: `edge ${JSON.stringify(e.id)} runs over the title of group ${JSON.stringify(over.group)} and no free corridor was found; set route.via below the title (\`iad layout\` lists the title areas), force other sides with from_side/to_side, or move one of its nodes`,
         });
       }
     }

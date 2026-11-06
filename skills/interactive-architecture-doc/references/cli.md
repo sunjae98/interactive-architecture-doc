@@ -27,9 +27,10 @@ overview-only; mixing them exits 2. `validate`, `render` and `layout` read `meta
 
 `layout` (walkthrough only) prints the map the renderer would draw: the viewBox, every lane (`x`, `w`)
 and row (`y`, `h`), the free gaps between lanes and between rows (good `x` / `y` values for
-`route.via`), each node's `lane row x y w h`, each group's box and each edge's SVG path. Warnings go to
+`route.via`), each node's `lane row x y w h`, each group's box and title area (edges and badges keep off it) and
+each edge's SVG path. Warnings go to
 stderr. `--json` prints the same data as one object (`viewBox`, `lanes`, `rows`, `laneGaps`, `rowGaps`,
-`nodes`, `groups`, `edges`, `warnings`). A document with errors prints them and exits 1; an overview
+`nodes`, `groups`, `titles`, `edges`, `warnings`). A document with errors prints them and exits 1; an overview
 document exits 2.
 
 Exit codes: `0` valid (warnings allowed) · `1` validation errors · `2` usage, read, JSON parse, or write error.

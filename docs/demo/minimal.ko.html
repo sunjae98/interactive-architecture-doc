@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;sha256-y1X804AWTZ0E2jmio+1R6cnW/d4b2w7q2LXE28PAMnY=&#39; &#39;sha256-RJkd29HRpXPUUAmtiZWI+A7/Vx3IjToHRBcMTvEYxDQ=&#39; &#39;sha256-ECyb4dDlJ4OGtK7hvH+bL9vKww9L8Je+dDuih2jZSPc=&#39;; style-src &#39;unsafe-inline&#39;; font-src data:; img-src data: blob:; base-uri &#39;none&#39;; form-action &#39;none&#39;">
+<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;sha256-y1X804AWTZ0E2jmio+1R6cnW/d4b2w7q2LXE28PAMnY=&#39; &#39;sha256-RJkd29HRpXPUUAmtiZWI+A7/Vx3IjToHRBcMTvEYxDQ=&#39; &#39;sha256-vq19fjGA93yS/EDon/RIWcntzyOwcgKfE2EeTVYdgWw=&#39;; style-src &#39;unsafe-inline&#39;; font-src data:; img-src data: blob:; base-uri &#39;none&#39;; form-action &#39;none&#39;">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="interactive-architecture-doc">
 <title>OAuth2 인가 코드 로그인</title>
@@ -989,7 +989,11 @@
   function fitText(text, widthOf, maxW, pad) {
     var p = pad || 0;
     if (widthOf(text) + p <= maxW) return { text: text, cut: false };
-    var chars = Array.from(text), lo = 0, hi = chars.length - 1;
+    // whole graphemes where the browser can tell them (an emoji sequence is never split), else code points
+    var chars = typeof Intl !== "undefined" && Intl.Segmenter
+      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text), function (g) { return g.segment; })
+      : Array.from(text);
+    var lo = 0, hi = chars.length - 1;
     function show(n) { return chars.slice(0, n).join("").replace(/\s+$/, "") + "\u2026"; }
     while (lo < hi) {
       var mid = (lo + hi + 1) >> 1;

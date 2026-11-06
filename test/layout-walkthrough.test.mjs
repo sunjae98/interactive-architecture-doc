@@ -476,6 +476,8 @@ test("CLI layout: prints lanes, gaps, node boxes and edge paths; --json has the 
   assert.deepEqual(j.nodes.disk, { lane: L.nodes.disk.lane, row: L.nodes.disk.row, x: L.nodes.disk.x, y: L.nodes.disk.y, w: L.nodes.disk.w, h: L.nodes.disk.h });
   assert.equal(j.edges.up.d, L.edges.up.d);
   assert.deepEqual(j.viewBox, L.viewBox);
+  assert.deepEqual(j.titles.map((t) => t.group), L.titles.map((t) => t.group));
+  assert.match(t.stdout, /^group titles \(group {2}x y w h; edges and badges keep off\):$/m);
   // invalid documents exit 1 with their errors; overview documents and bad usage exit 2
   const bad = mini(["a", "b"], [["a", "b"]]);
   bad.edges[0].to = "ghost";
@@ -669,5 +671,11 @@ test("group titles: an edge forced over a title is W_EDGE_CROSSES_NODE", () => {
   const w = validate(doc).warnings.filter((x) => x.code === "W_EDGE_CROSSES_NODE");
   assert.equal(w.length, 1);
   assert.match(w[0].message, /runs over the title of group "g1"/);
+});
+
+test("group ends: a node that shares its id with its group is still a node end (facing ports line up)", () => {
+  const doc = mini([{ id: "a", x: 40, y: 70, h: 120 }, { id: "x", group: "x", x: 300, y: 100 }], [["a", "x"]], { groups: [{ id: "x", title: "X" }] });
+  const d = layoutWalkthrough(doc).edges.e0.d;
+  assert.match(d, /^M\S+ (\S+) H\S+$/, `a straight line between facing sides, got ${d}`);
 });
 

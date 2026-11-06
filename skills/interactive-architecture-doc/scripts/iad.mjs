@@ -166,10 +166,12 @@ function cmdLayout(args) {
   const nodes = Object.fromEntries(Object.entries(L.nodes).map(([id, b]) => [id, { lane: b.lane ?? null, row: b.row ?? null, x: b.x, y: b.y, w: b.w, h: b.h }]));
   const edges = Object.fromEntries(Object.entries(L.edges).map(([id, e]) => [id, { d: e.d }]));
   const groups = L.groups.map((g) => ({ id: g.id, x: g.x, y: g.y, w: g.w, h: g.h }));
+  const r1 = (n) => Math.round(n * 10) / 10;
+  const titles = L.titles.map((t) => ({ group: t.group, x: r1(t.x), y: r1(t.y), w: r1(t.w), h: r1(t.h) }));
   const gapsX = L.lanes.slice(0, -1).map((l, i) => Math.round(((l.x + l.w + L.lanes[i + 1].x) / 2) * 10) / 10);
   const gapsY = L.rows.slice(0, -1).map((r, i) => Math.round(((r.y + r.h + L.rows[i + 1].y) / 2) * 10) / 10);
   if (args.json) {
-    process.stdout.write(JSON.stringify({ ok: true, viewBox: L.viewBox, lanes: L.lanes, rows: L.rows, laneGaps: gapsX, rowGaps: gapsY, nodes, groups, edges, warnings: result.warnings }, null, 2) + "\n");
+    process.stdout.write(JSON.stringify({ ok: true, viewBox: L.viewBox, lanes: L.lanes, rows: L.rows, laneGaps: gapsX, rowGaps: gapsY, nodes, groups, titles, edges, warnings: result.warnings }, null, 2) + "\n");
     return 0;
   }
   const out = [`viewBox ${L.viewBox.join(" ")}`, "", "lanes (x, w):"];
@@ -180,6 +182,8 @@ function cmdLayout(args) {
   for (const [id, b] of Object.entries(nodes)) out.push(`  ${id}  ${b.lane ?? "-"} ${b.row ?? "-"}  ${b.x} ${b.y} ${b.w} ${b.h}`);
   out.push("", "groups (id  x y w h):");
   for (const g of groups) out.push(`  ${g.id}  ${g.x} ${g.y} ${g.w} ${g.h}`);
+  out.push("", "group titles (group  x y w h; edges and badges keep off):");
+  for (const t of titles) out.push(`  ${t.group}  ${t.x} ${t.y} ${t.w} ${t.h}`);
   out.push("", "edges (id  path):");
   for (const [id, e] of Object.entries(edges)) out.push(`  ${id}  ${e.d}`);
   process.stdout.write(out.join("\n") + "\n");

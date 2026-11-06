@@ -515,7 +515,11 @@
   function fitText(text, widthOf, maxW, pad) {
     var p = pad || 0;
     if (widthOf(text) + p <= maxW) return { text: text, cut: false };
-    var chars = Array.from(text), lo = 0, hi = chars.length - 1;
+    // whole graphemes where the browser can tell them (an emoji sequence is never split), else code points
+    var chars = typeof Intl !== "undefined" && Intl.Segmenter
+      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text), function (g) { return g.segment; })
+      : Array.from(text);
+    var lo = 0, hi = chars.length - 1;
     function show(n) { return chars.slice(0, n).join("").replace(/\s+$/, "") + "\u2026"; }
     while (lo < hi) {
       var mid = (lo + hi + 1) >> 1;

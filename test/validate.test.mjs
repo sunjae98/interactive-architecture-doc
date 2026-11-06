@@ -258,6 +258,17 @@ test("W_TEXT_LONG: gauge labels (empty, scenario override, step label) must fit 
   assert.deepEqual(paths, [`/gauges/0/empty`, `/scenarios/${si}/gauge_empty/${g.id}`, `/scenarios/${si}/steps/${ti}/gauges/${g.id}/label`]);
 });
 
+test("E_EDGE_SELF names the group as the container whichever end it is", () => {
+  const d = clone(BASE);
+  d.edges.find((e) => e.id === "write").to = "service"; // receiver (in service) -> service
+  assert.match(validate(d).errors[0].message, /connects "receiver" with its own group "service"/);
+  const r = clone(BASE);
+  const e = r.edges.find((x) => x.id === "write");
+  e.from = "service";
+  e.to = "disk";
+  assert.match(validate(r).errors[0].message, /connects group "service" with its own member "disk"/);
+});
+
 test("every rule code has at least one failing fixture", () => {
   const covered = new Set([...FIXTURES, ...OVERVIEW_FIXTURES].map(([c]) => c));
   const missing = RULES.map((r) => r.code).filter((c) => !covered.has(c));
