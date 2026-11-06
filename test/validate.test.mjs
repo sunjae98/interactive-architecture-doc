@@ -90,6 +90,7 @@ const FIXTURES = [
   ["E_NODE_UNKNOWN", (d) => { d.scenarios[1].skip[0].node = "ghost"; }],
   ["E_NODE_UNKNOWN", (d) => { d.gauges[0].node = "ghost"; }],
   ["E_GROUP_UNKNOWN", (d) => { d.nodes[0].group = "nope"; }],
+  ["W_HINT_REVERSES_FLOW", (d) => { d.nodes.find((n) => n.id === "model").lane = 0; d.nodes.find((n) => n.id === "browser").lane = 1; }],
   // an edge may end at a group, but not at a group without members, nor at its own member
   ["E_GROUP_UNKNOWN", (d) => { d.groups.push({ id: "empty", title: "Empty" }); d.edges[0].to = "empty"; }],
   ["E_EDGE_SELF", (d) => { d.edges.find((e) => e.id === "write").to = "service"; }],

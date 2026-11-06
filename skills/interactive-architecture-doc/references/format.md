@@ -156,7 +156,10 @@ The map is computed when the document is rendered; the page ships a static SVG.
   own block of lanes. When a map would be wider than 6 lanes, neighbouring lanes of the same group fold
   together so long chains run downward. Rows fill top to bottom.
 - **Hints.** `lane` and `row` on some nodes are constraints on top of the automatic layout: the node
-  gets exactly that lane or row, and the groups around it move or grow so they stay together. In such a
+  gets exactly that lane or row, and the groups around it move or grow so they stay together. The other
+  nodes keep their flow order: a hint further right than the node's place in the flow pushes what
+  follows to the right. A hint further left can only move its group ahead of its predecessors; the
+  edges it turns right to left are reported (`W_HINT_REVERSES_FLOW`). In such a
   partly automatic map a lane belongs to one group: hinting nodes of two groups (or a grouped and an
   ungrouped node) into the same lane is `E_LANE_GROUPS`, and lanes a hint skips over stay empty
   (`W_LANE_EMPTY`, drawn without width). Only when every node has a `lane` are lanes used exactly as
@@ -234,6 +237,7 @@ is neither a node nor a group is `E_NODE_UNKNOWN`, and one that names a group wi
 | `W_FACTS_MISSING` | warning | A node has no `facts`, so clicking it shows an empty panel. |
 | `W_POS_IGNORED` | warning | A node has both `x`/`y` and `lane`/`row`; `x`/`y` wins and `lane`/`row` are ignored. |
 | `W_GAUGE_UNUSED` | warning | No step sets this gauge, so it always shows its empty state. |
+| `W_HINT_REVERSES_FLOW` | warning | Lane hints on a partly automatic map turn a `file`/`text` edge right to left that runs left to right without them (a hinted node or its group sits left of its predecessor). |
 | `W_LANE_EMPTY` | warning | Lane hints leave lanes without any node; they are drawn without width, but a lower hint is usually meant. |
 | `W_BADGE_CROWDED` | warning | A step badge found no spot clear of the scenario's other badges and of node boxes (many steps start on one short edge); it overlaps. |
 | `W_PLACEHOLDER` | warning | A string still contains a `[...]` placeholder or `TODO`. |
