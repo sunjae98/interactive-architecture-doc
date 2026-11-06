@@ -268,3 +268,67 @@ test("fit mode: re-decided when the stage itself changes width (ResizeObserver),
   assert.ok(HTML.includes("if (window.ResizeObserver) new ResizeObserver(scheduleFit).observe(stageEl);"));
   assert.ok(HTML.includes('window.addEventListener("resize", scheduleFit);'));
 });
+
+// ---- deep links ------------------------------------------------------------------
+
+test("deep links: #sN and #sN/M (1-based) parse against the scenarios' step counts; anything else is null", () => {
+  const h = loadHelpers();
+  const counts = [7, 3];
+  assert.deepEqual(plain(h.parseDeepLink("#s1", counts)), { scenario: 0, step: -1 });
+  assert.deepEqual(plain(h.parseDeepLink("#s2/3", counts)), { scenario: 1, step: 2 });
+  assert.deepEqual(plain(h.parseDeepLink("s1/7", counts)), { scenario: 0, step: 6 }, "the # is optional");
+  for (const bad of ["", "#", "#iad-selfcheck", "#s0", "#s3", "#s2/4", "#s2/0", "#s1/", "#s01", "#s1/2/3", "#S1", "#s1x", "#s99999", null, undefined]) {
+    assert.equal(h.parseDeepLink(bad, counts), null, String(bad));
+  }
+});
+
+test("deep links: format round-trips, and the default view has no hash", () => {
+  const h = loadHelpers();
+  assert.equal(h.formatDeepLink(0, -1), "");
+  assert.equal(h.formatDeepLink(0, 0), "#s1/1");
+  assert.equal(h.formatDeepLink(1, -1), "#s2");
+  assert.equal(h.formatDeepLink(3, 2), "#s4/3");
+  const counts = [2, 3, 1, 4];
+  for (let sc = 0; sc < counts.length; sc++) {
+    for (let st = -1; st < counts[sc]; st++) {
+      const hash = h.formatDeepLink(sc, st);
+      if (hash) assert.deepEqual(plain(h.parseDeepLink(hash, counts)), { scenario: sc, step: st });
+    }
+  }
+});
+
+test("deep links: the page opens the link, follows the reader with replaceState and leaves #iad-selfcheck alone", () => {
+  assert.ok(HTML.includes("openDeepLink(location.hash);\n  linkReady = true;"));
+  assert.ok(HTML.includes('history.replaceState(null, "", location.pathname + location.search + want)'));
+  assert.ok(!/history\.pushState/.test(HTML), "no history entries");
+  assert.ok(HTML.includes('window.addEventListener("hashchange", function () { if (!openDeepLink(location.hash)) syncHash(); });'), "an invalid hash is put back");
+  assert.ok(HTML.includes('if (!linkReady || scrollQuiet || location.hash === "#iad-selfcheck") return;'));
+  const render = HTML.slice(HTML.indexOf("function render() {"), HTML.indexOf("function syncHash()"));
+  assert.ok(render.includes("syncHash();"), "every view change updates the hash");
+});
+
+test("?theme=dark|light: wins over the saved choice and the OS, is not saved, ignored when invalid", () => {
+  const h = loadHelpers();
+  assert.equal(h.themeParam("?theme=dark"), "dark");
+  assert.equal(h.themeParam("?x=1&theme=light"), "light");
+  assert.equal(h.themeParam("?theme=purple"), null);
+  assert.equal(h.themeParam("?themes=dark"), null);
+  assert.equal(h.themeParam(""), null);
+  const head = HTML.slice(0, HTML.indexOf("</head>"));
+  const code = head.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const run = (search, stored, prefersDark) => {
+    const attrs = {};
+    const saved = [];
+    vm.runInNewContext(code, {
+      window: { location: { search }, matchMedia: () => ({ matches: prefersDark }) },
+      document: { documentElement: { setAttribute: (k, v) => { attrs[k] = v; } } },
+      localStorage: { getItem: () => stored, setItem: (k, v) => saved.push(v) },
+    });
+    assert.deepEqual(saved, [], "not persisted");
+    return attrs["data-theme"];
+  };
+  assert.equal(run("?theme=dark", "light", false), "dark");
+  assert.equal(run("?theme=light", "dark", true), "light");
+  assert.equal(run("?theme=nope", "dark", false), "dark");
+  assert.equal(run("", null, true), "dark");
+});

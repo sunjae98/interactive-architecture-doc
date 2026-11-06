@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Walkthrough pages keep a link to the current scenario and step in the URL (`#s2/3`), open such links
+  directly, and accept `?theme=dark|light`.
+
 ## 3.0.0 — 2026-11-05
 
 The walkthrough style is rebuilt around a **component map**. Overview documents are unchanged.

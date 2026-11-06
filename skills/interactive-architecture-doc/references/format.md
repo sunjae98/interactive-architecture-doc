@@ -167,6 +167,15 @@ The map is computed when the document is rendered; the page ships a static SVG.
   than its box) and `E_LAYOUT_OVERLAP` (boxes or groups overlap, with the lanes / rows of both) come
   from the layout and run only on documents without other errors.
 
+## Links to a scenario or step
+
+The page keeps its URL in step with what the reader sees, so any view can be shared: `doc.html#s2` opens
+scenario 2 on its full path and `doc.html#s2/3` opens scenario 2 at step 3 (both 1-based, in the
+order of `scenarios` and `steps`). The hash is updated without adding browser history entries; the
+first scenario's full path has no hash. A link to a scenario or step that does not exist opens the
+default view. `?theme=dark` or `?theme=light` forces a theme for that visit without saving it. The
+self-check hash `#iad-selfcheck` is unaffected.
+
 ## Page layout
 
 The map is drawn between 0.80x and 1.15x of its own size; small maps are not blown up. On screens
