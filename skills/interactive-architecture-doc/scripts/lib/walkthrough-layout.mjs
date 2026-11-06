@@ -110,6 +110,27 @@ function naturalWidth(n) {
 }
 const clampLane = (w) => Math.min(GEOMETRY_WT.laneMax, Math.max(GEOMETRY_WT.laneMin, Math.ceil(w)));
 
+// ---- group endpoints --------------------------------------------------------
+// An edge end may name a group instead of a node ("to one of these boxes"). The arrow is drawn to
+// the group's border; for ranking, highlighting and isolation it stands for every member.
+export function groupMembers(doc) {
+  const nodeIds = new Set(doc.nodes.map((n) => n.id));
+  const out = new Map();
+  for (const g of doc.groups || []) if (!nodeIds.has(g.id)) out.set(g.id, []);
+  for (const n of doc.nodes) if (n.group && out.has(n.group)) out.get(n.group).push(n.id);
+  return out;
+}
+// The node ids an edge end stands for: the node itself, or a group's members.
+export const endNodes = (members, id) => members.get(id) || [id];
+// Edges with group ends replaced by one edge per member pair (same id and kind).
+export function memberEdges(doc, members = groupMembers(doc)) {
+  const out = [];
+  for (const e of doc.edges) {
+    for (const from of endNodes(members, e.from)) for (const to of endNodes(members, e.to)) out.push({ ...e, from, to });
+  }
+  return out;
+}
+
 // ---- lanes ------------------------------------------------------------------
 // 1. Longest-path rank over file/text edges (ctrl edges are replies and side channels). Cycles are
 //    broken by a DFS in nodes[] order. A node with an explicit lane keeps it; successors rank after it.
@@ -148,6 +169,7 @@ function dfsOrder(ids, out) {
 
 function computeLanes(doc) {
   const ids = doc.nodes.map((n) => n.id);
+  const flat = memberEdges(doc); // a group end ranks like an edge to each of its members
   const byId = Object.fromEntries(doc.nodes.map((n) => [n.id, n]));
   // x/y nodes sit outside the grid: they neither pin lanes nor push their successors' ranks
   const manual = (id) => typeof byId[id].x === "number" && typeof byId[id].y === "number";
@@ -159,10 +181,10 @@ function computeLanes(doc) {
   const fixed = (id) => allHinted && hinted(id);
   // file/text edges rank +1; ctrl edges into a node without file/text predecessors rank +0
   const dataIn = new Set();
-  for (const e of doc.edges) if (e.kind !== "ctrl" && e.from !== e.to && !manual(e.from)) dataIn.add(e.to);
+  for (const e of flat) if (e.kind !== "ctrl" && e.from !== e.to && !manual(e.from)) dataIn.add(e.to);
   const out = new Map(ids.map((id) => [id, []]));
   const weight = new Map();
-  for (const e of doc.edges) {
+  for (const e of flat) {
     if (e.from === e.to || manual(e.from) || manual(e.to)) continue;
     const w = e.kind !== "ctrl" ? 1 : !dataIn.has(e.to) ? 0 : null;
     if (w === null) continue;
@@ -183,7 +205,7 @@ function computeLanes(doc) {
   }
   // a node with no edge at all sits with its group (lowest lane of its connected siblings)
   const linked = new Set();
-  for (const e of doc.edges) linked.add(e.from).add(e.to);
+  for (const e of flat) linked.add(e.from).add(e.to);
   for (const n of doc.nodes) {
     if (fixed(n.id) || linked.has(n.id) || !n.group) continue;
     const sib = doc.nodes.filter((m) => m.group === n.group && linked.has(m.id)).map((m) => rank.get(m.id));
@@ -647,6 +669,9 @@ export function layoutWalkthrough(doc) {
   const gaugeByNode = Object.fromEntries((doc.gauges || []).map((g) => [g.node, g]));
   const groupDefs = Object.fromEntries((doc.groups || []).map((g) => [g.id, g]));
   const manual = (n) => typeof n.x === "number" && typeof n.y === "number";
+  const members = groupMembers(doc);
+  // the nodes an edge connects (a group end: all its members); other nodes are obstacles
+  const related = (e) => new Set([...endNodes(members, e.from), ...endNodes(members, e.to)]);
 
   // ---- grid placement
   const { lane: rank, order } = computeLanes(doc);
@@ -795,6 +820,7 @@ export function layoutWalkthrough(doc) {
 
   // ---- groups
   const groups = [];
+  const groupBox = {};
   (doc.groups || []).forEach((g, gi) => {
     const members = doc.nodes.filter((n) => n.group === g.id).map((n) => nodes[n.id]);
     if (!members.length) return;
@@ -803,6 +829,7 @@ export function layoutWalkthrough(doc) {
     const x2 = Math.max(...members.map((b) => b.x + b.w)) + G.groupSide;
     const y2 = Math.max(...members.map((b) => b.y + b.h)) + G.groupBottom;
     groups.push({ id: g.id, title: g.title, meta: g.meta, tone: g.tone || "default", x: round(x1), y: round(y1), w: round(x2 - x1), h: round(y2 - y1), path: `/groups/${gi}` });
+    groupBox[g.id] = groups[groups.length - 1];
     const longest = Math.max(measure(g.title, TEXT_WT.groupTitle), g.meta ? measure(g.meta, TEXT_WT.groupMeta) : 0);
     if (longest > x2 - x1 - 24) issues.push({ path: `/groups/${gi}`, code: "W_TEXT_LONG", message: "group title or meta is wider than its box; shorten it" });
   });
@@ -845,6 +872,9 @@ export function layoutWalkthrough(doc) {
     }
   }
 
+  // an edge end's box: its node, or the border of its group
+  const boxOf = (id) => nodes[id] || groupBox[id];
+
   // ---- edge ports
   // Each edge end lives on one side of its node. Ends of the same node pair on one side share a
   // slot (a bidirectional pair is then offset by +-bidi). Slots go where the opposite node faces
@@ -862,8 +892,8 @@ export function layoutWalkthrough(doc) {
   for (const e of doc.edges) {
     const r = e.route || {};
     if (r.d !== undefined) continue;
-    const a = nodes[e.from];
-    const b = nodes[e.to];
+    const a = boxOf(e.from);
+    const b = boxOf(e.to);
     if (r.via && r.via.length) {
       const s1 = r.from_side || sideToward(a, r.via[0]);
       const s2 = r.to_side || sideToward(b, r.via[r.via.length - 1]);
@@ -882,7 +912,8 @@ export function layoutWalkthrough(doc) {
       const top = s1 === "bottom" ? a : b;
       const bot = s1 === "bottom" ? b : a;
       const chan = { x: Math.max(a.x, b.x), w: Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), y: top.y + top.h, h: bot.y - (top.y + top.h) };
-      if (ids.some((id) => id !== e.from && id !== e.to && overlaps(chan, nodes[id]))) {
+      const rel = related(e);
+      if (ids.some((id) => !rel.has(id) && overlaps(chan, nodes[id]))) {
         if (!r.from_side && !r.to_side) {
           detours.push(e);
           continue;
@@ -912,7 +943,7 @@ export function layoutWalkthrough(doc) {
     bySide.get(key).push(end);
   }
   for (const list of bySide.values()) {
-    const box = nodes[list[0].node];
+    const box = boxOf(list[0].node);
     const side = list[0].side;
     const len = sideLen(box, side);
     const along = (b) => (isHorizontal(side) ? center(b)[1] - box.y : center(b)[0] - box.x);
@@ -920,11 +951,12 @@ export function layoutWalkthrough(doc) {
     for (const end of list) {
       let slot = slots.find((s) => s.pair === end.pair);
       if (!slot) {
-        const other = nodes[end.other];
+        const other = boxOf(end.other);
         // facing sides with an overlapping range: the middle of the overlap lines both ends up
+        // (a group's border keeps its ends in the middle of the side)
         let want = len / 2;
         const otherSide = plan[end.edge][end.which === "from" ? "s2" : "s1"];
-        if (otherSide === OPPOSITE[side]) {
+        if (otherSide === OPPOSITE[side] && !groupBox[end.node] && !groupBox[end.other]) {
           const lo = isHorizontal(side) ? Math.max(box.y, other.y) : Math.max(box.x, other.x);
           const hi = isHorizontal(side) ? Math.min(box.y + box.h, other.y + other.h) : Math.min(box.x + box.w, other.x + other.w);
           if (hi - lo >= 16) want = (lo + hi) / 2 - (isHorizontal(side) ? box.y : box.x);
@@ -969,9 +1001,12 @@ export function layoutWalkthrough(doc) {
   const edges = {};
   const routed = {}; // edge id -> point list of an automatic detour (offset below where channels are shared)
   const dOf = {};
-  const crossesFor = (e) => (path) => {
-    const sp = samplePath(path);
-    return ids.some((id) => id !== e.from && id !== e.to && sp.some(([px, py]) => inside(nodes[id], px, py, 2)));
+  const crossesFor = (e) => {
+    const rel = related(e);
+    return (path) => {
+      const sp = samplePath(path);
+      return ids.some((id) => !rel.has(id) && sp.some(([px, py]) => inside(nodes[id], px, py, 2)));
+    };
   };
   doc.edges.forEach((e) => {
     const r = e.route || {};
@@ -979,8 +1014,8 @@ export function layoutWalkthrough(doc) {
     if (r.d !== undefined) d = r.d.trim().replace(/\s+/g, " ");
     else if (plan[e.id].via) {
       const { s1, s2, via } = plan[e.id];
-      const p1 = portToward(nodes[e.from], s1, via[0]);
-      const p2 = portToward(nodes[e.to], s2, via[via.length - 1]);
+      const p1 = portToward(boxOf(e.from), s1, via[0]);
+      const p2 = portToward(boxOf(e.to), s2, via[via.length - 1]);
       d = polyline([p1, ...via, p2]);
     } else {
       const { s1, s2 } = plan[e.id];
@@ -1047,7 +1082,8 @@ export function layoutWalkthrough(doc) {
     const mid = pointAtHalf(pts);
     edges[e.id] = { d, badgeAt: { x: round(mid.x), y: round(mid.y) }, length: round(mid.length), path: `/edges/${i}`, pts };
     // crossing: a sample strictly inside an unrelated node
-    const hit = ids.find((id) => id !== e.from && id !== e.to && pts.some(([px, py]) => inside(nodes[id], px, py, 2)));
+    const rel = related(e);
+    const hit = ids.find((id) => !rel.has(id) && pts.some(([px, py]) => inside(nodes[id], px, py, 2)));
     if (hit) {
       issues.push({
         path: `/edges/${i}`,

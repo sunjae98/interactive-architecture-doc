@@ -98,9 +98,15 @@ dims the group with the rest of the map while a scenario is shown. The box is dr
 | Field | Required | Notes |
 |---|---|---|
 | `id` | yes | lowercase words joined by `-` or `_`, unique |
-| `from`, `to` | yes | node ids, different from each other |
+| `from`, `to` | yes | node ids or group ids, different from each other. A group end ("one of these boxes") meets the middle of the group border that faces the other end; see below |
 | `kind` | yes | `file` (bulk data, thick), `text` (requests and text), `ctrl` (control and responses, dotted) |
 | `route` | no | `{from_side?, to_side?, via?, d?}`; see [Layout](#layout) |
+
+An edge to or from a group stands for "one of the group's boxes": a step that uses it lights up every
+member, the automatic layout ranks it like an edge to each member, and the members count as connected
+(no `W_NODE_ISOLATED`). The arrow follows the group border when the layout changes, so it needs no
+`route.d`. When a node and a group share an id, the edge end is the node. A group cannot connect to
+its own member (`E_EDGE_SELF`).
 
 ### `gauges[]`
 
@@ -190,7 +196,9 @@ controls. The mode is decided when the page loads and again whenever the page's 
 Errors (`E_*`) make `validate` exit 1 and `render` refuse. Warnings (`W_*`) are reported but do not
 block. Structural rules run first; cross-reference rules run only when the structure is valid; layout
 rules run only on an error-free document. `E_NODE_UNKNOWN`, `E_GROUP_UNKNOWN` and `W_TEXT_LONG` are
-listed in [format-overview.md](format-overview.md) and apply here too.
+listed in [format-overview.md](format-overview.md) and apply here too; in a walkthrough an edge end that
+is neither a node nor a group is `E_NODE_UNKNOWN`, and one that names a group without members is
+`E_GROUP_UNKNOWN`.
 
 | Code | Level | Meaning |
 |---|---|---|
@@ -218,10 +226,10 @@ listed in [format-overview.md](format-overview.md) and apply here too.
 | `E_POS_PARTIAL` | error | A node has only one of `x` / `y`; absolute positions need both. |
 | `E_LAYOUT_OVERLAP` | error | Two nodes, two groups, or a node and a group it does not belong to overlap on the map. |
 | `E_ROUTE_PATH` | error | `route.d` is not an absolute SVG path: it must start with M and use M L H V C Q Z with whole argument groups (M/L 2, H/V 1, C 6, Q 4, Z 0) of finite numbers within ±1e5. |
-| `E_EDGE_SELF` | error | An edge starts and ends at the same node (use `step.nodes` to highlight a single node). |
+| `E_EDGE_SELF` | error | An edge starts and ends at the same node, or connects a group with one of its own members (use `step.nodes` to highlight a single node). |
 | `E_TABLE_SHAPE` | error | A table row does not have one cell per column. |
 | `W_EDGE_UNUSED` | warning | An edge is not used by any step of any scenario. |
-| `W_NODE_ISOLATED` | warning | A node has no edge. |
+| `W_NODE_ISOLATED` | warning | A node has no edge (an edge to or from its group counts). |
 | `W_EDGE_CROSSES_NODE` | warning | An edge runs through a node it does not connect; set `route` or move a node. |
 | `W_FACTS_MISSING` | warning | A node has no `facts`, so clicking it shows an empty panel. |
 | `W_POS_IGNORED` | warning | A node has both `x`/`y` and `lane`/`row`; `x`/`y` wins and `lane`/`row` are ignored. |

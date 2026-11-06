@@ -5,6 +5,9 @@
 - Walkthrough pages keep a link to the current scenario and step in the URL (`#s2/3`), open such links
   directly, and accept `?theme=dark|light`.
 - A walkthrough takes up to 8 scenarios (was 6): two more scenario color slots, `--s7` and `--s8`.
+- An edge may start or end at a group (`from` / `to` = a group id): the arrow meets the middle of the
+  group border that faces the other end, the step lights every member, the layout ranks it like an edge
+  to each member, and members connected this way are not `W_NODE_ISOLATED`.
 
 ## 3.0.0 — 2026-11-05
 

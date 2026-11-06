@@ -90,6 +90,9 @@ const FIXTURES = [
   ["E_NODE_UNKNOWN", (d) => { d.scenarios[1].skip[0].node = "ghost"; }],
   ["E_NODE_UNKNOWN", (d) => { d.gauges[0].node = "ghost"; }],
   ["E_GROUP_UNKNOWN", (d) => { d.nodes[0].group = "nope"; }],
+  // an edge may end at a group, but not at a group without members, nor at its own member
+  ["E_GROUP_UNKNOWN", (d) => { d.groups.push({ id: "empty", title: "Empty" }); d.edges[0].to = "empty"; }],
+  ["E_EDGE_SELF", (d) => { d.edges.find((e) => e.id === "write").to = "service"; }],
   ["W_EDGE_UNUSED", (d) => { d.edges.push({ id: "spare", from: "browser", to: "receiver", kind: "ctrl", route: { via: [[200, 40], [530, 40]] } }); }],
   ["W_NODE_ISOLATED", (d) => { d.nodes.push({ id: "lonely", kind: "tool", title: "Lonely", facts: ["x"], x: 40, y: 260 }); d.legend.nodes.tool = "Tool"; }],
   ["W_EDGE_CROSSES_NODE", (d) => { d.edges.push({ id: "skip", from: "browser", to: "receiver", kind: "ctrl", route: { via: [[310, 102]] } }); step(d, 0, 0).edges.push("skip"); }],
@@ -211,6 +214,23 @@ test("MAX_SCENARIOS scenarios validate; one more is E_SCENARIO_LIMIT", () => {
   assert.equal(validate(d).ok, true, JSON.stringify(validate(d).errors));
   d.scenarios.push({ ...clone(d.scenarios[1]), id: "ninth" });
   assert.deepEqual(validate(d).errors.map((e) => e.code), ["E_SCENARIO_LIMIT"]);
+});
+
+test("edge ends: a group id is accepted, and its members count as connected", () => {
+  const d = clone(BASE);
+  d.nodes.push({ id: "spare", kind: "store", title: "Spare", group: "service", facts: ["f"] });
+  assert.deepEqual(validate(d).warnings.map((w) => w.code), ["W_NODE_ISOLATED"]);
+  d.edges.find((e) => e.id === "fwd").to = "service";
+  const r = validate(d);
+  assert.deepEqual(r.errors, []);
+  assert.ok(!r.warnings.some((w) => w.code === "W_NODE_ISOLATED"), JSON.stringify(r.warnings));
+  // a node id wins over a group of the same name: "parser" stays the node, not a self edge
+  d.groups.push({ id: "parser", title: "P" });
+  d.nodes.find((n) => n.id === "spare").group = "parser";
+  d.edges.find((e) => e.id === "read").to = "parser";
+  assert.deepEqual(validate(d).errors, []);
+  d.edges.find((e) => e.id === "fwd").to = "ghost";
+  assert.match(validate(d).errors.find((e) => e.code === "E_NODE_UNKNOWN").message, /not a node id or a group id/);
 });
 
 test("every rule code has at least one failing fixture", () => {

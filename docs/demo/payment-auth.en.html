@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;sha256-y1X804AWTZ0E2jmio+1R6cnW/d4b2w7q2LXE28PAMnY=&#39; &#39;sha256-RJkd29HRpXPUUAmtiZWI+A7/Vx3IjToHRBcMTvEYxDQ=&#39; &#39;sha256-J3iyAPeyUNjy7PIyzMslA2WJXlpFttHequWwjH0u9Eo=&#39;; style-src &#39;unsafe-inline&#39;; font-src data:; img-src data: blob:; base-uri &#39;none&#39;; form-action &#39;none&#39;">
+<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;sha256-y1X804AWTZ0E2jmio+1R6cnW/d4b2w7q2LXE28PAMnY=&#39; &#39;sha256-RJkd29HRpXPUUAmtiZWI+A7/Vx3IjToHRBcMTvEYxDQ=&#39; &#39;sha256-ZoJKa2tmgU0GsPbcn8Z8Ug5MALe2eqVZbCQNK8rHiIw=&#39;; style-src &#39;unsafe-inline&#39;; font-src data:; img-src data: blob:; base-uri &#39;none&#39;; form-action &#39;none&#39;">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="interactive-architecture-doc">
 <title>Payment authorization: retries and timeouts</title>
@@ -1343,25 +1343,30 @@
     }).join("");
   }
 
-  // Nodes a step touches: its own `nodes`, then both ends of each edge.
-  function nodesOfStep(st, edges) {
+  // Nodes a step touches: its own `nodes`, then both ends of each edge. An edge end that is a group
+  // (members: group id -> member node ids) stands for every member.
+  function nodesOfStep(st, edges, members) {
     var out = (st.nodes || []).slice();
-    st.edges.forEach(function (id) { out.push(edges[id].from, edges[id].to); });
+    function end(id) {
+      var m = members && Object.prototype.hasOwnProperty.call(members, id) ? members[id] : null;
+      if (m) m.forEach(function (n) { out.push(n); }); else out.push(id);
+    }
+    st.edges.forEach(function (id) { end(edges[id].from); end(edges[id].to); });
     return out;
   }
 
   // Highlight sets for a scenario at step j (-1 = the whole path): on = used anywhere in the
   // scenario, cur = the current step (or everything at -1). Values are id -> true maps.
-  function focusSets(steps, j, edges) {
+  function focusSets(steps, j, edges, members) {
     var allE = {}, allN = {}, curE = {}, curN = {};
     steps.forEach(function (st) {
       st.edges.forEach(function (e) { allE[e] = true; });
-      nodesOfStep(st, edges).forEach(function (n) { allN[n] = true; });
+      nodesOfStep(st, edges, members).forEach(function (n) { allN[n] = true; });
     });
     if (j < 0) { curE = allE; curN = allN; }
     else {
       steps[j].edges.forEach(function (e) { curE[e] = true; });
-      nodesOfStep(steps[j], edges).forEach(function (n) { curN[n] = true; });
+      nodesOfStep(steps[j], edges, members).forEach(function (n) { curN[n] = true; });
     }
     return { allE: allE, allN: allN, curE: curE, curN: curN };
   }
@@ -1491,9 +1496,11 @@
   }
   // ---- END pure helpers ----
 
-  var EDGES = {}, NODES = {};
+  var EDGES = {}, NODES = {}, MEMBERS = {};
   DOC.edges.forEach(function (e) { EDGES[e.id] = e; });
   DOC.nodes.forEach(function (n) { NODES[n.id] = n; });
+  (DOC.groups || []).forEach(function (g) { if (!NODES[g.id]) MEMBERS[g.id] = []; });
+  DOC.nodes.forEach(function (n) { if (n.group && MEMBERS[n.group]) MEMBERS[n.group].push(n.id); });
   var SC = DOC.scenarios;
   var GAUGES = DOC.gauges || [];
 
@@ -1525,8 +1532,9 @@
   var caseEls = Array.prototype.slice.call(casesEl.querySelectorAll(".case"));
   var badgeGroups = Array.prototype.slice.call(svg.querySelectorAll(".badges"));
 
+  // an edge end's box: its node, or its group's border
   function box(id) {
-    var r = nodeEls[id].querySelector("rect.box");
+    var r = nodeEls[id] ? nodeEls[id].querySelector("rect.box") : svg.querySelector('.grp[data-group="' + id + '"] rect');
     return { x: +r.getAttribute("x"), y: +r.getAttribute("y"), w: +r.getAttribute("width"), h: +r.getAttribute("height") };
   }
   function mk(tag, attrs, parent, text) {
@@ -1563,7 +1571,7 @@
 
   function render() {
     var sc = SC[cur], steps = sc.steps, total = steps.length;
-    var f = focusSets(steps, step, EDGES);
+    var f = focusSets(steps, step, EDGES, MEMBERS);
     var skip = {};
     (sc.skip || []).forEach(function (k) { skip[k.node] = true; });
     svg.classList.add("focus");
@@ -1876,7 +1884,7 @@
         pickScenario(i);
         for (var j = -1; j < sc.steps.length; j++) {
           go(j);
-          var f = focusSets(sc.steps, j, EDGES);
+          var f = focusSets(sc.steps, j, EDGES, MEMBERS);
           var gs = gaugeState(GAUGES, sc.steps, j, sc.gauge_empty), labels = {};
           Object.keys(gs).forEach(function (id) { labels[id] = gs[id].label; });
           var expected = { curE: f.curE, curN: f.curN, badges: sc.steps.length, gauges: labels, markers: j >= 0 ? (sc.steps[j].markers || []).length : 0 };
@@ -1888,7 +1896,7 @@
       go(savedStep);
       scrollQuiet = false;
       syncHash();
-      var back = focusSets(SC[cur].steps, step, EDGES);
+      var back = focusSets(SC[cur].steps, step, EDGES, MEMBERS);
       if (restoreView(savedStep) === "follow") followStep(back.curE, back.curN, true);
       else scrollMapTo(0, true); // the full path: leave the map at its start
       var errors = (window.__iadErrors || []).slice();

@@ -95,6 +95,8 @@ Paths are relative to the skill folder; run the commands from there or use absol
 - Define every used kind in `legend.nodes`, in the reader's terms, and use kinds consistently.
 - Each step names the edges it uses (in order: the token travels them one after another), or `nodes`
   when nothing moves along an edge.
+- "Goes to one of these boxes" is one edge to their group: `from` / `to` may be a group id. The arrow
+  meets the group border and its step lights every member; do not draw it to one member with `route.d`.
 - Gauge values (0..1) carry forward to later steps; set them only where they change.
 - Every `considerations` item needs a `why`; do not record a decision without its reason.
 - Text fields support only `**bold**` and `` `code` ``; everything else is escaped.

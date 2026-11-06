@@ -554,3 +554,30 @@ test("node cap: 64 nodes validate (and lay out quickly), 65 are E_NODE_LIMIT bef
   const over = validate(chain(65));
   assert.deepEqual(over.errors.map((e) => [e.code, e.path]), [["E_NODE_LIMIT", "/nodes"]]);
 });
+
+// ---- edges to and from a group ------------------------------------------------------------------
+test("group ends: the arrow meets the middle of the facing group border and follows it when the layout changes", () => {
+  const doc = mini(
+    ["a", { id: "t1", group: "g" }, { id: "t2", group: "g" }, { id: "t3", group: "g" }, "b"],
+    [["a", "g"], ["g", "b"]],
+    { groups: [{ id: "g", title: "Tiers" }] }
+  );
+  const check = (L) => {
+    const g = L.groups.find((x) => x.id === "g");
+    const into = samplePath(L.edges.e0.d);
+    const out = samplePath(L.edges.e1.d);
+    const [ex, ey] = into[into.length - 1];
+    const [sx, sy] = out[0];
+    assert.ok(Math.abs(ex - g.x) < 0.5 && Math.abs(ey - (g.y + g.h / 2)) < 0.5, `into the left border middle, got ${ex},${ey}`);
+    assert.ok(Math.abs(sx - (g.x + g.w)) < 0.5 && Math.abs(sy - (g.y + g.h / 2)) < 0.5, `out of the right border middle, got ${sx},${sy}`);
+    assert.ok(L.nodes.a.lane < L.nodes.t1.lane && L.nodes.t1.lane < L.nodes.b.lane, "ranked like an edge to every member");
+    assert.deepEqual(L.issues, []);
+  };
+  check(layoutWalkthrough(doc));
+  assert.deepEqual(codes(doc), []);
+  // a taller group (another member, a bigger node) moves the border; the arrow still meets its middle
+  doc.nodes.push({ id: "t4", kind: "app", title: "T4", group: "g", facts: ["f"], h: 140 });
+  check(layoutWalkthrough(doc));
+  assert.deepEqual(codes(doc), []);
+});
+
