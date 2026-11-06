@@ -4,6 +4,7 @@
 
 - Walkthrough pages keep a link to the current scenario and step in the URL (`#s2/3`), open such links
   directly, and accept `?theme=dark|light`.
+- A walkthrough takes up to 8 scenarios (was 6): two more scenario color slots, `--s7` and `--s8`.
 
 ## 3.0.0 — 2026-11-05
 
