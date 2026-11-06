@@ -435,6 +435,18 @@ test("lane hints: a hint that puts a node left of its predecessor is W_HINT_REVE
   assert.ok(!codes(back).includes("W_HINT_REVERSES_FLOW"));
 });
 
+test("lane hints: earlier hints keep their lanes and groups stay contiguous (review regressions)", () => {
+  // two ungrouped hints right of their source: both keep their lanes
+  const two = mini(["src", { id: "a", lane: 2 }, { id: "b", lane: 3 }], [["src", "a", "text"], ["src", "b", "text"]]);
+  const L2 = layoutWalkthrough(two);
+  assert.deepEqual([L2.nodes.a.lane, L2.nodes.b.lane], [2, 3]);
+  // a hinted group member next to an ungrouped hint: no column lands inside the group
+  const g = mini([{ id: "a", group: "g", lane: 0 }, { id: "b", group: "g" }, { id: "c", lane: 1 }], [["a", "b", "text"], ["b", "c", "text"]], { groups: [{ id: "g", title: "G" }] });
+  const Lg = layoutWalkthrough(g);
+  assert.deepEqual([Lg.nodes.a.lane, Lg.nodes.b.lane, Lg.nodes.c.lane], [0, 0, 1]);
+  assert.deepEqual(validate(g).errors, []);
+});
+
 test("lane hints: overlap errors say which node or group collides, and where", () => {
   const doc = mini([{ id: "a", lane: 0, row: 0 }, { id: "b", lane: 0, row: 0 }], [["a", "b"]]);
   const [e] = validate(doc).errors;
