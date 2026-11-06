@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;sha256-y1X804AWTZ0E2jmio+1R6cnW/d4b2w7q2LXE28PAMnY=&#39; &#39;sha256-RJkd29HRpXPUUAmtiZWI+A7/Vx3IjToHRBcMTvEYxDQ=&#39; &#39;sha256-ZoJKa2tmgU0GsPbcn8Z8Ug5MALe2eqVZbCQNK8rHiIw=&#39;; style-src &#39;unsafe-inline&#39;; font-src data:; img-src data: blob:; base-uri &#39;none&#39;; form-action &#39;none&#39;">
+<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;sha256-y1X804AWTZ0E2jmio+1R6cnW/d4b2w7q2LXE28PAMnY=&#39; &#39;sha256-RJkd29HRpXPUUAmtiZWI+A7/Vx3IjToHRBcMTvEYxDQ=&#39; &#39;sha256-zZyj40vFZ33i8AEiW3UcFF/APzzcRgShqzO85M2fO20=&#39;; style-src &#39;unsafe-inline&#39;; font-src data:; img-src data: blob:; base-uri &#39;none&#39;; form-action &#39;none&#39;">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="interactive-architecture-doc">
 <title>결제 승인 흐름: 재시도와 타임아웃</title>
@@ -233,6 +233,7 @@
   .wt-map .xm text{font:700 11px var(--font-mono);fill:var(--err-tx);text-anchor:middle;dominant-baseline:central;}
 
   .wt-map .tok{pointer-events:none;}
+  .wt-map .tok.cut{pointer-events:auto;cursor:help;}
   .wt-map .tok rect{stroke-width:1.5;}
   .wt-map .tok text{font:700 11px var(--font-mono);text-anchor:middle;dominant-baseline:central;}
   .wt-map .tok.file rect{fill:var(--store-bg);stroke:var(--store-tx);}
@@ -1320,6 +1321,8 @@
   // ---- BEGIN pure helpers (no DOM access; test/runtime.test.mjs runs this block in node:vm) ----
   var EXPORT_MAX_PIXELS = 16000000;  // ~16MP canvas area cap (Safari's limit)
   var EXPORT_MAX_SIDE = 16384;       // per-side canvas cap shared by current browsers
+  var TOKEN_MAX_W = 220;             // token chip width cap on the map (GEOMETRY_WT.tokenMax)
+  var TOKEN_PAD = 16;                // chip padding, left + right
 
   // UI string with {name} placeholders filled; unknown placeholders are kept as-is.
   function t(key, params) {
@@ -1394,6 +1397,19 @@
       d -= lengths[i];
     }
     return { i: 0, at: 0 };
+  }
+
+  // Token chip text that fits maxW (text width + padding): the whole text, or the longest prefix that
+  // fits with "…" appended. widthOf(s) -> rendered width of s. Characters, not UTF-16 units, are cut.
+  function fitChip(text, widthOf, maxW) {
+    if (widthOf(text) + TOKEN_PAD <= maxW) return { text: text, cut: false };
+    var chars = Array.from(text), lo = 0, hi = chars.length - 1;
+    function show(n) { return chars.slice(0, n).join("").replace(/\s+$/, "") + "\u2026"; }
+    while (lo < hi) {
+      var mid = (lo + hi + 1) >> 1;
+      if (widthOf(show(mid)) + TOKEN_PAD <= maxW) lo = mid; else hi = mid - 1;
+    }
+    return { text: show(lo), cut: true };
   }
 
   // The stretch of the token's route where the chip (w x 20, plus a margin) does not cover the
@@ -1739,9 +1755,17 @@
     var halo = mk("rect", { "class": "halo" }, tok);
     var r = mk("rect", { rx: 5, height: 20, y: -10 }, tok);
     var text = mk("text", null, tok, st.token.text);
-    var w = 0;
-    try { w = text.getComputedTextLength() + 16; } catch (e) { w = 0; }
-    if (!w || w < 30) w = st.token.text.length * 7.5 + 16;
+    function widthOf(s) {
+      text.textContent = s;
+      var px = 0;
+      try { px = text.getComputedTextLength(); } catch (e) { px = 0; }
+      return px > 0 ? px : Array.from(s).length * 7.5;
+    }
+    // a long token is cut to one chip of at most TOKEN_MAX_W; hovering it shows the whole text
+    var fit = fitChip(st.token.text, widthOf, TOKEN_MAX_W);
+    text.textContent = fit.text;
+    if (fit.cut) { tok.classList.add("cut"); mk("title", null, tok, st.token.text); }
+    var w = Math.max(30, widthOf(fit.text) + TOKEN_PAD);
     r.setAttribute("x", -w / 2); r.setAttribute("width", w);
     halo.setAttribute("x", -w / 2 - 4); halo.setAttribute("y", -14); halo.setAttribute("width", w + 8); halo.setAttribute("height", 28); halo.setAttribute("rx", 8);
     function place(p) { tok.setAttribute("transform", "translate(" + p.x.toFixed(1) + "," + p.y.toFixed(1) + ")"); }

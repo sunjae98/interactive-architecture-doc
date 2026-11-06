@@ -134,7 +134,7 @@ its own member (`E_EDGE_SELF`).
 | `title` | yes | markup; step list and narration heading |
 | `edges` | yes | edge ids (may be empty); the token travels them in order |
 | `nodes` | no | nodes highlighted without an edge; required when `edges` is empty |
-| `token` | yes | `{text, kind}`: the moving chip; `kind` is `file`, `text`, `ctrl` or `err` |
+| `token` | yes | `{text, kind}`: the moving chip; `kind` is `file`, `text`, `ctrl` or `err`. On the map the chip is at most about 220px wide (some 30 Latin or 20 Hangul characters); longer text is cut with `…` and shown whole on hover and in the narration (`W_TOKEN_LONG`) |
 | `what`, `where`, `fail` | yes | markup; the three narration boxes |
 | `gauges` | no | `{gaugeId: {value: 0..1, label}}` |
 | `markers` | no | `[{node, label}]`: error markers at the node's top-right corner, this step only |
@@ -238,6 +238,7 @@ is neither a node nor a group is `E_NODE_UNKNOWN`, and one that names a group wi
 | `W_POS_IGNORED` | warning | A node has both `x`/`y` and `lane`/`row`; `x`/`y` wins and `lane`/`row` are ignored. |
 | `W_GAUGE_UNUSED` | warning | No step sets this gauge, so it always shows its empty state. |
 | `W_HINT_REVERSES_FLOW` | warning | Lane hints on a partly automatic map turn a `file`/`text` edge right to left that runs left to right without them (a hinted node or its group sits left of its predecessor). |
+| `W_TOKEN_LONG` | warning | A step's token text is wider than the map's token chip (about 220px); the map cuts it with an ellipsis and shows the whole text on hover and in the narration. |
 | `W_LANE_EMPTY` | warning | Lane hints leave lanes without any node; they are drawn without width, but a lower hint is usually meant. |
 | `W_BADGE_CROWDED` | warning | A step badge found no spot clear of the scenario's other badges and of node boxes (many steps start on one short edge); it overlaps. |
 | `W_PLACEHOLDER` | warning | A string still contains a `[...]` placeholder or `TODO`. |

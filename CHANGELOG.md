@@ -11,6 +11,8 @@
 - Lane hints on some nodes keep the other nodes in flow order: a hint right of the node's place in the
   flow pushes what follows to the right instead of moving it ahead. Hints that turn a `file` / `text`
   edge right to left are reported (`W_HINT_REVERSES_FLOW`).
+- The moving token chip on the map is at most 220px wide: longer text is cut with `…` and shown whole
+  on hover and in the narration. `W_TOKEN_LONG` flags tokens that will be cut.
 
 ## 3.0.0 — 2026-11-05
 

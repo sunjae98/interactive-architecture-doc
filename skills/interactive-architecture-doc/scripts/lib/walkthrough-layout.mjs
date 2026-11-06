@@ -39,6 +39,8 @@ export const GEOMETRY_WT = {
   badgeOff: 14, // sideways offset from the path when the path itself has no room
   badgeTries: 6, // last resort: up to this many badge-sized steps in each direction
   maxAutoLanes: 6, // fully automatic maps fold into at most this many lanes (about the stage's aspect)
+  tokenMax: 220, // token chip width cap on the map, padding included (the runtime's TOKEN_MAX_W)
+  tokenPad: 16,
 };
 
 // Text styles shared with the template CSS (.wt-map .node .nt / .nm / .ns / .nl, .grp .gt / .gm).
@@ -49,6 +51,7 @@ export const TEXT_WT = {
   line: { px: 10.5, mono: true },
   groupTitle: { px: 12.5, bold: true },
   groupMeta: { px: 10.5, mono: true },
+  token: { px: 11, mono: true, bold: true },
 };
 // Advance widths in em, measured from the embedded fonts (IAD Sans, Geist Mono) and rounded up a
 // little so real overflow is still caught: Hangul/CJK 0.864 measured, Latin lowercase 0.47-0.49,
