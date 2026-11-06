@@ -245,6 +245,19 @@ test("W_TOKEN_LONG: about 40 characters are too long for the map chip; 20 are fi
   assert.deepEqual(validate(d).warnings.map((w) => w.path), ["/scenarios/0/steps/0/token/text", "/scenarios/0/steps/1/token/text"]);
 });
 
+test("W_TEXT_LONG: gauge labels (empty, scenario override, step label) must fit their gauge", () => {
+  const d = clone(BASE);
+  const g = d.gauges[0];
+  const si = d.scenarios.findIndex((sc) => sc.steps.some((st) => st.gauges && st.gauges[g.id]));
+  const ti = d.scenarios[si].steps.findIndex((st) => st.gauges && st.gauges[g.id]);
+  assert.deepEqual(validate(d).warnings, []);
+  g.empty = "0.375 → REASONING (override) and more";
+  d.scenarios[si].gauge_empty = { [g.id]: "nothing written at all in this scenario" };
+  d.scenarios[si].steps[ti].gauges[g.id].label = "0.375 → REASONING (override)";
+  const paths = validate(d).warnings.filter((w) => w.code === "W_TEXT_LONG").map((w) => w.path);
+  assert.deepEqual(paths, [`/gauges/0/empty`, `/scenarios/${si}/gauge_empty/${g.id}`, `/scenarios/${si}/steps/${ti}/gauges/${g.id}/label`]);
+});
+
 test("every rule code has at least one failing fixture", () => {
   const covered = new Set([...FIXTURES, ...OVERVIEW_FIXTURES].map(([c]) => c));
   const missing = RULES.map((r) => r.code).filter((c) => !covered.has(c));
@@ -354,7 +367,7 @@ test("v3: removed v2 kinds and fields are rejected", () => {
 test("walkthrough: lines may be {text, muted}; scenarios may override the gauge's empty label", () => {
   const d = clone(BASE);
   d.nodes[3].lines = ["/tmp/uploads/", { text: "0600", muted: true }, { text: "plain" }];
-  d.scenarios[1].gauge_empty = { "disk-use": "0B · nothing written" };
+  d.scenarios[1].gauge_empty = { "disk-use": "0B · none" };
   assert.deepEqual(validate(d), { ok: true, errors: [], warnings: [] });
 });
 

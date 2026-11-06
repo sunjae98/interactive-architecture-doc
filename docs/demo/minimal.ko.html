@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;sha256-y1X804AWTZ0E2jmio+1R6cnW/d4b2w7q2LXE28PAMnY=&#39; &#39;sha256-RJkd29HRpXPUUAmtiZWI+A7/Vx3IjToHRBcMTvEYxDQ=&#39; &#39;sha256-zZyj40vFZ33i8AEiW3UcFF/APzzcRgShqzO85M2fO20=&#39;; style-src &#39;unsafe-inline&#39;; font-src data:; img-src data: blob:; base-uri &#39;none&#39;; form-action &#39;none&#39;">
+<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;sha256-y1X804AWTZ0E2jmio+1R6cnW/d4b2w7q2LXE28PAMnY=&#39; &#39;sha256-RJkd29HRpXPUUAmtiZWI+A7/Vx3IjToHRBcMTvEYxDQ=&#39; &#39;sha256-ECyb4dDlJ4OGtK7hvH+bL9vKww9L8Je+dDuih2jZSPc=&#39;; style-src &#39;unsafe-inline&#39;; font-src data:; img-src data: blob:; base-uri &#39;none&#39;; form-action &#39;none&#39;">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="interactive-architecture-doc">
 <title>OAuth2 인가 코드 로그인</title>
@@ -983,15 +983,17 @@
     return { i: 0, at: 0 };
   }
 
-  // Token chip text that fits maxW (text width + padding): the whole text, or the longest prefix that
-  // fits with "…" appended. widthOf(s) -> rendered width of s. Characters, not UTF-16 units, are cut.
-  function fitChip(text, widthOf, maxW) {
-    if (widthOf(text) + TOKEN_PAD <= maxW) return { text: text, cut: false };
+  // Text that fits maxW (text width + pad): the whole text, or the longest prefix that fits with "…"
+  // appended. widthOf(s) -> rendered width of s. Characters, not UTF-16 units, are cut. Used for the
+  // token chip (pad TOKEN_PAD) and gauge labels (pad 0, maxW = the gauge's data-room).
+  function fitText(text, widthOf, maxW, pad) {
+    var p = pad || 0;
+    if (widthOf(text) + p <= maxW) return { text: text, cut: false };
     var chars = Array.from(text), lo = 0, hi = chars.length - 1;
     function show(n) { return chars.slice(0, n).join("").replace(/\s+$/, "") + "\u2026"; }
     while (lo < hi) {
       var mid = (lo + hi + 1) >> 1;
-      if (widthOf(show(mid)) + TOKEN_PAD <= maxW) lo = mid; else hi = mid - 1;
+      if (widthOf(show(mid)) + p <= maxW) lo = mid; else hi = mid - 1;
     }
     return { text: show(lo), cut: true };
   }
@@ -1091,6 +1093,7 @@
     Object.keys(expected.gauges).forEach(function (id) {
       if (obs.gauges[id] !== expected.gauges[id]) add("gauge", id + " shows " + JSON.stringify(obs.gauges[id]) + ", expected " + JSON.stringify(expected.gauges[id]));
     });
+    (obs.gaugeSpill || []).forEach(function (id) { add("gauge-fit", id + " label is wider than its gauge"); });
     if (obs.markers !== expected.markers) add("markers", obs.markers + " marker(s), expected " + expected.markers);
     if (obs.overflow) add("overflow", "the page scrolls horizontally");
   }
@@ -1136,6 +1139,23 @@
   function box(id) {
     var r = nodeEls[id] ? nodeEls[id].querySelector("rect.box") : svg.querySelector('.grp[data-group="' + id + '"] rect');
     return { x: +r.getAttribute("x"), y: +r.getAttribute("y"), w: +r.getAttribute("width"), h: +r.getAttribute("height") };
+  }
+  // widthOf(s) for an SVG <text>: sets its text and measures it (an estimate where layout is unavailable)
+  function measurer(el) {
+    return function (s) {
+      el.textContent = s;
+      var px = 0;
+      try { px = el.getComputedTextLength(); } catch (e) { px = 0; }
+      return px > 0 ? px : Array.from(s).length * 7.5;
+    };
+  }
+  // Shows text in an SVG <text> cut to maxW; a cut text gets a <title> with the whole text.
+  function setFitted(el, full, maxW, pad) {
+    var fit = fitText(full, measurer(el), maxW, pad);
+    el.textContent = fit.text;
+    el.setAttribute("data-label", full);
+    if (fit.cut) mk("title", null, el, full);
+    return fit;
   }
   function mk(tag, attrs, parent, text) {
     var e = document.createElementNS(SVGNS, tag);
@@ -1193,7 +1213,7 @@
       var h = Math.max(0, Math.round((gh - 2) * gs[id].value));
       r.setAttribute("height", h);
       r.setAttribute("y", gy + gh - 1 - h);
-      gaugeLabels[id].textContent = gs[id].label;
+      setFitted(gaugeLabels[id], gs[id].label, +gaugeLabels[id].getAttribute("data-room"));
     });
     // error markers (top right of the node)
     gMarkers.innerHTML = "";
@@ -1339,14 +1359,9 @@
     var halo = mk("rect", { "class": "halo" }, tok);
     var r = mk("rect", { rx: 5, height: 20, y: -10 }, tok);
     var text = mk("text", null, tok, st.token.text);
-    function widthOf(s) {
-      text.textContent = s;
-      var px = 0;
-      try { px = text.getComputedTextLength(); } catch (e) { px = 0; }
-      return px > 0 ? px : Array.from(s).length * 7.5;
-    }
+    var widthOf = measurer(text);
     // a long token is cut to one chip of at most TOKEN_MAX_W; hovering it shows the whole text
-    var fit = fitChip(st.token.text, widthOf, TOKEN_MAX_W);
+    var fit = fitText(st.token.text, widthOf, TOKEN_MAX_W, TOKEN_PAD);
     text.textContent = fit.text;
     if (fit.cut) { tok.classList.add("cut"); mk("title", null, tok, st.token.text); }
     var w = Math.max(30, widthOf(fit.text) + TOKEN_PAD);
@@ -1471,10 +1486,16 @@
     var curE = {}, curN = {}, gauges = {};
     Object.keys(edgeEls).forEach(function (id) { if (edgeEls[id].classList.contains("cur")) curE[id] = true; });
     Object.keys(nodeEls).forEach(function (id) { if (nodeEls[id].classList.contains("cur")) curN[id] = true; });
-    Object.keys(gaugeLabels).forEach(function (id) { gauges[id] = gaugeLabels[id].textContent; });
+    var gaugeSpill = [];
+    Object.keys(gaugeLabels).forEach(function (id) {
+      var el = gaugeLabels[id], px = 0;
+      gauges[id] = el.getAttribute("data-label");
+      try { px = el.getComputedTextLength(); } catch (e) { px = 0; }
+      if (px > +el.getAttribute("data-room") + 0.5) gaugeSpill.push(id);
+    });
     var shown = badgeGroups.filter(function (g) { return g.classList.contains("show"); });
     return {
-      curE: curE, curN: curN, gauges: gauges,
+      curE: curE, curN: curN, gauges: gauges, gaugeSpill: gaugeSpill,
       narration: detail.textContent,
       badges: shown.reduce(function (s, g) { return s + g.querySelectorAll(".badge").length; }, 0),
       markers: gMarkers.querySelectorAll(".xm").length,

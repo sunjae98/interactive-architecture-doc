@@ -13,6 +13,8 @@
   edge right to left are reported (`W_HINT_REVERSES_FLOW`).
 - The moving token chip on the map is at most 220px wide: longer text is cut with `…` and shown whole
   on hover and in the narration. `W_TOKEN_LONG` flags tokens that will be cut.
+- Gauge labels stay inside the gauge: a longer label is cut with `…` (whole on hover), `W_TEXT_LONG`
+  reports it, and the self-check fails when a label spills out of its gauge.
 
 ## 3.0.0 — 2026-11-05
 

@@ -4,7 +4,7 @@
 // shows per-scenario badges / skip labels and draws error markers; it never computes geometry.
 
 import { escapeHtml, plainText } from "./markup.mjs";
-import { layoutWalkthrough, lineText } from "./walkthrough-layout.mjs";
+import { layoutWalkthrough, lineText, gaugeRoom } from "./walkthrough-layout.mjs";
 
 const a = (v) => escapeHtml(String(v));
 
@@ -32,7 +32,7 @@ function renderNode(n, box, gauge, doc, ui) {
     out.push(
       `<rect class="gauge-bg" x="${gx}" y="${gy}" width="${gw}" height="${g.h}" rx="6"/>`,
       `<rect class="gauge" data-gauge="${a(gauge.id)}" data-gy="${gy}" data-gh="${g.h}" x="${gx + 1}" y="${gy + g.h - 1}" width="${gw - 2}" height="0" rx="5"/>`,
-      `<text class="gauge-l" data-gauge-label="${a(gauge.id)}" x="${x + box.w / 2}" y="${gy + g.h / 2}">${escapeHtml(gauge.empty || "")}</text>`
+      `<text class="gauge-l" data-gauge-label="${a(gauge.id)}" data-room="${gaugeRoom(box.w)}" x="${x + box.w / 2}" y="${gy + g.h / 2}">${escapeHtml(gauge.empty || "")}</text>`
     );
     if (g.caption !== null) out.push(`<text class="nm" x="${tx}" y="${y + g.caption}">${escapeHtml(gauge.caption)}</text>`);
   }
