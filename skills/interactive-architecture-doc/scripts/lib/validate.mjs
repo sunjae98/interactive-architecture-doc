@@ -374,7 +374,10 @@ function checkSemantics(doc, out) {
     }
     const isGroup = (id) => members.has(id);
     const self = e.from === e.to || (isGroup(e.to) && groupOf[e.from] === e.to) || (isGroup(e.from) && groupOf[e.to] === e.from);
-    if (self) report(out, `/edges/${i}`, "E_EDGE_SELF", `edge ${q(e.id)} connects ${q(e.from)} with ${e.from === e.to ? "itself" : q(e.to) + ", which contains it"}; a step on one node uses step.nodes instead`);
+    if (self) {
+      const what = e.from === e.to ? `${q(e.from)} with itself` : isGroup(e.from) ? `group ${q(e.from)} with its own member ${q(e.to)}` : `${q(e.from)} with its own group ${q(e.to)}`;
+      report(out, `/edges/${i}`, "E_EDGE_SELF", `edge ${q(e.id)} connects ${what}; a step on one node uses step.nodes instead`);
+    }
     for (const end of [e.from, e.to]) for (const id of endNodes(members, end)) linked.add(id);
     if (e.route && e.route.d !== undefined) {
       if (!isValidPath(e.route.d)) {
