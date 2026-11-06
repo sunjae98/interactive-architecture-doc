@@ -22,17 +22,31 @@
 문서를 요청하면 에이전트가 요청 내용으로 형식을 고릅니다("테크스펙용" → Walkthrough, "공식 문서용" → Overview).
 판단할 수 없으면 한 번 물어봅니다. 선택은 JSON의 `meta.style`에 기록되고, 이 값이 없는 문서는 Walkthrough입니다.
 
-**Walkthrough**
+스크린샷을 누르면 실제로 동작하는 페이지가 열립니다. README에는 정적 이미지만 넣을 수 있어서, 같은 화면의 HTML을 따로 올려 두었습니다.
 
-| 라이트 | 다크 |
-|---|---|
-| ![Walkthrough 문서 (라이트 테마)](docs/screenshot-light.png) | ![Walkthrough 문서 (다크 테마)](docs/screenshot-dark.png) |
+**Walkthrough** (결제 예제, "PSP 타임아웃과 재시도" 시나리오 3단계)
+
+<a href="https://sunjae98.github.io/interactive-architecture-doc/demo/payment-auth.ko.html#s2/3">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+    <img alt="Walkthrough 문서 (라이트 테마)" src="docs/screenshot-light.png">
+  </picture>
+</a>
+
+[▶ 직접 눌러보기](https://sunjae98.github.io/interactive-architecture-doc/demo/payment-auth.ko.html#s2/3) · [영어판](https://sunjae98.github.io/interactive-architecture-doc/demo/payment-auth.en.html#s2/3)
 
 **Overview** ("Needs a lookup" 경로를 선택한 상태)
 
-| 라이트 | 다크 |
-|---|---|
-| ![Overview 문서 (라이트 테마)](docs/screenshot-overview-light.png) | ![Overview 문서 (다크 테마)](docs/screenshot-overview-dark.png) |
+<a href="https://sunjae98.github.io/interactive-architecture-doc/demo/request-router.overview.ko.html#lookup">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-overview-dark.png">
+    <img alt="Overview 문서 (라이트 테마)" src="docs/screenshot-overview-light.png">
+  </picture>
+</a>
+
+[▶ 직접 눌러보기](https://sunjae98.github.io/interactive-architecture-doc/demo/request-router.overview.ko.html#lookup) · [영어판](https://sunjae98.github.io/interactive-architecture-doc/demo/request-router.overview.en.html#lookup)
+
+전체 데모 목록: [sunjae98.github.io/interactive-architecture-doc/demo/](https://sunjae98.github.io/interactive-architecture-doc/demo/) (모든 예제, 한국어와 영어)
 
 ## 동작 흐름
 
