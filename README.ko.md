@@ -81,14 +81,14 @@ interactive-architecture-doc은 대신 JSON 형식, 검증기, 렌더러, 브라
 | 일관성 | 단계 수 / 단계 총합, `data-step` / `data-branch`, fan hub/target 쌍, 시나리오 옵션과 키를 손으로 맞춤 | 모두 하나의 JSON 정의에서 생성 |
 | 검증 | 페이지를 클릭해 보며 불일치 발견 | 렌더 전에 JSON pointer와 규칙 코드로 거부 (예: `/scenarios/0/steps/2/edges/0 E_EDGE_UNKNOWN`) |
 | 확인 | 수동 클릭, 스크린샷 여러 장 | `doc.html#iad-selfcheck`가 모든 시나리오 × 단계를 재생하고 JSON 한 줄로 결과 반환 |
-| 에이전트가 읽는 양 | ≈46 KB (`SKILL.md` + 참고 문서 + 약 34 KB HTML 템플릿) | ≈25 KB (`SKILL.md` 7.4 KB + `format.md` 15.8 KB + 기본 `iad init` 뼈대 약 2 KB); 템플릿은 렌더러만 사용 |
+| 에이전트가 읽는 양 | ≈46 KB (`SKILL.md` + 참고 문서 + 약 34 KB HTML 템플릿) | ≈28 KB (`SKILL.md` 7.6 KB + `format.md` 18.3 KB + 기본 `iad init` 뼈대 약 2 KB); 템플릿은 렌더러만 사용 |
 | 에이전트가 쓰는 양 | HTML ~34 KB 이상 | JSON 파일 (예제 기준 ≈7–13 KB) |
 | 수정 | HTML을 다시 손으로 편집 | JSON을 고치고 다시 렌더; JSON이 HTML에 들어 있어 복원 가능 |
 | 배포 | 프로젝트마다 폴더 복사 (사본끼리 어긋남) | `npx skills add` / `npx skills update` 한 줄로 설치와 업데이트 |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/token-comparison-dark.svg">
-  <img alt="시나리오 3개짜리 문서 1개를 만들 때의 추정 토큰: 단일 SKILL.md + 템플릿 수작업 편집은 읽기 약 11.6K, 쓰기 약 8.5K(합계 20.2K), interactive-architecture-doc은 읽기 약 7.6K, 쓰기 약 3.2K(합계 10.8K)." src="docs/token-comparison-light.svg" width="720">
+  <img alt="시나리오 3개짜리 문서 1개를 만들 때의 추정 토큰: 단일 SKILL.md + 템플릿 수작업 편집은 읽기 약 11.6K, 쓰기 약 8.5K(합계 20.2K), interactive-architecture-doc은 읽기 약 8.3K, 쓰기 약 3.2K(합계 11.5K)." src="docs/token-comparison-light.svg" width="720">
 </picture>
 
 - 표의 수치는 파일 크기(바이트)이고, 그래프는 바이트 / 4로 토큰을 추정한 값입니다. 둘 다 정확한 토크나이저
