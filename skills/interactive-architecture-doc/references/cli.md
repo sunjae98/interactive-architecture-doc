@@ -45,7 +45,9 @@ is the input file itself.
 ## Self-check (browser)
 
 Open the rendered page with `#iad-selfcheck` appended (`doc.html#iad-selfcheck`), or call
-`window.iadSelfCheck()` (returns a Promise of the result). The page replays every scenario, from the
+`window.iadSelfCheck()` (returns a Promise of the result). While the page is open with that hash it
+does not write its scenario / step link (`#s2/3`, see [format.md](format.md)) into the URL, and a
+self-check started with `window.iadSelfCheck()` leaves the reader's link as it was. The page replays every scenario, from the
 full path (step -1) through every step, and writes one JSON line into
 `<pre id="iad-selfcheck-result" data-state="pass|fail">` (visually hidden) and the console
 (`IAD_SELFCHECK {...}`):

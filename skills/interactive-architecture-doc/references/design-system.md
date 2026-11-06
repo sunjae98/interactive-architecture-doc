@@ -146,6 +146,16 @@ the middle of the route and the dash does not move.
   summary line, the cards below stack.
 - `body` keeps `word-break: keep-all` so Korean words do not break mid-word.
 
+## Deep links
+
+`parseDeepLink()` / `formatDeepLink()` in the pure-helpers block map the hash to a view and back:
+`#sN` (scenario N, full path) and `#sN/M` (step M), 1-based; the default view (first scenario, full
+path) has no hash. On load the runtime opens the link (an invalid one is dropped); every `render()`
+writes the current view with `history.replaceState`, never `pushState`. A later `hashchange` opens
+the new link or puts the current view's hash back. Nothing is written while the self-check runs or
+while the hash is `#iad-selfcheck`. `?theme=dark|light` is read by the early theme script before the
+saved choice and is not saved; while it is set, OS theme changes are ignored.
+
 ## Keyboard
 
 ←/→ move between steps from anywhere except text fields (also while a box has focus). Boxes and

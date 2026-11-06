@@ -7,11 +7,14 @@
 <meta name="generator" content="interactive-architecture-doc">
 <title>{{IAD_TITLE}}</title>
 <script>
-// Theme before first paint (no flash): the saved choice, else the OS preference. localStorage can
-// throw on file:// (blocked storage), so every access is guarded.
+// Theme before first paint (no flash): ?theme=dark|light in the URL (a shared link; not saved), else
+// the saved choice, else the OS preference. localStorage can throw on file:// (blocked storage), so
+// every access is guarded.
 (function () {
   var theme = null;
-  try { theme = localStorage.getItem("iad-theme"); } catch (e) { /* storage unavailable */ }
+  var q = /[?&]theme=(dark|light)(?:&|$)/.exec((window.location && window.location.search) || "");
+  if (q) theme = q[1];
+  else try { theme = localStorage.getItem("iad-theme"); } catch (e) { /* storage unavailable */ }
   if (theme !== "light" && theme !== "dark") {
     theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
@@ -516,6 +519,29 @@
   // Desktop stage mode: "side" when the map fits beside the narration at >= 0.80x, else "stacked"
   // (map full width, narration under it). stageW: the stage's width; asideW: narration column +
   // gap; chrome: panel border + map padding.
+  // Deep links: "#s2/3" is scenario 2, step 3 (both 1-based); "#s2" is scenario 2 on its full path.
+  // stepCounts: the number of steps of each scenario. Anything else (including "#iad-selfcheck")
+  // gives null, and the page opens on its default view.
+  function parseDeepLink(hash, stepCounts) {
+    var m = /^#?s([1-9][0-9]{0,2})(?:\/([1-9][0-9]{0,2}))?$/.exec(String(hash || ""));
+    if (!m) return null;
+    var sc = +m[1] - 1;
+    if (sc >= stepCounts.length) return null;
+    var st = m[2] === undefined ? -1 : +m[2] - 1;
+    if (st >= stepCounts[sc]) return null;
+    return { scenario: sc, step: st };
+  }
+  // The hash for a view; the default view (first scenario, full path) has none.
+  function formatDeepLink(scenario, step) {
+    if (scenario === 0 && step < 0) return "";
+    return "#s" + (scenario + 1) + (step >= 0 ? "/" + (step + 1) : "");
+  }
+  // ?theme=dark|light, else null.
+  function themeParam(search) {
+    var m = /[?&]theme=(dark|light)(?:&|$)/.exec(String(search || ""));
+    return m ? m[1] : null;
+  }
+
   // After the self-check restores the reader's step: follow it, or show the start of the map for
   // the full path.
   function restoreView(step) {
@@ -696,6 +722,24 @@
     runToken();
     if (step >= 0) followStep(f.curE, f.curN);
     else scrollMapTo(0); // the full path (and a new scenario) starts at the start of the map
+    syncHash();
+  }
+
+  // ---- deep link: the URL hash follows the reader (replaceState: no history entries). Left alone
+  // while the self-check runs and while the page was opened with #iad-selfcheck.
+  var linkReady = false; // set once the link the page was opened with has been applied
+  function syncHash() {
+    if (!linkReady || scrollQuiet || location.hash === "#iad-selfcheck") return;
+    var want = formatDeepLink(cur, step);
+    if ((location.hash || "") === want) return;
+    try { history.replaceState(null, "", location.pathname + location.search + want); } catch (e) { /* file:// in some browsers */ }
+  }
+  function openDeepLink(hash) {
+    var link = parseDeepLink(hash, SC.map(function (sc) { return sc.steps.length; }));
+    if (!link) return false;
+    if (link.scenario !== cur) pickScenario(link.scenario);
+    if (link.step !== step) { stopPlay(); go(link.step); }
+    return true;
   }
 
   // ---- narrow screens: keep the current step in view and show which side has more map
@@ -719,7 +763,7 @@
     var to = scrollTarget(diagramEl.scrollLeft, diagramEl.clientWidth, origin + (x1 - vb.x) * k, origin + (x2 - vb.x) * k, max, 24);
     if (to !== null) scrollMapTo(to, instant);
   }
-  var scrollQuiet = false; // the self-check walks every step without scrolling the reader's view
+  var scrollQuiet = false; // the self-check walks every step without scrolling the reader's view (or touching the URL)
   function scrollMapTo(left, instant) {
     if (scrollQuiet) return;
     // always issue the scroll: it also replaces a smooth scroll still in flight
@@ -873,6 +917,11 @@
 
   decideFit();
   pickScenario(0);
+  openDeepLink(location.hash);
+  linkReady = true;
+  syncHash(); // an invalid link is replaced by the default view's (empty) hash
+  // a hash typed or followed later: open it, or put the current view's hash back if it is not a link
+  window.addEventListener("hashchange", function () { if (!openDeepLink(location.hash)) syncHash(); });
 
   // ---- Theme toggle: flips data-theme on <html> (set early in <head>) and remembers the choice.
   // Without a saved choice the page keeps following the OS preference.
@@ -895,7 +944,7 @@
   if (window.matchMedia) {
     var darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
     var onSchemeChange = function (e) {
-      if (savedTheme()) return;
+      if (savedTheme() || themeParam(location.search)) return;
       rootEl.setAttribute("data-theme", e.matches ? "dark" : "light");
       syncThemeButton();
     };
@@ -942,6 +991,7 @@
       pickScenario(savedCur);
       go(savedStep);
       scrollQuiet = false;
+      syncHash();
       var back = focusSets(SC[cur].steps, step, EDGES);
       if (restoreView(savedStep) === "follow") followStep(back.curE, back.curN, true);
       else scrollMapTo(0, true); // the full path: leave the map at its start
