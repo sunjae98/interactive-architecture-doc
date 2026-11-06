@@ -167,7 +167,8 @@ The map is computed when the document is rendered; the page ships a static SVG.
   given. `x` / `y` place a node outside the grid.
 - **Edges.** Each edge leaves and enters its boxes on the facing sides; edges between the same pair
   are spread apart. When a curve would run through another box, the edge is routed around the boxes
-  through the gaps between lanes and rows (detours sharing a gap are spread 6px apart). `route`
+  through the gaps between lanes and rows (detours sharing a gap are spread 6px apart). Edges and step
+  badges also keep off group titles: a long edge runs in the corridor under the titles. `route`
   overrides this: `from_side` / `to_side` (`top`, `right`, `bottom`, `left`) force the sides, `via`
   lists waypoints (`[[x, y], ...]`, drawn with rounded corners), and `d` is a raw absolute SVG path
   (`M L H V C Q Z` only, whole argument groups).
@@ -234,14 +235,14 @@ is neither a node nor a group is `E_NODE_UNKNOWN`, and one that names a group wi
 | `E_TABLE_SHAPE` | error | A table row does not have one cell per column. |
 | `W_EDGE_UNUSED` | warning | An edge is not used by any step of any scenario. |
 | `W_NODE_ISOLATED` | warning | A node has no edge (an edge to or from its group counts). |
-| `W_EDGE_CROSSES_NODE` | warning | An edge runs through a node it does not connect; set `route` or move a node. |
+| `W_EDGE_CROSSES_NODE` | warning | An edge runs through a node it does not connect, or over a group's title; set `route` or move a node. |
 | `W_FACTS_MISSING` | warning | A node has no `facts`, so clicking it shows an empty panel. |
 | `W_POS_IGNORED` | warning | A node has both `x`/`y` and `lane`/`row`; `x`/`y` wins and `lane`/`row` are ignored. |
 | `W_GAUGE_UNUSED` | warning | No step sets this gauge, so it always shows its empty state. |
 | `W_HINT_REVERSES_FLOW` | warning | Lane hints on a partly automatic map turn a `file`/`text` edge right to left that runs left to right without them (a hinted node or its group sits left of its predecessor). |
 | `W_TOKEN_LONG` | warning | A step's token text is wider than the map's token chip (about 220px); the map cuts it with an ellipsis and shows the whole text on hover and in the narration. |
 | `W_LANE_EMPTY` | warning | Lane hints leave lanes without any node; they are drawn without width, but a lower hint is usually meant. |
-| `W_BADGE_CROWDED` | warning | A step badge found no spot clear of the scenario's other badges and of node boxes (many steps start on one short edge); it overlaps. |
+| `W_BADGE_CROWDED` | warning | A step badge found no spot clear of the scenario's other badges, node boxes and group titles (many steps start on one short edge); it overlaps. |
 | `W_PLACEHOLDER` | warning | A string still contains a `[...]` placeholder or `TODO`. |
 
 ## Design notes

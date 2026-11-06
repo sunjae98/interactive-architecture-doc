@@ -531,6 +531,7 @@ test("layout: many steps starting on one short edge keep their badges off node b
   const crowded = many.issues.filter((i) => i.code === "W_BADGE_CROWDED");
   assert.ok(crowded.length > 0);
   assert.match(crowded[0].path, /^\/scenarios\/0\/steps\/\d+$/);
+  assert.match(crowded[0].message, /another badge, a box or a group title/);
 });
 
 test("lane hints: two groups hinted into one lane is E_LANE_GROUPS, not an overlap on another node", () => {
@@ -619,5 +620,42 @@ test("group ends: the arrow meets the middle of the facing group border and foll
   doc.nodes.push({ id: "t4", kind: "app", title: "T4", group: "g", facts: ["f"], h: 140 });
   check(layoutWalkthrough(doc));
   assert.deepEqual(codes(doc), []);
+});
+
+// ---- group titles ---------------------------------------------------------------------------------
+test("group titles: a long edge across several groups runs under their titles, and badges stay off them", () => {
+  // a -> [g1: b] -> [g2: c] -> [g3: d] -> z, and a reply z -> a back across the top row. The group
+  // boxes are three rows tall, so the short way back is along the top, where the titles are.
+  const doc = mini(
+    ["a", { id: "b", group: "g1", rows: 3 }, { id: "c", group: "g2", rows: 3 }, { id: "d", group: "g3", rows: 3 }, "z"],
+    [["a", "b"], ["b", "c"], ["c", "d"], ["d", "z"], ["z", "a", "text"]],
+    { groups: ["g1", "g2", "g3"].map((id) => ({ id, title: `Group ${id} title`, meta: "meta line under it" })) }
+  );
+  doc.scenarios[0].steps = doc.edges.map((e) => ({ title: e.id, edges: [e.id], token: { text: "t", kind: "file" }, what: "w", where: "w", fail: "f" }));
+  const L = layoutWalkthrough(doc);
+  assert.equal(L.titles.length, 3);
+  const inTitle = (t, x, y) => x > t.x && x < t.x + t.w && y > t.y && y < t.y + t.h;
+  const back = samplePath(L.edges.e4.d);
+  for (const t of L.titles) assert.ok(!back.some(([x, y]) => inTitle(t, x, y)), `the reply crosses the title of ${t.group}`);
+  const top = Math.min(...back.map(([, y]) => y));
+  assert.ok(top >= Math.max(...L.titles.map((t) => t.y + t.h)) && top < L.nodes.b.y, `in the corridor under the titles (y ${top})`);
+  const R = GEOMETRY_WT.badgeR;
+  for (const p of L.badges.s) for (const t of L.titles) assert.ok(!(p.x > t.x - R && p.x < t.x + t.w + R && p.y > t.y - R && p.y < t.y + t.h + R), `badge at ${p.x},${p.y} on ${t.group}`);
+  assert.deepEqual(codes(doc), []);
+});
+
+test("group titles: an edge forced over a title is W_EDGE_CROSSES_NODE", () => {
+  const doc = mini(
+    ["a", { id: "b", group: "g1" }, "z"],
+    [["a", "b"], ["b", "z"], ["z", "a", "text"]],
+    { groups: [{ id: "g1", title: "A rather long group title", meta: "meta" }] }
+  );
+  const L0 = layoutWalkthrough(doc);
+  const t = L0.titles[0];
+  const y = t.y + t.h / 2;
+  doc.edges[2].route = { via: [[L0.nodes.z.x - 20, y], [L0.nodes.a.x + L0.nodes.a.w + 20, y]] };
+  const w = validate(doc).warnings.filter((x) => x.code === "W_EDGE_CROSSES_NODE");
+  assert.equal(w.length, 1);
+  assert.match(w[0].message, /runs over the title of group "g1"/);
 });
 
