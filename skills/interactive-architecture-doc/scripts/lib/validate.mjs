@@ -3,7 +3,7 @@
 
 import { hasPlaceholder } from "./markup.mjs";
 import { layoutOverview } from "./layout.mjs";
-import { layoutWalkthrough, SIDES, isValidPath, MAX_COORD, groupMembers, endNodes } from "./walkthrough-layout.mjs";
+import { layoutWalkthrough, SIDES, isValidPath, MAX_COORD, groupMembers, endNodes, GEOMETRY_WT, TEXT_WT, textWidthWt } from "./walkthrough-layout.mjs";
 
 // Walkthrough (v3) node kinds; their colors follow the reference design (client crimson, infra
 // violet, app amber, store green, tool gray, dep blue). What each kind means is set by `legend.nodes`.
@@ -57,6 +57,7 @@ export const RULES = [
   { code: "W_POS_IGNORED", level: "warning", summary: "A node has both `x`/`y` and `lane`/`row`; `x`/`y` wins and `lane`/`row` are ignored." },
   { code: "W_GAUGE_UNUSED", level: "warning", summary: "No step sets this gauge, so it always shows its empty state." },
   { code: "W_HINT_REVERSES_FLOW", level: "warning", summary: "Lane hints on a partly automatic map turn a `file`/`text` edge right to left that runs left to right without them (a hinted node or its group sits left of its predecessor)." },
+  { code: "W_TOKEN_LONG", level: "warning", summary: "A step's token text is wider than the map's token chip (about 220px); the map cuts it with an ellipsis and shows the whole text on hover and in the narration." },
   { code: "W_LANE_EMPTY", level: "warning", summary: "Lane hints leave lanes without any node; they are drawn without width, but a lower hint is usually meant." },
   { code: "W_BADGE_CROWDED", level: "warning", summary: "A step badge found no spot clear of the scenario's other badges and of node boxes (many steps start on one short edge); it overlaps." },
   { code: "E_NODE_UNKNOWN", level: "error", summary: "An edge, step, gauge, marker, skip entry or overview path names a node id that does not exist (an edge end may also be a group id)." },
@@ -419,6 +420,10 @@ function checkSemantics(doc, out) {
         if (!(g.value >= 0 && g.value <= 1)) report(out, ptr(`${p}/gauges`, gid) + "/value", "E_GAUGE_RANGE", `gauge value must be in 0..1, got ${g.value}`);
       }
       (st.markers || []).forEach((m, j) => nodeRef(m.node, `${p}/markers/${j}/node`));
+      const chip = textWidthWt(st.token.text, TEXT_WT.token.px, TEXT_WT.token) + GEOMETRY_WT.tokenPad;
+      if (chip > GEOMETRY_WT.tokenMax) {
+        report(out, `${p}/token/text`, "W_TOKEN_LONG", `the token chip would be about ${Math.round(chip)}px wide; the map cuts it at ${GEOMETRY_WT.tokenMax}px with "…" (hover and the narration show it whole), so a shorter token reads better`);
+      }
     });
   });
   doc.edges.forEach((e, i) => {

@@ -106,6 +106,29 @@ test("tokenAt: the distance is split across the step's paths in order", () => {
   assert.equal(h.easeInOut(0.5), 0.5);
 });
 
+test("fitChip: a long token is cut to the chip width with an ellipsis; a short one is kept whole", async () => {
+  const { GEOMETRY_WT } = await import("../skills/interactive-architecture-doc/scripts/lib/walkthrough-layout.mjs");
+  const h = loadHelpers();
+  assert.equal(h.TOKEN_MAX_W, GEOMETRY_WT.tokenMax, "runtime and layout agree on the cap");
+  const widthOf = (s) => Array.from(s).length * 7; // 7px per character
+  assert.deepEqual(plain(h.fitChip("req.json", widthOf, 220)), { text: "req.json", cut: false });
+  const long = "📎 report.pdf · chart.png “요약해줘” and a few more words";
+  const r = plain(h.fitChip(long, widthOf, 220));
+  assert.equal(r.cut, true);
+  assert.ok(r.text.endsWith("…") && !/\s…$/.test(r.text), r.text);
+  assert.ok(widthOf(r.text) + 16 <= 220, "fits");
+  assert.ok(widthOf(Array.from(long).slice(0, Array.from(r.text).length).join("") + "…") + 16 > 220 || long.startsWith(r.text.slice(0, -1)), "longest prefix");
+  assert.ok(long.startsWith(r.text.slice(0, -1).trimEnd()), "a prefix of the token, cut on whole characters");
+});
+
+test("token chip: the map chip is capped, gets a hover title when cut; narration chips stay whole", () => {
+  const src = HTML.slice(HTML.indexOf("function runToken()"), HTML.indexOf("// ---- progress"));
+  assert.match(src, /fitChip\(st\.token\.text, widthOf, TOKEN_MAX_W\)/);
+  assert.match(src, /if \(fit\.cut\) \{ tok\.classList\.add\("cut"\); mk\("title", null, tok, st\.token\.text\); \}/);
+  assert.match(HTML, /\.wt-map \.tok\.cut\{pointer-events:auto;/, "a cut chip takes the hover");
+  assert.match(HTML, /<span class="tk-s ' \+ st\.token\.kind \+ '">' \+ escapeHtml\(st\.token\.text\)/, "narration shows the whole token");
+});
+
 test("file names: unsafe characters removed, whitespace dashed, trimmed, capped at 80", () => {
   const h = loadHelpers();
   assert.equal(h.sanitizeFilePart('a<b>c:"d"/e\\f|g?h*i'), "abcdefghi");

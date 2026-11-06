@@ -90,6 +90,7 @@ const FIXTURES = [
   ["E_NODE_UNKNOWN", (d) => { d.scenarios[1].skip[0].node = "ghost"; }],
   ["E_NODE_UNKNOWN", (d) => { d.gauges[0].node = "ghost"; }],
   ["E_GROUP_UNKNOWN", (d) => { d.nodes[0].group = "nope"; }],
+  ["W_TOKEN_LONG", (d) => { step(d, 0, 0).token.text = "📎 report.pdf · chart.png “please summarize both of these for me”"; }],
   ["W_HINT_REVERSES_FLOW", (d) => { d.nodes.find((n) => n.id === "model").lane = 0; d.nodes.find((n) => n.id === "browser").lane = 1; }],
   // an edge may end at a group, but not at a group without members, nor at its own member
   ["E_GROUP_UNKNOWN", (d) => { d.groups.push({ id: "empty", title: "Empty" }); d.edges[0].to = "empty"; }],
@@ -232,6 +233,16 @@ test("edge ends: a group id is accepted, and its members count as connected", ()
   assert.deepEqual(validate(d).errors, []);
   d.edges.find((e) => e.id === "fwd").to = "ghost";
   assert.match(validate(d).errors.find((e) => e.code === "E_NODE_UNKNOWN").message, /not a node id or a group id/);
+});
+
+test("W_TOKEN_LONG: about 40 characters are too long for the map chip; 20 are fine", () => {
+  const d = clone(BASE);
+  step(d, 0, 0).token.text = "x".repeat(20);
+  step(d, 0, 1).token.text = "가".repeat(18);
+  assert.deepEqual(validate(d).warnings, []);
+  step(d, 0, 0).token.text = "x".repeat(40);
+  step(d, 0, 1).token.text = "가".repeat(24);
+  assert.deepEqual(validate(d).warnings.map((w) => w.path), ["/scenarios/0/steps/0/token/text", "/scenarios/0/steps/1/token/text"]);
 });
 
 test("every rule code has at least one failing fixture", () => {
