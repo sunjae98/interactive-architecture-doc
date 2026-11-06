@@ -1,24 +1,39 @@
 # Changelog
 
-## Unreleased
+## 3.1.0 — 2026-11-06
 
+Walkthrough authoring fixes. Existing 3.0.0 documents validate and render as before; the new warnings
+below can appear on documents whose tokens, gauge labels or edges were already overflowing.
+
+**Added**
+
+- A walkthrough takes up to 8 scenarios (was 6): two more scenario color slots, `--s7` and `--s8`.
+- An edge may start or end at a group (`from` / `to` = a group id) for "goes to one of these boxes":
+  the arrow meets the middle of the group border that faces the other end and follows it when the
+  layout changes, the step lights every member, the layout ranks it like an edge to each member, and
+  members connected this way are not `W_NODE_ISOLATED`. When a node and a group share an id, the edge
+  end is the node.
 - Walkthrough pages keep a link to the current scenario and step in the URL (`#s2/3`), open such links
   directly, and accept `?theme=dark|light`.
-- A walkthrough takes up to 8 scenarios (was 6): two more scenario color slots, `--s7` and `--s8`.
-- An edge may start or end at a group (`from` / `to` = a group id): the arrow meets the middle of the
-  group border that faces the other end, the step lights every member, the layout ranks it like an edge
-  to each member, and members connected this way are not `W_NODE_ISOLATED`.
-- Lane hints on some nodes keep the other nodes in flow order: a hint right of the node's place in the
-  flow pushes what follows to the right instead of moving it ahead. Hints that turn a `file` / `text`
-  edge right to left are reported (`W_HINT_REVERSES_FLOW`).
-- The moving token chip on the map is at most 220px wide: longer text is cut with `…` and shown whole
-  on hover and in the narration. `W_TOKEN_LONG` flags tokens that will be cut.
+- New warnings: `W_HINT_REVERSES_FLOW` (lane hints turn a `file` / `text` edge right to left) and
+  `W_TOKEN_LONG` (a token is wider than the map's token chip).
+- `iad layout` prints each group's title area (`titles` in `--json`).
+- Live demo pages of every example in `docs/demo/`, served by GitHub Pages and linked from the READMEs.
+
+**Changed**
+
+- Lane hints on some nodes keep the other nodes in flow order: when hinted nodes leave their group's
+  (or their own) column, the group goes back to its place in the flow and grows up to the hinted lane,
+  so what follows moves right instead of ending up ahead of it.
+- The moving token chip on the map is at most 220px wide: longer text is cut with `…` on whole
+  characters and shown whole on hover; the narration and step list show it whole.
 - Gauge labels stay inside the gauge: a longer label is cut with `…` (whole on hover), `W_TEXT_LONG`
-  reports it, and the self-check fails when a label spills out of its gauge.
+  reports it, and the self-check fails with `gauge-fit` when a label spills out of its gauge.
 - Edges and step badges keep off group titles: a long edge across several groups runs in the corridor
-  under their titles, badges pick a spot clear of them, and an edge that still runs over a title is
-  `W_EDGE_CROSSES_NODE` (a crowded badge's `W_BADGE_CROWDED` counts titles too). The layout returns the
-  title areas as `titles`.
+  under their titles, badges pick a spot clear of them, an edge that still runs over a title is
+  `W_EDGE_CROSSES_NODE`, and `W_BADGE_CROWDED` counts titles too.
+- `E_EDGE_SELF` also covers an edge between a group and its own member; `E_GROUP_UNKNOWN` covers an
+  edge to a group without members.
 
 ## 3.0.0 — 2026-11-05
 
