@@ -56,6 +56,7 @@ export const RULES = [
   { code: "W_FACTS_MISSING", level: "warning", summary: "A node has no `facts`, so clicking it shows an empty panel." },
   { code: "W_POS_IGNORED", level: "warning", summary: "A node has both `x`/`y` and `lane`/`row`; `x`/`y` wins and `lane`/`row` are ignored." },
   { code: "W_GAUGE_UNUSED", level: "warning", summary: "No step sets this gauge, so it always shows its empty state." },
+  { code: "W_HINT_REVERSES_FLOW", level: "warning", summary: "Lane hints on a partly automatic map turn a `file`/`text` edge right to left that runs left to right without them (a hinted node or its group sits left of its predecessor)." },
   { code: "W_LANE_EMPTY", level: "warning", summary: "Lane hints leave lanes without any node; they are drawn without width, but a lower hint is usually meant." },
   { code: "W_BADGE_CROWDED", level: "warning", summary: "A step badge found no spot clear of the scenario's other badges and of node boxes (many steps start on one short edge); it overlaps." },
   { code: "E_NODE_UNKNOWN", level: "error", summary: "An edge, step, gauge, marker, skip entry or overview path names a node id that does not exist (an edge end may also be a group id)." },

@@ -8,6 +8,9 @@
 - An edge may start or end at a group (`from` / `to` = a group id): the arrow meets the middle of the
   group border that faces the other end, the step lights every member, the layout ranks it like an edge
   to each member, and members connected this way are not `W_NODE_ISOLATED`.
+- Lane hints on some nodes keep the other nodes in flow order: a hint right of the node's place in the
+  flow pushes what follows to the right instead of moving it ahead. Hints that turn a `file` / `text`
+  edge right to left are reported (`W_HINT_REVERSES_FLOW`).
 
 ## 3.0.0 — 2026-11-05
 

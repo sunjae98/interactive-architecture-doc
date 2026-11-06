@@ -395,6 +395,46 @@ test("lane hints: a hint into another group's lane moves the groups instead of o
   groupsApart(L2);
 });
 
+test("lane hints: pinning a whole group keeps every other node in flow order", () => {
+  // a -> g(t1..t3) -> b -> c, with a side branch; every member of g hinted into one lane
+  const make = () =>
+    mini(
+      ["a", "s", { id: "t1", group: "g" }, { id: "t2", group: "g" }, { id: "t3", group: "g" }, { id: "b", group: "h" }, { id: "c", group: "h" }, "d"],
+      [["a", "s"], ["s", "t1"], ["s", "t2"], ["s", "t3"], ["t1", "b"], ["b", "c"], ["c", "d"]],
+      { groups: [{ id: "g", title: "G" }, { id: "h", title: "H" }] }
+    );
+  const free = layoutWalkthrough(make());
+  const others = ["a", "s", "b", "c", "d"];
+  const order = (L) => [...others].sort((p, q) => L.nodes[p].lane - L.nodes[q].lane || others.indexOf(p) - others.indexOf(q));
+  const natural = free.nodes.t1.lane;
+  for (const lane of [natural, natural + 1, natural + 2]) {
+    const doc = make();
+    doc.nodes.filter((n) => n.group === "g").forEach((n, i) => { n.lane = lane; n.row = i; });
+    const L = layoutWalkthrough(doc);
+    for (const id of ["t1", "t2", "t3"]) assert.equal(L.nodes[id].lane, lane, id);
+    assert.deepEqual(order(L), order(free), `hint lane ${lane}: the other nodes keep their order`);
+    assert.ok(L.nodes.s.lane < lane && L.nodes.b.lane > lane, `hint lane ${lane}: predecessors left, successors right`);
+    if (lane === natural) for (const id of others) assert.equal(L.nodes[id].lane, free.nodes[id].lane, `${id} unchanged`);
+    assert.deepEqual(validate(doc).errors, []);
+    assert.ok(!codes(doc).includes("W_HINT_REVERSES_FLOW"));
+  }
+});
+
+test("lane hints: a hint that puts a node left of its predecessor is W_HINT_REVERSES_FLOW", () => {
+  const doc = grouped();
+  assert.ok(!codes(doc).includes("W_HINT_REVERSES_FLOW"));
+  doc.nodes[5].lane = 1; // z (g3, after y) into lane 1
+  const w = validate(doc).warnings.filter((x) => x.code === "W_HINT_REVERSES_FLOW");
+  assert.equal(w.length, 1);
+  assert.equal(w[0].path, "/edges/4");
+  assert.match(w[0].message, /edge "e4" now runs right to left \(lane \d+ -> 1\) because of lane hints on "z"/);
+  // a ctrl edge back is a reply, not the flow: never reported
+  const back = grouped();
+  back.edges.forEach((e) => (e.kind = "ctrl"));
+  back.nodes[5].lane = 1;
+  assert.ok(!codes(back).includes("W_HINT_REVERSES_FLOW"));
+});
+
 test("lane hints: overlap errors say which node or group collides, and where", () => {
   const doc = mini([{ id: "a", lane: 0, row: 0 }, { id: "b", lane: 0, row: 0 }], [["a", "b"]]);
   const [e] = validate(doc).errors;
